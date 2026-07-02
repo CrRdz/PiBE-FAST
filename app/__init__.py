@@ -1,0 +1,2 @@
+"""Fall detection service package."""
+

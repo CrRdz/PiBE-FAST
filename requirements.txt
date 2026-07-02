@@ -1,0 +1,8 @@
+Flask>=3.0
+numpy>=1.24
+opencv-python>=4.8
+
+# Install one TFLite interpreter for your platform:
+#   Local development: python -m pip install tensorflow
+#   Raspberry Pi:      python -m pip install tflite-runtime
+
