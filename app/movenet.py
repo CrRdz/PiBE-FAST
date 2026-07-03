@@ -12,6 +12,7 @@ from app.keypoints import KEYPOINT_NAMES
 
 
 def _load_interpreter_class() -> Any:
+    # Raspberry Pi 上优先使用轻量的 tflite-runtime，开发机上可退回 TensorFlow 自带解释器。
     try:
         from tflite_runtime.interpreter import Interpreter
 
@@ -28,10 +29,12 @@ def _load_interpreter_class() -> Any:
             ) from exc
 
 
+# MoveNet 推理封装，负责把 RGB 图像送入 TFLite 模型并输出 17 个关键点。
 class MoveNet:
     """Runs a single-pose MoveNet TFLite model and returns normalized keypoints."""
 
     def __init__(self, model_path: str | Path, num_threads: int = 2) -> None:
+        # 模型文件不提交到仓库，运行前需要放到 models/ 或通过 --model 指定。
         self.model_path = Path(model_path)
         if not self.model_path.exists():
             raise FileNotFoundError(
@@ -44,6 +47,7 @@ class MoveNet:
             model_path=str(self.model_path), num_threads=num_threads
         )
         self.interpreter.allocate_tensors()
+        # 输入/输出 tensor 信息由模型决定，后面 resize 时要使用模型声明的尺寸。
         self.input_details = self.interpreter.get_input_details()
         self.output_details = self.interpreter.get_output_details()
 
@@ -59,6 +63,7 @@ class MoveNet:
         The returned dictionaries use x/y order, while MoveNet outputs y/x/score.
         """
 
+        # MoveNet Lightning 常见输入是 192x192 RGB，但这里不写死，直接读取模型 shape。
         resized = cv2.resize(
             rgb_frame,
             (self.input_width, self.input_height),
@@ -66,6 +71,7 @@ class MoveNet:
         )
         input_data = np.expand_dims(resized, axis=0)
 
+        # 有些 TFLite 模型输入是 uint8，有些是 float32；根据 dtype 自动适配。
         if np.issubdtype(self.input_dtype, np.floating):
             input_data = input_data.astype(self.input_dtype) / 255.0
         else:
@@ -76,12 +82,14 @@ class MoveNet:
         output = self.interpreter.get_tensor(self.output_details[0]["index"])
         points = np.squeeze(output)
 
+        # MoveNet SinglePose 输出 17 x 3，每行是 y, x, score。
         if points.shape != (17, 3):
             points = points.reshape((17, 3))
 
         keypoints: list[dict[str, float]] = []
         for name, point in zip(KEYPOINT_NAMES, points):
             y, x, score = point.tolist()
+            # 统一输出为 x/y/score，并把坐标限制在 0..1，方便后续规则和绘制使用。
             keypoints.append(
                 {
                     "name": name,
