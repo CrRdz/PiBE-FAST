@@ -6,6 +6,7 @@ __pycache__/
 *.py[cod]
 
 models/*.tflite
+models/*.task
 !models/.gitkeep
 
 data/clips/*
@@ -14,6 +15,7 @@ data/snapshots/*
 !data/snapshots/.gitkeep
 data/keypoints/*
 !data/keypoints/.gitkeep
+data/cache/
 
 *.mp4
 *.mov

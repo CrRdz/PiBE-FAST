@@ -1,40 +1,320 @@
-# Fall Detection Pi
+# PiBE-FAST
 
-Real-time human pose and fall detection for Raspberry Pi.
+## 基于树莓派多模态感知的急性脑卒中早期筛查系统
 
-The first version uses TensorFlow Lite + MoveNet SinglePose Lightning to extract
-17 body keypoints from each frame. The service then classifies the pose with
-local rules (`standing`, `sitting`, `lying`) and uses a temporal state machine to
-detect likely falls. A fall is not the same as lying down: the detector looks for
-an upright pose, a fast center drop, rapid torso rotation, and sustained lying.
+## A Raspberry Pi–Based Multimodal System for Early Acute Stroke Screening
 
-## Project Layout
+[中文说明](#中文说明) · [English](#english)
+
+> **紧急提示 / Emergency notice**
+>
+> 如果突然出现面部歪斜、单侧无力、言语不清、视力或平衡异常，请立即拨打 120，
+> 不要等待本系统完成检测。
+>
+> If facial drooping, one-sided weakness, speech difficulty, visual disturbance,
+> or loss of balance occurs suddenly, call local emergency services immediately.
+> Do not wait for this system to finish.
+
+---
+
+# 中文说明
+
+## 1. 项目定位
+
+PiBE-FAST 是面向树莓派边缘部署的 BE-FAST 急性脑卒中早期筛查研究原型。
+系统融合以下信息：
+
+- 摄像头视频流；
+- MediaPipe 面部、虹膜和表情关键点；
+- MoveNet 人体姿态关键点；
+- 多帧时序运动特征；
+- 本人或照护者提供的言语、平衡和发病时间信息。
+
+树莓派负责模型推理、规则计算、日志和 Web 服务；默认使用与服务主机相连的
+CSI/USB 摄像头，也可由打开页面的手机或电脑浏览器提供前置摄像头帧。
+推理仍在运行 Python 服务的设备上完成，不上传到第三方云服务。
+
+本项目不是医疗器械，不能诊断或排除脑卒中。当前阈值是没有可靠临床数据时的
+工程初值，不是临床决策阈值，也不是卒中概率。
+
+## 2. 树莓派的运行模式与作用
+
+PiBE-FAST 不是要求使用者全天重复固定动作的连续检查系统。它采用“**长期待机、
+事件触发、短时主动筛查**”的工作方式：
 
 ```text
-app/
-  main.py                 # Service entry point
-  camera.py               # Camera and local video frame sources
-  movenet.py              # TFLite MoveNet inference
-  pose_classifier.py      # standing / sitting / lying rules
-  fall_detector.py        # Fall state machine
-  web.py                  # MJPEG preview and status API
-  drawing.py              # Skeleton overlay
-  config.py               # Tunable thresholds
-models/
-  movenet_lightning.tflite
-data/
-  clips/
-  keypoints/
-  snapshots/
-scripts/
-  install_pi.sh
-  run_local_video.sh
-tests/
+低负载待机
+  ├─ 用户感觉不适，点击“开始筛查”
+  ├─ 照护者发现突然变化，启动筛查
+  ├─ 被动层确认疑似跌倒，只触发筛查
+  └─ 到达可选的定时筛查时间
+             │
+             ▼
+1～2 分钟标准化 BE-FAST 主动筛查
+             │
+             ▼
+结果提示 / 紧急提醒 → 用户确认后返回待机
 ```
 
-## Setup
+固定动作只在主动筛查阶段出现。E 需要明确的左右视觉目标，F 需要中性脸与微笑基线，
+A 需要双臂平举，B 需要在安全条件下站立。标准化动作让不同时间的测量具有可比性；
+待机阶段不要求使用者面对摄像头或配合动作。
 
-Create a virtual environment and install dependencies:
+树莓派是**始终可用的本地边缘主机**，而不是电脑的摄像头配件。它负责：
+
+- 连接 CSI/USB 摄像头，并持续提供本地预览；
+- 待机时以默认约 2 FPS 低频运行 MoveNet，被动观察疑似跌倒；
+- 根据当前步骤在 MoveNet 与 MediaPipe 之间切换，避免两套模型同时满负荷运行；
+- 执行 BE-FAST 时序特征计算、质量门控和保守决策；
+- 提供 Flask Web 页面，手机或电脑只是局域网内的显示与控制终端；
+- 断网时继续本地筛查；按配置记录 JSONL 和紧急事件短片段；
+- 后续可连接实体求助按钮、蜂鸣器、麦克风或可穿戴设备。
+
+当前被动层只实现低频人体姿态与“快速转变后持续躺倒”的跌倒序列检测。它的输出只能
+打开主动筛查并提醒照护者，**不能作为脑卒中阳性或阴性结果**。普通躺下不会触发；
+面部、眼动、手臂无力和言语检查仍必须在主动流程中完成。
+
+实际推理调度如下：
+
+| 运行状态 | 摄像头预览 | MoveNet | MediaPipe Face | 医学含义 |
+|---|---:|---:|---:|---|
+| 待机 | 默认 15 FPS | 默认约 2 FPS | 暂停 | 只寻找筛查触发信号 |
+| 等待 E/F 动作 | 继续 | 暂停 | 低频约 5 FPS | 判断脸部/眼睛是否进入正确位置 |
+| 等待 A/B 动作 | 继续 | 低频约 5 FPS | 暂停 | 判断肢体是否完整入镜及姿势是否安全 |
+| E/F 阶段 | 继续 | 暂停 | 默认 5 FPS | 眼动或面部标准化测量 |
+| A/B 阶段 | 继续 | 摄像头帧率 | 暂停 | 手臂或平衡标准化测量 |
+| 结果复核 | 继续 | 暂停 | 暂停 | 填写 S/T 并查看结果 |
+
+待机时 JSONL 只在实际执行低频推理时写入，不按每个摄像头帧写盘。可以通过
+`--standby-pose-fps` 调整负载，通过 `--disable-passive-monitor` 完全关闭被动推理，
+通过 `--scheduled-screen-interval-hours` 启用周期提醒。
+
+> BE-FAST 识别的是已经突然出现的警示体征，不预测“即将中风”。如果已经出现任何
+> 突发症状，应立即拨打 120，不要为了完成主动筛查而等待。
+
+### Pi BE-FAST 筛查 Demo Web 界面
+
+打开 Web 页面后，摄像头预览占据主区域，页面不会先展示一组操作卡片。当前步骤的
+动作说明直接叠加在预览画面底部：红色表示人物位置、关键点可见性或动作尚未满足采集
+条件，绿色表示当前动作与画面质量已经适合开始测量。系统只有在动作质量连续通过后才
+自动进入该项采集；若采集期间质量不足，则回到同一步重新引导，而不会把数据不足当作
+正常结果或直接跳到下一项。同一步可以不限次数重新开始，不会因为此前的重试状态而
+卡住；动作变绿时仍提供“开始检测”按钮，若活动阶段到达 100% 后后台没有完成切换，
+页面会提供“重新检测本项”作为兜底，但不会跳过该项或伪造结果。
+每个 E/F/A/B 自动检测步骤都提供“跳过本项”；确认后立即进入下一项。
+最终报告会把该项明确标为“已跳过”，不会当作阴性结果；若没有更高优先级的异常结论，
+总体结果保持“评估未完成”。
+
+页面右上角可在两种输入之间选择：
+
+- **自动切换的主机摄像头**：当前 MacBook 配置在 E/F 使用索引 `1` 的电脑前置
+  摄像头，在待机及 A/B 使用索引 `0` 的手机连续互通相机；树莓派 Picamera2
+  后端仍使用同一台 CSI 摄像头完成所有步骤。
+- **手机 / 当前设备**：调用当前打开页面的设备前置摄像头。要用手机镜头，
+  必须在手机上打开该页面并选择此项。浏览器将画面缩放到最长边 640 px，
+  以约 6 FPS 上传 JPEG 帧，服务端将其送入同一套 MediaPipe / MoveNet 流程。
+
+“主机自动切换”和“手机 / 当前设备”两种输入只能在待机页手动切换；主机模式内部的
+E/F 与 A/B 摄像头路由会在步骤交界处自动完成，同一项测量期间不会改变视角。除 `localhost` 外，
+手机和电脑浏览器都要求可信任的 HTTPS 上下文才会允许页面调用摄像头；麦克风仍被禁用。
+预览帧内的大型调试文字默认关闭，需排障时可用 `--debug-overlay` 显式开启。
+
+E、F、A、B 会依次引导眼动、微笑、双臂平举和安全站立。B 开始前必须由使用者确认
+周围有支撑且站立安全；S（言语）和 T（是否突然发生、发病时间）在最后复核。页面右上
+角的 `中文 / EN` 可即时切换界面语言。这里的绿色仅代表**动作及采集质量合格**，不代表
+医学筛查结果为阴性。最终结果会逐项显示异常类型、可能涉及的侧别和数据不足原因，
+例如“左眼水平移动范围明显小于右眼”，而不是只显示一个“异常”标签。
+
+## 3. 系统架构
+
+```text
+CSI / USB 摄像头 ─┐
+浏览器前置摄像头 ──├─▶ 选定的视频输入
+                     │
+                     ▼
+Raspberry Pi
+  ├─ Picamera2 / OpenCV：采集视频
+  ├─ MediaPipe Face Landmarker：E、F
+  ├─ MoveNet Lightning：A、B
+  ├─ BE-FAST 时序特征与保守决策
+  ├─ JSONL 研究日志 / 可选事件片段
+  └─ Flask Web 服务
+        │ 局域网 / SSH 端口转发
+        ▼
+手机或电脑浏览器：预览、引导、操作和结果
+```
+
+为控制树莓派 CPU 占用和温度，系统采用阶段调度：
+
+- 待机阶段仅以默认约 2 FPS 运行 MoveNet，Face Landmarker 暂停；
+- E/F 阶段仅以默认 5 FPS 运行 Face Landmarker，暂停 MoveNet；
+- A/B 阶段运行 MoveNet，暂停人脸推理；
+- 等待 E/F 动作时低频运行 Face Landmarker，等待 A/B 动作时低频运行 MoveNet；
+- 结果复核阶段暂停两套推理模型；
+- 浏览器预览仍按摄像头帧率更新；
+- 任一模型不可用时保留原始预览，对应项目返回数据不足，不伪造正常结果。
+
+## 4. BE-FAST 检测技术细节
+
+### B — Balance / 平衡
+
+**目标：**发现明显的持续侧偏或站立摆动，并允许本人/照护者直接报告突然失衡。
+
+**输入：**MoveNet 的左右肩、左右髋和左右踝关键点，以及站立姿态质量门槛。
+
+**计算：**
+
+1. 计算肩中心、髋中心和双踝支撑中心。
+2. 身体中心定义为肩中心与髋中心的平均位置。
+3. 使用肩宽进行尺度归一化：
+
+   ```text
+   body_support_offset = (body_center_x - ankle_center_x) / shoulder_width
+   ```
+
+4. 预热 1.5 秒后采集约 6 秒。
+5. 使用采样中位数表示持续侧偏，使用第 5–95 百分位范围表示摆动幅度。
+
+**当前工程规则：**
+
+- 至少 20 个有效样本且有效帧比例不低于 55%；
+- 持续侧偏绝对值达到 `0.40 × 肩宽`：阳性；
+- 摆动范围达到 `0.50 × 肩宽`：阳性；
+- 全身、脚踝或稳定站姿持续不可见：`insufficient`；
+- 本人/照护者报告突然失衡时，无需冒险站立，B 可直接记为阳性。
+
+**限制：**单目姿态不能测量眩晕、共济失调或深度方向摆动；地面、镜头角度、辅助器具、
+骨科疾病和既往残疾都会影响结果。
+
+### E — Eyes / 眼睛
+
+**摄像头来源：**可使用服务主机的本地摄像头，也可使用当前浏览器设备的
+前置摄像头。两者都会进入相同的 E/F 特征识别流程。
+
+**目标：**检测对移动视觉目标的可见眼动响应、左右眼活动范围差和双眼共轭运动异常。
+
+**输入：**MediaPipe Face Landmarker 的 478 点面部网格，其中包括：
+
+- 右虹膜中心 `468`，左虹膜中心 `473`；
+- 右眼角 `33/133`，左眼角 `362/263`；
+- 鼻尖 `1`；
+- 双眼外眼角 `33/263` 作为尺度和头部滚转参考。
+
+**引导与计算：**
+
+1. 页面目标点依次停留在中间、左侧、右侧，每处约 3 秒，界面同步显示方向和倒计时。
+2. 使用双眼外眼角连线校正画面内头部滚转。
+3. 用外眼角距离归一化脸部尺度；小于画面宽度约 7.5% 时认为脸太小。
+4. 每只眼的虹膜位置转换为眼裂内相对位置：
+
+   ```text
+   gaze_x = (iris_x - eye_corner_min_x) / eye_width
+   ```
+
+5. 分别计算左右眼从左目标到右目标的活动范围。
+6. 比较两眼活动范围差、相对中心目标的共轭误差，以及鼻尖相对双眼中心的头部代偿。
+
+**当前工程规则：**
+
+- 每个目标至少 4 个有效样本，总有效帧比例不低于 50%；
+- 两眼活动范围都低于 `0.12`：可见目标跟随减弱；
+- 左右眼活动范围差达到 `0.10`：眼球活动不对称；
+- 最大共轭误差达到 `0.14`：双眼共轭运动异常；
+- 头部代偿范围达到 `0.35 × 双眼外眼角距离`：数据不足并提示重试；
+- 虹膜、面部持续不可见：`insufficient`。
+
+**关键医学边界：**E 只检测摄像头可见的眼动，不能测量视力，也不能排除视物模糊、
+复视、黑蒙或视野缺损。本人报告突然视力异常时，必须直接按急症处理，不能被模型
+阴性结果覆盖。
+
+### F — Face / 面部
+
+**目标：**检测从中性表情到微笑时的单侧下脸部运动减弱。
+
+**输入：**
+
+- 右嘴角 `61`、左嘴角 `291`；
+- 双眼外眼角 `33/263`；
+- MediaPipe blendshape：`mouthSmileLeft`、`mouthSmileRight`。
+
+**引导与计算：**
+
+1. 先采集约 2 秒中性表情作为个体基线。
+2. 页面提示后采集约 3 秒自然微笑。
+3. 使用双眼连线做滚转校正，并用双眼外眼角距离归一化嘴角高度差。
+4. 计算微笑阶段相对中性阶段的嘴角差变化。
+5. 同时比较左右 `mouthSmile` 激活，减少仅依赖单个几何点造成的误报。
+
+**当前工程规则：**
+
+- 中性和微笑阶段各至少 5 个有效样本，总有效帧比例不低于 50%；
+- 最大微笑激活低于 `0.22`：未检测到足够微笑，返回数据不足；
+- 基线校正后的嘴角差变化达到 `0.075 × 双眼距离`：阳性；
+- 左右微笑激活差达到 `0.24`：阳性；
+- 面部太小、遮挡或阶段样本不足：`insufficient`。
+
+**限制：**天然面部不对称、既往面瘫、牙科/颌面疾病、光照、胡须、口罩和大幅转头
+都可能影响结果。
+
+### A — Arms / 手臂
+
+**目标：**检测双臂平举时的持续高度差和保持过程中的单侧下沉。
+
+**输入：**MoveNet 的左右肩、左右肘和左右腕关键点。
+
+**计算：**
+
+1. 受试者坐稳并将双臂向前平举。
+2. 预热 1.5 秒后采集约 6 秒。
+3. 每侧手腕相对同侧肩膀的纵向距离按肩宽归一化：
+
+   ```text
+   wrist_relative_y = (wrist_y - shoulder_y) / shoulder_width
+   ```
+
+4. 使用整个阶段的中位数计算持续双臂高度差。
+5. 比较采样前 1/3 与后 1/3 的手腕位置，计算左右下沉量之差。
+
+**当前工程规则：**
+
+- 至少 20 个有效样本且有效帧比例不低于 55%；
+- 持续高度差达到 `0.30 × 肩宽`：阳性；
+- 左右下沉量之差达到 `0.22 × 肩宽`：阳性；
+- 开始时双臂没有抬起，或肩/腕持续不可见：`insufficient`。
+
+**限制：**肩周疾病、疼痛、旧有偏瘫、活动受限、宽松衣物和透视角度都会影响结果。
+
+### S — Speech / 言语
+
+当前版本不使用自动语音模型。页面要求受试者复述“今天天气很好”，由本人或照护者
+确认是否出现说话含混、不能正确复述或理解困难。
+
+之所以保留人工确认，是因为没有临床语音数据时，普通 ASR 错误、方言、噪声、听力
+问题和原有言语障碍很容易被错误解释为卒中体征。后续可增加本地音频模型，但必须把
+“语音识别错误”和“神经功能异常”分开验证。
+
+### T — Time / 时间
+
+记录异常是否为新出现或突然发生，以及首次发现异常的时间。决策逻辑为：
+
+- 任一 B/E/F/A/S 项阳性，且确认为新发/突然发生：`emergency`；
+- 存在阳性，但尚未确认新发：`warning`；
+- 任一项目质量不足或未完成：`incomplete`；
+- 所有项目均为阴性：`clear`，但仍不能排除脑卒中。
+
+## 5. 引导流程
+
+1. 树莓派平时处于低负载待机，不需要持续完成固定动作。
+2. 用户、照护者、被动异常或定时提醒触发一次筛查。
+3. 确认实时预览、光线和取景。
+4. E：头保持不动，只用眼睛跟随中/左/右目标。
+5. F：先保持中性表情，提示后自然微笑。
+6. A：坐稳并保持双臂向前平举。
+7. B：只有在有人看护且安全时站立；不安全就跳过并报告异常。
+8. S/T：复述句子，填写是否突然出现及首次发现时间。
+9. 查看结果后点击“结束并返回待机”。
+
+## 6. 安装与模型
 
 ```bash
 python -m venv .venv
@@ -43,117 +323,682 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-Install one TFLite interpreter:
+桌面开发固定使用 `mediapipe==0.10.31`。Linux ARM64/Raspberry Pi 目前没有对应的
+官方 PyPI wheel；`requirements.txt` 会在该平台跳过 MediaPipe，需要按 Google 的
+[Python wheel 构建说明](https://developers.google.com/edge/mediapipe/solutions/build_python)
+构建并安装相同版本。
+
+安装 MoveNet 所需的解释器：
 
 ```bash
-# Local development
+# 桌面开发
 python -m pip install tensorflow
 
-# Raspberry Pi, when a wheel is available for your OS/Python version
+# Raspberry Pi：使用与系统/Python 匹配的轻量解释器
 python -m pip install tflite-runtime
 ```
 
-Download the MoveNet SinglePose Lightning TFLite model from TensorFlow Hub or
-the official TensorFlow examples and save it as:
+模型文件：
 
 ```text
 models/movenet_lightning.tflite
+models/face_landmarker.task
 ```
 
-## Run With Local Videos
-
-The first development phase should use local videos before connecting the camera:
+下载官方 Face Landmarker 模型：
 
 ```bash
-python -m app.main --source samples/test_standing.mp4
-python -m app.main --source samples/test_sitting.mp4
-python -m app.main --source samples/test_lying.mp4
-python -m app.main --source samples/test_fall.mp4
+curl -L \
+  https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task \
+  -o models/face_landmarker.task
 ```
 
-Open the web preview at:
+## 7. 运行
+
+MacBook 双摄像头自动切换（推荐）：
+
+```bash
+.venv/bin/python -m app.main
+```
+
+本项目针对当前 MacBook + 连续互通相机配置提供阶段感知切换：待机、A（手臂）和
+B（平衡）使用索引 `0` 的手机摄像头，以便拍摄上半身或全身；E（眼动）和 F（面部）
+使用索引 `1` 的 MacBook 前置摄像头，以便稳定捕捉面部细节。进入新阶段时程序会先
+释放旧摄像头再打开目标摄像头，因此启动时不再需要传入 `--camera-index`。如果索引
+`1` 不可用，系统会自动回退到索引 `0`，不会中断筛查。
+
+macOS 的设备索引可能因连接顺序而变化。如需覆盖自动配置，可使用
+`--camera-index N` 指定待机/A/B 摄像头，并使用 `--face-camera-index M` 指定 E/F
+摄像头。在 Web 页面选择“自动切换（E/F 电脑 · A/B 手机）”即可使用主机端自动路由；
+“手机 / 当前设备”仍表示浏览器通过 `getUserMedia` 上传画面。
+
+树莓派官方摄像头：
+
+```bash
+python -m app.main \
+  --source camera \
+  --camera-backend picamera2 \
+  --web-host 0.0.0.0 \
+  --web-port 8080
+```
+
+树莓派长期待机示例：
+
+```bash
+python -m app.main \
+  --source camera \
+  --camera-backend picamera2 \
+  --standby-pose-fps 2 \
+  --scheduled-screen-interval-hours 0
+```
+
+- `--standby-pose-fps 2`：待机 MoveNet 频率，越低越省 CPU，但快速事件采样更稀疏；
+- `--disable-passive-monitor`：只保留手动或照护者触发；
+- `--scheduled-screen-interval-hours 12`：每 12 小时打开一次主动筛查提醒；默认 `0` 关闭。
+
+然后在同一局域网的手机或电脑访问：
 
 ```text
-http://localhost:8080
+http://<树莓派IP>:8080
 ```
 
-For a quick command wrapper:
+上述 HTTP 地址可使用主机摄像头，但移动浏览器通常会拒绝在 HTTP 局域网页面中打开
+手机摄像头。要使用“手机 / 当前设备”，请配置手机信任的 TLS 证书，并运行：
 
 ```bash
-scripts/run_local_video.sh samples/test_fall.mp4
+python -m app.main \
+  --camera-backend picamera2 \
+  --web-host 0.0.0.0 \
+  --web-port 8443 \
+  --web-cert cert.pem \
+  --web-key key.pem
 ```
 
-## Run With Camera
+手机访问 `https://<树莓派IP或证书域名>:8443`。证书必须包含所访问的主机名/IP 且被手机信任；
+仅忽略不可信证书警告不能保证 `getUserMedia` 可用。MacBook 本机使用
+`http://localhost:8080` 时，localhost 被浏览器视为安全上下文，可直接选择“当前设备”。
 
-USB or OpenCV-compatible camera:
-
-```bash
-python -m app.main --source camera
-```
-
-Raspberry Pi camera via Picamera2:
-
-```bash
-python -m app.main --source camera --camera-backend picamera2
-```
-
-When using SSH:
+SSH 端口转发：
 
 ```bash
 ssh -L 8080:localhost:8080 pi@raspberrypi.local
 ```
 
-Then open:
+## 8. API、日志与隐私
 
 ```text
-http://localhost:8080
+GET  /api/status
+POST /api/camera/source      {"source":"host" | "client"}
+POST /api/camera/frame       Content-Type: image/jpeg
+POST /api/monitoring/trigger {"source":"user","reason":"felt_unwell"}
+POST /api/monitoring/standby
+POST /api/befast/stage   {"stage":"eyes"}
+POST /api/befast/stage   {"stage":"face"}
+POST /api/befast/stage   {"stage":"arms"}
+POST /api/befast/stage   {"stage":"balance"}
+POST /api/befast/skip
+POST /api/befast/manual
+POST /api/befast/reset
 ```
 
-## Logs and Event Clips
+`/api/status` 中的 `befast.mode` 为 `standby` 或 `screening`；`monitoring` 字段显示
+当前推理调度、待机 FPS、最近被动状态和
+`medical_role=trigger_only_not_stroke_diagnosis`。
 
-Keypoints are written as JSONL under `data/keypoints/` by default. Each line has
-the timestamp, pose, fall flag, quality, metrics, and all keypoints:
+人工输入示例：
 
 ```json
-{"ts":1719912001.23,"pose":"standing","fall":false,"quality":0.82,"keypoints":[{"name":"left_shoulder","x":0.42,"y":0.31,"score":0.88}]}
+{
+  "balance_problem": false,
+  "speech_problem": true,
+  "new_or_sudden": true,
+  "onset_time": "2026-07-19T10:30"
+}
 ```
 
-Video is not saved continuously. To save MP4 event clips only when a likely fall
-is detected:
+默认 JSONL 日志只保存姿态关键点、质量、结果、原因和量化指标，不持续保存原始视频。
+只有显式启用 `--save-event-clips` 才会保存事件片段。真实患者视频、人脸、语音和身份
+信息不得提交到 GitHub；采集前应取得知情同意并制定访问、加密、留存和删除策略。
 
-```bash
-python -m app.main --source camera --save-event-clips
-```
-
-The recorder keeps about 5 seconds before and 5 seconds after the fall event.
-OpenCV codec support differs by platform; this first version writes MP4 with the
-`mp4v` codec.
-
-## Tune Thresholds
-
-The first-pass rules live in `app/config.py`:
-
-- `PoseClassifierConfig`: keypoint confidence, body aspect ratios, torso angles,
-  sitting knee/hip geometry.
-- `FallDetectorConfig`: transition window, center drop threshold, torso angle
-  change, lying hold duration, recovery duration.
-
-Camera placement strongly affects these values. Start with logs from controlled
-samples: standing 30s, sitting 30s, lying 30s, slow lying down 30s, and several
-simulated falls.
-
-## Tests
+## 9. 测试与性能基准
 
 ```bash
 python -m unittest discover -s tests -v
+python -m scripts.benchmark_face --frames 100
 ```
 
-The current tests cover the rule classifier and the temporal fall detector. They
-do not require OpenCV, TensorFlow, a camera, or the model file.
+测试使用合成关键点，只验证软件和规则逻辑，不代表临床敏感度或特异度。取得合规临床
+数据后，应采用患者级数据划分、卒中类似疾病阴性组、神经科医师结合 CT/MRI 的最终诊断，
+并报告敏感度、特异度、PPV、NPV、校准度和外部验证结果。
 
-## Git Hygiene
+## 10. 项目结构
 
-Do not commit real videos, privacy-sensitive snapshots, `.env`, or `.venv`.
-Generated clips, snapshots, keypoint logs, and common image/video files are
-ignored by `.gitignore`.
+```text
+app/
+  main.py                 # 分阶段实时推理与 Web 服务入口
+  befast.py               # E/F/A/B 特征和 BE-FAST 决策
+  face_landmarker.py      # MediaPipe 478 点/52 blendshape 适配器
+  monitoring.py           # 低频被动触发层与树莓派待机节流
+  movenet.py              # TFLite MoveNet 推理
+  camera.py               # OpenCV / Picamera2 视频输入
+  pose_classifier.py      # standing / sitting / lying 质量门槛
+  web.py                  # 双语项目名、中文操作引导与 API
+  drawing.py              # 姿态/面部点和状态叠加
+  keypoint_logger.py      # JSONL 研究日志
+  event_recorder.py       # 可选紧急事件片段
+scripts/
+  benchmark_face.py       # 不保存画面的 Face Landmarker 基准
+tests/
+models/
+data/
+```
 
+---
+
+# English
+
+## 1. Project scope
+
+PiBE-FAST is a research prototype for Raspberry Pi edge deployment and early
+BE-FAST screening of acute stroke. It fuses:
+
+- a live camera stream;
+- MediaPipe facial, iris, and expression landmarks;
+- MoveNet body-pose landmarks;
+- temporal motion features across multiple frames; and
+- structured observations about speech, balance, and symptom onset.
+
+The Raspberry Pi performs model inference, feature computation, logging, and Web
+serving. It uses an attached CSI/USB camera by default, or it can receive front-
+camera frames from the phone or computer that opened the page. Inference still
+runs on the Python-service host and no video is sent to a third-party cloud.
+
+This project is not a medical device and cannot diagnose or rule out stroke.
+All current thresholds are unvalidated engineering defaults, not clinical
+decision thresholds or stroke probabilities.
+
+## 2. Raspberry Pi operating model and responsibilities
+
+PiBE-FAST does not ask a person to repeat fixed actions all day. It uses an
+**always-available standby, event-triggered, short active-screening** model:
+
+```text
+Low-load standby
+  ├─ the user feels unwell and presses Start
+  ├─ a caregiver notices a sudden change
+  ├─ the passive layer confirms a possible fall and requests a screen
+  └─ an optional scheduled reminder becomes due
+                         │
+                         ▼
+1–2 minute standardized guided BE-FAST screen
+                         │
+                         ▼
+Result / urgent warning → return to standby after acknowledgement
+```
+
+The fixed actions appear only during an active screen. E needs explicit visual
+targets, F needs neutral and smile phases, A needs a bilateral arm hold, and B
+needs supervised standing when safe. Standardized actions make measurements at
+different times comparable; standby does not require the person to face the
+camera or perform any action.
+
+The Raspberry Pi is the **always-on local edge host**, not a camera accessory for
+a desktop computer. It:
+
+- connects to a CSI/USB camera and serves a local live preview;
+- runs MoveNet at about 2 FPS by default in standby to observe possible falls;
+- switches between MoveNet and MediaPipe by stage instead of saturating the CPU
+  with both models;
+- computes temporal features, quality gates, and conservative BE-FAST decisions;
+- hosts the Flask interface while a phone or computer acts only as a LAN client;
+- continues local screening without Internet access and optionally records JSONL
+  data or short emergency event clips; and
+- can later integrate a physical help button, buzzer, microphone, or wearable.
+
+The current passive layer implements low-rate pose observation and a fall sequence
+requiring a rapid transition followed by sustained lying. Its output may open the
+guided workflow and alert a caregiver, but **it is never a positive or negative
+stroke result**. Ordinary lying does not trigger it. Face, gaze, arm weakness, and
+speech still require the active workflow.
+
+Actual inference scheduling:
+
+| State | Camera preview | MoveNet | MediaPipe Face | Medical role |
+|---|---:|---:|---:|---|
+| Standby | 15 FPS default | about 2 FPS default | paused | trigger signals only |
+| Waiting for E/F setup | continues | paused | about 5 FPS | verify face/eye framing |
+| Waiting for A/B setup | continues | about 5 FPS | paused | verify body framing and safe posture |
+| E/F | continues | paused | 5 FPS default | standardized gaze/face measurement |
+| A/B | continues | camera cadence | paused | standardized arm/balance measurement |
+| Review | continues | paused | paused | collect S/T and display results |
+
+In standby, JSONL is written only when low-rate inference actually runs, not for
+every camera frame. Tune load with `--standby-pose-fps`, disable passive inference
+with `--disable-passive-monitor`, and enable periodic prompts with
+`--scheduled-screen-interval-hours`.
+
+> BE-FAST recognizes warning signs that have already appeared suddenly; it does
+> not predict an impending stroke. If any sudden sign is already present, call
+> emergency services immediately instead of waiting for the active screen.
+
+### Pi BE-FAST Screening Demo Web interface
+
+The live camera preview is the primary page area; users do not have to navigate
+through a dashboard of setup cards. The current instruction appears directly over
+the bottom of the video. Red means framing, landmark visibility, or the requested
+action is not yet suitable for capture. Green means the action and capture quality
+are ready. A stage starts automatically only after readiness is observed
+consistently. If capture quality is insufficient, the interface returns to the
+same guided step instead of treating missing data as normal or advancing.
+The same step can restart repeatedly without being blocked by an earlier retry.
+When setup turns green, a manual “Start this check” control remains available;
+if an active stage reaches 100% without completing, “Restart this check” appears
+as a recovery action without skipping the item or fabricating a result.
+Each automated E/F/A/B step also provides **Skip this check**. After confirmation,
+the flow advances and the final report explicitly marks that item as `skipped`.
+A skipped item is never treated as negative; unless a higher-priority abnormal
+finding applies, the overall screen remains incomplete.
+
+The top-right selector provides two inputs:
+
+- **Automatically routed host cameras:** on the current MacBook setup, E/F uses
+  the built-in front camera at index `1`, while standby and A/B use the phone
+  Continuity Camera at index `0`. The Raspberry Pi Picamera2 backend continues
+  to use its single attached CSI camera for every stage.
+- **Phone / this device:** opens the front camera of the device displaying the
+  page. To use a phone camera, open the page on that phone and select this option.
+  The browser scales frames to a 640 px maximum edge and uploads JPEG at about
+  6 FPS; the service feeds them into the same MediaPipe / MoveNet pipeline.
+
+The user can switch between host routing and **Phone / this device** only while
+the screen is idle. Host E/F-to-A/B routing happens automatically between stages,
+never during one temporal measurement. Browsers require a trusted HTTPS context for camera
+access except on `localhost`; microphone access remains disabled. The large
+diagnostic text drawn into the video is off by default and can be restored with
+`--debug-overlay` when troubleshooting.
+
+The flow guides E, F, A, and B in sequence: eye motion, smile, bilateral arm hold,
+and supported standing. Balance capture requires an explicit safety confirmation.
+Speech and symptom timing are reviewed at the end. The top-right `中文 / EN`
+control switches the whole interface immediately. Green indicates **action and
+capture readiness only**; it is not a negative medical screening result. Final
+results identify the specific sign, affected side when available, and the reason
+for insufficient data—for example, “the left eye had a smaller horizontal range”
+instead of showing only “abnormal.”
+
+## 3. Architecture
+
+```text
+CSI / USB camera ─┐
+browser front camera ──├─▶ selected video input
+                       │
+                       ▼
+Raspberry Pi
+  ├─ Picamera2 / OpenCV video capture
+  ├─ MediaPipe Face Landmarker for E and F
+  ├─ MoveNet Lightning for A and B
+  ├─ temporal BE-FAST features and conservative decisions
+  ├─ JSONL research logs / optional event clips
+  └─ Flask Web service
+        │ LAN or SSH tunnel
+        ▼
+Phone or computer browser: preview, guidance, controls, and results
+```
+
+To limit Raspberry Pi CPU load and thermal pressure, inference is stage-aware:
+
+- standby runs MoveNet at about 2 FPS by default and pauses Face Landmarker;
+- E/F runs Face Landmarker at 5 FPS by default and pauses MoveNet;
+- A/B runs MoveNet and pauses facial inference;
+- Face Landmarker runs at low rate while waiting for E/F setup, and MoveNet runs
+  at low rate while waiting for A/B setup;
+- both models pause during result review;
+- the browser preview continues at camera cadence; and
+- if either model is unavailable, raw preview remains available and the affected
+  item becomes insufficient instead of being reported as normal.
+
+## 4. BE-FAST detection details
+
+### B — Balance
+
+**Purpose:** detect persistent lateral lean or large standing sway, while allowing
+the person or caregiver to directly report sudden loss of balance.
+
+**Inputs:** MoveNet left/right shoulders, hips, and ankles, gated by standing-pose
+quality.
+
+**Method:**
+
+1. Compute shoulder, hip, and ankle-support centers.
+2. Define the body center as the mean of the shoulder and hip centers.
+3. Normalize lateral displacement by shoulder width:
+
+   ```text
+   body_support_offset = (body_center_x - ankle_center_x) / shoulder_width
+   ```
+
+4. After a 1.5-second warm-up, collect approximately 6 seconds of data.
+5. Use the median for persistent offset and the 5th–95th percentile range for sway.
+
+**Current engineering rules:** at least 20 valid samples and 55% valid frames;
+`0.40 × shoulder width` persistent offset or `0.50 × shoulder width` sway is
+positive. Missing ankles/body or an unstable pose produces `insufficient`.
+A reported sudden balance problem can mark B positive without requiring an unsafe
+standing attempt.
+
+**Limitations:** monocular pose cannot measure vertigo, ataxia, or depth-axis sway.
+Camera angle, walking aids, orthopedic disease, and pre-existing disability can
+affect the result.
+
+### E — Eyes
+
+**Camera source:** either the local camera attached to the service host or the
+front camera of the current browser device. Both enter the same E/F feature
+extraction path.
+
+**Purpose:** detect visible gaze response to moving targets, inter-eye excursion
+asymmetry, and abnormal conjugate eye movement.
+
+**Inputs:** MediaPipe's 478-point mesh, including right/left iris centers `468/473`,
+right eye corners `33/133`, left eye corners `362/263`, nose tip `1`, and outer
+eye corners `33/263` for scale and roll correction.
+
+**Method:**
+
+1. A target remains at center, left, and right for about 3 seconds each; the UI
+   shows the current direction and a countdown.
+2. The outer-eye line corrects in-plane head roll.
+3. Interocular distance normalizes scale; a distance below about 7.5% of image
+   width is treated as a face that is too small.
+4. Iris position is represented within each eye opening:
+
+   ```text
+   gaze_x = (iris_x - eye_corner_min_x) / eye_width
+   ```
+
+5. Compute left-to-right excursion for both eyes.
+6. Compare excursion asymmetry, conjugacy error relative to center, and head
+   compensation derived from the nose position.
+
+**Current engineering rules:** at least 4 valid samples per target and 50% valid
+frames. Both excursions below `0.12` indicate reduced visible target response;
+excursion difference of `0.10` indicates asymmetry; conjugacy error of `0.14`
+indicates abnormal conjugate motion; head compensation of `0.35 × interocular
+distance` makes the result insufficient. Missing irises/face also produces
+`insufficient`.
+
+**Critical medical boundary:** E only evaluates camera-visible eye motion. It does
+not measure visual acuity and cannot rule out blurred vision, diplopia, transient
+vision loss, or visual-field defects. A sudden subjective visual symptom must
+override a negative model result and be treated as an emergency symptom.
+
+### F — Face
+
+**Purpose:** detect unilateral lower-face movement weakness from neutral expression
+to smile.
+
+**Inputs:** right/left mouth corners `61/291`, outer eye corners `33/263`, and the
+`mouthSmileLeft` / `mouthSmileRight` MediaPipe blendshapes.
+
+**Method:** collect a 2-second neutral baseline followed by a 3-second natural
+smile. Correct roll using the eye line, normalize mouth-corner displacement by
+interocular distance, compare smile-versus-neutral corner asymmetry, and combine
+it with the left/right smile activation difference.
+
+**Current engineering rules:** at least 5 valid samples in each phase and 50% valid
+frames. Maximum smile activation below `0.22` means no adequate smile was detected.
+Baseline-corrected mouth-corner change of `0.075 × interocular distance`, or a
+left/right smile activation difference of `0.24`, is positive. A small, occluded,
+or insufficiently sampled face produces `insufficient`.
+
+**Limitations:** natural asymmetry, previous facial palsy, dental/maxillofacial
+conditions, lighting, facial hair, masks, and head rotation can affect the result.
+
+### A — Arms
+
+**Purpose:** detect persistent arm-height asymmetry or unilateral downward drift
+during a forward arm hold.
+
+**Inputs:** MoveNet left/right shoulders, elbows, and wrists.
+
+**Method:** after a 1.5-second warm-up, collect approximately 6 seconds. Normalize
+each wrist's vertical position relative to its shoulder by shoulder width:
+
+```text
+wrist_relative_y = (wrist_y - shoulder_y) / shoulder_width
+```
+
+Use the stage median for persistent height difference. Compare the first and
+last thirds of the samples to measure differential arm drift.
+
+**Current engineering rules:** at least 20 valid samples and 55% valid frames;
+`0.30 × shoulder width` persistent height difference or `0.22 × shoulder width`
+differential drift is positive. Arms not initially raised or shoulders/wrists not
+visible long enough produces `insufficient`.
+
+**Limitations:** shoulder disease, pain, prior hemiparesis, restricted movement,
+loose clothing, and perspective distortion can affect the result.
+
+### S — Speech
+
+The current version does not use an automatic speech model. The interface asks
+the person to repeat a short sentence, and the person or caregiver reports slurred
+speech, inability to repeat, or comprehension difficulty.
+
+This remains manual because, without clinical speech data, ASR errors, dialects,
+noise, hearing problems, and pre-existing speech disorders could be incorrectly
+interpreted as neurological deficits. A future on-device audio model must validate
+speech-recognition error separately from neurological impairment.
+
+### T — Time
+
+The interface records whether a sign is new/sudden and when it was first noticed:
+
+- any positive B/E/F/A/S item plus new/sudden onset: `emergency`;
+- a positive item without confirmed sudden onset: `warning`;
+- an unfinished or low-quality item: `incomplete`;
+- all items negative: `clear`, which still does not rule out stroke.
+
+## 5. Guided workflow
+
+1. The Raspberry Pi remains in low-load standby; no repeated actions are required.
+2. A user, caregiver, passive anomaly, or scheduled reminder triggers one screen.
+3. Confirm live preview, lighting, and framing.
+4. E: keep the head still and follow center/left/right targets using only the eyes.
+5. F: remain neutral, then smile when prompted.
+6. A: sit safely and hold both arms forward.
+7. B: stand only with supervision and only when safe; otherwise skip and report it.
+8. S/T: repeat the sentence and record sudden onset and first-known time.
+9. Review the result and select **Return to standby**.
+
+## 6. Installation and models
+
+```bash
+python -m venv .venv
+. .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+Desktop development is pinned to `mediapipe==0.10.31`. There is currently no
+official Linux ARM64/Raspberry Pi PyPI wheel. The requirements file skips
+MediaPipe on that platform; build and install the same version using Google's
+[Python wheel build guide](https://developers.google.com/edge/mediapipe/solutions/build_python).
+
+Install a MoveNet-compatible TFLite interpreter:
+
+```bash
+# Desktop development
+python -m pip install tensorflow
+
+# Raspberry Pi: select a wheel matching the OS and Python version
+python -m pip install tflite-runtime
+```
+
+Required models:
+
+```text
+models/movenet_lightning.tflite
+models/face_landmarker.task
+```
+
+Download the official Face Landmarker model:
+
+```bash
+curl -L \
+  https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task \
+  -o models/face_landmarker.task
+```
+
+## 7. Running the system
+
+Automatic dual-camera routing on a MacBook (recommended):
+
+```bash
+.venv/bin/python -m app.main
+```
+
+For the current MacBook + Continuity Camera setup, the service uses stage-aware
+routing. Camera index `0` (the phone) is used for standby, A (arms), and B
+(balance), where a wider upper-body or full-body view is needed. Camera index `1`
+(the MacBook front camera) is used for E (eyes) and F (face), where close facial
+detail is needed. The old device is released before the target device is opened,
+so no camera argument is required at startup. If index `1` is unavailable, the
+screen falls back to index `0` instead of stopping.
+
+macOS camera indices can change with device connection order. Override the
+automatic mapping with `--camera-index N` for standby/A/B and
+`--face-camera-index M` for E/F. In the Web UI, **Auto (E/F Mac · A/B phone)**
+uses this host-side routing; **Phone / this device** still means browser-uploaded
+frames from `getUserMedia`.
+
+Raspberry Pi camera:
+
+```bash
+python -m app.main \
+  --source camera \
+  --camera-backend picamera2 \
+  --web-host 0.0.0.0 \
+  --web-port 8080
+```
+
+Long-running Raspberry Pi standby example:
+
+```bash
+python -m app.main \
+  --source camera \
+  --camera-backend picamera2 \
+  --standby-pose-fps 2 \
+  --scheduled-screen-interval-hours 0
+```
+
+- `--standby-pose-fps 2`: lower values save CPU but sample rapid events less often;
+- `--disable-passive-monitor`: retain only user/caregiver-triggered screening;
+- `--scheduled-screen-interval-hours 12`: open a screen every 12 hours; `0` disables it.
+
+Open `http://<raspberry-pi-ip>:8080` from a phone or computer on the same network,
+or use an SSH tunnel. This HTTP URL supports the host camera, but mobile browsers
+normally reject camera capture from an HTTP LAN page.
+
+To use **Phone / this device**, configure a TLS certificate trusted by the phone:
+
+```bash
+python -m app.main \
+  --camera-backend picamera2 \
+  --web-host 0.0.0.0 \
+  --web-port 8443 \
+  --web-cert cert.pem \
+  --web-key key.pem
+```
+
+Open `https://<raspberry-pi-ip-or-certificate-hostname>:8443`. The certificate
+must cover that hostname/IP and be trusted by the phone; merely bypassing an
+untrusted-certificate warning may not enable `getUserMedia`. On the MacBook that
+runs the service, `http://localhost:8080` is treated as a secure context and can
+use **this device** without TLS.
+
+SSH tunnel:
+
+```bash
+ssh -L 8080:localhost:8080 pi@raspberrypi.local
+```
+
+## 8. API, logging, and privacy
+
+```text
+GET  /api/status
+POST /api/camera/source      {"source":"host" | "client"}
+POST /api/camera/frame       Content-Type: image/jpeg
+POST /api/monitoring/trigger {"source":"user","reason":"felt_unwell"}
+POST /api/monitoring/standby
+POST /api/befast/stage   {"stage":"eyes"}
+POST /api/befast/stage   {"stage":"face"}
+POST /api/befast/stage   {"stage":"arms"}
+POST /api/befast/stage   {"stage":"balance"}
+POST /api/befast/skip
+POST /api/befast/manual
+POST /api/befast/reset
+```
+
+In `/api/status`, `befast.mode` is `standby` or `screening`. The `monitoring`
+object reports inference scheduling, standby FPS, the last passive state, and
+`medical_role=trigger_only_not_stroke_diagnosis`.
+
+Manual-input example:
+
+```json
+{
+  "balance_problem": false,
+  "speech_problem": true,
+  "new_or_sudden": true,
+  "onset_time": "2026-07-19T10:30"
+}
+```
+
+By default, JSONL logs contain landmarks, quality, decisions, reasons, and numeric
+metrics, but not continuous raw video. Event clips are saved only when
+`--save-event-clips` is explicitly enabled. Do not commit real patient video,
+faces, speech, or identifiers to GitHub. Obtain informed consent and define
+access, encryption, retention, and deletion policies before data collection.
+
+## 9. Tests and benchmarks
+
+```bash
+python -m unittest discover -s tests -v
+python -m scripts.benchmark_face --frames 100
+```
+
+Tests use synthetic landmarks and validate software logic only. They do not
+establish clinical sensitivity or specificity. Clinical evaluation should use
+patient-level splits, stroke-mimic controls, neurologist-adjudicated CT/MRI-based
+outcomes, calibration analysis, and external validation.
+
+## 10. Repository layout
+
+```text
+app/
+  main.py                 # stage-aware inference and Web entry point
+  befast.py               # E/F/A/B features and BE-FAST decisions
+  face_landmarker.py      # MediaPipe 478-landmark/52-blendshape adapter
+  monitoring.py           # throttled passive trigger layer for Pi standby
+  movenet.py              # TFLite MoveNet inference
+  camera.py               # OpenCV / Picamera2 input
+  pose_classifier.py      # standing / sitting / lying quality gate
+  web.py                  # guided interface and API
+  drawing.py              # pose/face/status overlays
+  keypoint_logger.py      # JSONL research logs
+  event_recorder.py       # optional emergency event clips
+scripts/
+  benchmark_face.py       # no-save Face Landmarker benchmark
+tests/
+models/
+data/
+```
+
+## References / 参考资料
+
+- [American Stroke Association — Stroke symptoms and BE-FAST](https://www.stroke.org/en/about-stroke/stroke-symptoms)
+- [MediaPipe Face Landmarker for Python](https://developers.google.com/edge/mediapipe/solutions/vision/face_landmarker/python)
+- [MediaPipe Raspberry Pi Face Landmarker example](https://github.com/google-ai-edge/mediapipe-samples/tree/main/examples/face_landmarker/raspberry_pi)
+- [MoveNet models on TensorFlow Hub](https://www.tensorflow.org/hub/tutorials/movenet)
+- [MediaPipe Python wheel build guide](https://developers.google.com/edge/mediapipe/solutions/build_python)

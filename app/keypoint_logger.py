@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import json
 from pathlib import Path
-from typing import Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 
 # JSONL 骨架日志写入器，每帧写一行，便于后续调参和离线分析。
@@ -37,6 +37,53 @@ class JsonlKeypointLogger:
         }
         if metrics:
             # metrics 保存分类器中间指标，例如 bbox、躯干角度、人体中心点。
+            record["metrics"] = {
+                str(key): round(float(value), 5)
+                for key, value in metrics.items()
+                if isinstance(value, (int, float))
+            }
+        self.file.write(json.dumps(record, separators=(",", ":")) + "\n")
+
+    def write_befast(
+        self,
+        ts: float,
+        keypoints: Sequence[Mapping[str, float]],
+        quality: float,
+        assessment: Mapping[str, Any],
+        pose: str,
+        metrics: Mapping[str, float] | None = None,
+    ) -> None:
+        """Write one frame and its current BE-FAST screening state."""
+
+        items = assessment.get("items", {})
+        record: dict[str, Any] = {
+            "ts": round(float(ts), 4),
+            "pose": pose,
+            "quality": round(float(quality), 4),
+            "befast": {
+                "mode": assessment.get("mode", "standby"),
+                "stage": assessment.get("stage", "idle"),
+                "decision": assessment.get("decision", "incomplete"),
+                "new_or_sudden": assessment.get("new_or_sudden"),
+                "onset_time": assessment.get("onset_time"),
+                "reasons": list(assessment.get("reasons", [])),
+                "trigger": assessment.get("trigger"),
+                "items": {
+                    str(code): {
+                        "status": item.get("status"),
+                        "source": item.get("source"),
+                        "reason": item.get("reason"),
+                        "affected_side": item.get("affected_side"),
+                        "quality": item.get("quality"),
+                        "metrics": item.get("metrics", {}),
+                    }
+                    for code, item in items.items()
+                    if isinstance(item, Mapping)
+                },
+            },
+            "keypoints": [_clean_keypoint(keypoint) for keypoint in keypoints],
+        }
+        if metrics:
             record["metrics"] = {
                 str(key): round(float(value), 5)
                 for key, value in metrics.items()
