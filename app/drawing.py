@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 import cv2
 
 from app.fall_detector import FallDetection
+from app.face_landmarker import FaceObservation
 from app.keypoints import SKELETON_EDGES, keypoint_map
 from app.pose_classifier import PoseClassification
 
@@ -53,6 +54,98 @@ def draw_overlay(
     return output
 
 
+def draw_befast_overlay(
+    frame,
+    keypoints: Sequence[Mapping[str, float]],
+    pose: PoseClassification,
+    assessment: Mapping[str, Any],
+    fps: float,
+    min_score: float = 0.25,
+    face_observation: FaceObservation | None = None,
+    show_diagnostics: bool = False,
+):
+    """Draw skeleton plus the current guided BE-FAST screening state."""
+
+    output = frame.copy()
+    height, width = output.shape[:2]
+    by_name = keypoint_map(keypoints)
+
+    for start_name, end_name in SKELETON_EDGES:
+        start = by_name.get(start_name)
+        end = by_name.get(end_name)
+        if not _visible(start, min_score) or not _visible(end, min_score):
+            continue
+        cv2.line(
+            output,
+            _pixel(start, width, height),
+            _pixel(end, width, height),
+            (0, 220, 255),
+            2,
+            lineType=cv2.LINE_AA,
+        )
+    for keypoint in keypoints:
+        if _visible(keypoint, min_score):
+            cv2.circle(
+                output,
+                _pixel(keypoint, width, height),
+                4,
+                (60, 255, 120),
+                -1,
+            )
+
+    if face_observation is not None:
+        # Sparse E/F landmarks provide immediate feedback without drawing all
+        # 478 points over the person's face.
+        groups = (
+            ((33, 133, 468), (255, 210, 70)),
+            ((362, 263, 473), (255, 210, 70)),
+            ((61, 291), (80, 190, 255)),
+        )
+        for indices, color in groups:
+            pixels = []
+            for index in indices:
+                point = face_observation.point(index)
+                if point is None:
+                    continue
+                pixel = (
+                    int(max(0.0, min(1.0, point[0])) * (width - 1)),
+                    int(max(0.0, min(1.0, point[1])) * (height - 1)),
+                )
+                pixels.append(pixel)
+                cv2.circle(output, pixel, 4, color, -1, lineType=cv2.LINE_AA)
+            if len(pixels) >= 2:
+                cv2.line(output, pixels[0], pixels[1], color, 2, cv2.LINE_AA)
+
+    if show_diagnostics:
+        decision = str(assessment.get("decision", "incomplete"))
+        colors = {
+            "standby": (100, 190, 120),
+            "emergency": (40, 40, 255),
+            "warning": (0, 150, 255),
+            "clear": (60, 220, 100),
+            "incomplete": (0, 210, 255),
+        }
+        accent = colors.get(decision, (0, 210, 255))
+        items = assessment.get("items", {})
+        item_text = " ".join(
+            f"{code}:{_short_item_status(items.get(code, {}))}"
+            for code in ("B", "E", "F", "A", "S")
+        )
+        stage = str(assessment.get("stage", "idle"))
+        mode = str(assessment.get("mode", "standby"))
+        progress = float(assessment.get("progress", 0.0))
+        lines = [
+            f"PiBE-FAST: {decision.upper()}",
+            f"mode: {mode}",
+            f"stage: {stage} ({progress * 100:.0f}%)",
+            item_text,
+            f"pose: {pose.pose}  quality: {pose.quality:.2f}",
+            f"fps: {fps:.1f}",
+        ]
+        _draw_status_box(output, lines, accent, box_width=430)
+    return output
+
+
 def _visible(keypoint: Mapping[str, float] | None, min_score: float) -> bool:
     # 绘制层也做置信度过滤，和分类层保持一致的“可靠点”概念。
     return bool(keypoint and float(keypoint.get("score", 0.0)) >= min_score)
@@ -65,11 +158,15 @@ def _pixel(keypoint: Mapping[str, float], width: int, height: int) -> tuple[int,
     return x, y
 
 
-def _draw_status_box(frame, lines: Sequence[str], accent: tuple[int, int, int]) -> None:
+def _draw_status_box(
+    frame,
+    lines: Sequence[str],
+    accent: tuple[int, int, int],
+    box_width: int = 250,
+) -> None:
     # 状态框使用半透明黑底，保证不同背景下文字都能读清。
     x, y = 12, 16
     line_height = 24
-    box_width = 250
     box_height = line_height * len(lines) + 18
     overlay = frame.copy()
     cv2.rectangle(overlay, (x - 6, y - 14), (x + box_width, y + box_height), (0, 0, 0), -1)
@@ -88,3 +185,14 @@ def _draw_status_box(frame, lines: Sequence[str], accent: tuple[int, int, int]) 
             2,
             lineType=cv2.LINE_AA,
         )
+
+
+def _short_item_status(item: Mapping[str, Any]) -> str:
+    status = str(item.get("status", "pending"))
+    return {
+        "positive": "+",
+        "negative": "-",
+        "insufficient": "?",
+        "checking": "...",
+        "pending": "?",
+    }.get(status, "?")
