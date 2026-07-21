@@ -63,10 +63,14 @@ class RuntimeConfig:
     frame_height: int = 480
     # 推荐处理帧率；摄像头模式会尝试设置，实际值取决于硬件。
     frame_fps: int = 15
+    # 待机时仅低频运行 MoveNet，用于“触发主动筛查”，不生成卒中结论。
+    standby_pose_fps: float = 2.0
+    # 0 表示不做定时提醒；可通过命令行配置高风险人群的周期性筛查提醒。
+    scheduled_screen_interval_hours: float = 0.0
     # Web 预览把画面编码成 JPEG，质量越高越清晰但带宽和 CPU 消耗越高。
     jpeg_quality: int = 80
     # 命令行日志输出间隔，避免每一帧都刷屏。
     log_every_seconds: float = 1.0
-    # fall 事件片段保存前后各多少秒。
+    # 事件片段保存前后各多少秒。
     event_pre_seconds: float = 5.0
     event_post_seconds: float = 5.0
