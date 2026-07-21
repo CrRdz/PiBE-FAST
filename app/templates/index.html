@@ -1,0 +1,620 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pi BE-FAST 筛查 Demo</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #05080c;
+      --glass: rgba(9, 15, 22, .78);
+      --line: rgba(255, 255, 255, .16);
+      --text: #f6f9fb;
+      --muted: #a9b6c2;
+      --blue: #35a9ff;
+      --green: #31d07f;
+      --red: #ff5864;
+      --yellow: #ffc857;
+    }
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter, system-ui, -apple-system, "PingFang SC", sans-serif; }
+    button, input, select { font: inherit; }
+    button { cursor: pointer; }
+    .app { min-height: 100vh; display: grid; grid-template-rows: auto auto 1fr; }
+    .topbar { height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 22px; border-bottom: 1px solid #18212a; background: #090e14; }
+    .brand { display: flex; align-items: center; gap: 11px; font-weight: 760; letter-spacing: -.02em; }
+    .brand-mark { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px; background: linear-gradient(145deg, #28b5ff, #2569e8); box-shadow: 0 7px 22px #217ee055; }
+    .brand-sub { color: var(--muted); font-size: .76rem; font-weight: 520; letter-spacing: .01em; }
+    .top-actions { display: flex; align-items: center; gap: 8px; }
+    .camera-picker { display: flex; align-items: center; gap: 7px; height: 38px; padding: 0 8px 0 11px; border: 1px solid #263442; border-radius: 9px; color: #9eafbd; background: #101720; font-size: .78rem; white-space: nowrap; }
+    .camera-picker select { max-width: 190px; padding: 5px 24px 5px 7px; border: 0; border-radius: 6px; outline: 0; color: #e7f1f8; background: #18232d; }
+    .camera-picker select:disabled { opacity: .55; cursor: not-allowed; }
+    .language { display: flex; padding: 3px; border: 1px solid #263442; border-radius: 9px; background: #101720; }
+    .language button { min-width: 52px; padding: 6px 10px; border: 0; border-radius: 6px; color: #8fa0af; background: transparent; }
+    .language button.active { color: #071018; background: #d9efff; font-weight: 750; }
+    .emergency { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 38px; padding: 8px 18px; color: #ffd8da; background: #451a1f; border-bottom: 1px solid #713039; text-align: center; font-size: .88rem; }
+    .workspace { position: relative; min-height: calc(100vh - 102px); overflow: hidden; background: #020304; }
+    .video { width: 100%; height: calc(100vh - 102px); display: block; object-fit: contain; background: #020304; }
+    .client-video { transform: scaleX(-1); }
+    .shade { pointer-events: none; position: absolute; inset: 0; background: linear-gradient(180deg, #0008 0, transparent 22%, transparent 57%, #000c 100%); }
+    .status { position: absolute; top: 12px; left: 12px; display: flex; align-items: center; gap: 6px; max-width: min(300px, calc(100% - 24px)); padding: 6px 9px; border: 1px solid var(--line); border-radius: 999px; background: rgba(9, 15, 22, .68); backdrop-filter: blur(12px); color: #dce6ee; font-size: .72rem; }
+    #runtimeText { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dot { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: #7e8c98; }
+    .status.running .dot, .status.standby .dot { background: var(--green); box-shadow: 0 0 0 4px #31d07f22; }
+    .status.preview_only .dot { background: var(--yellow); }
+    .status.error .dot, .status.camera_error .dot, .status.stopped .dot { background: var(--red); }
+    .steps { position: absolute; top: 18px; right: 18px; display: flex; align-items: center; gap: 6px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 999px; background: var(--glass); backdrop-filter: blur(15px); }
+    .step { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; color: #7f8d99; background: #1d2730; font-size: .75rem; font-weight: 760; }
+    .step.done { color: #07150e; background: var(--green); }
+    .step.skipped { color: #241a03; background: var(--yellow); box-shadow: none; }
+    .step.active { color: #04131e; background: #8cd4ff; box-shadow: 0 0 0 4px #35a9ff24; }
+    .eye-target { display: none; position: absolute; top: 45%; left: 50%; width: 30px; height: 30px; margin: -15px; border: 5px solid white; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 8px #35a9ff35, 0 0 28px #35a9ff; transition: left .18s ease; }
+    .eye-target.visible { display: block; }
+    .eye-target.left { left: 18%; }
+    .eye-target.right { left: 82%; }
+    .guide { position: absolute; left: 50%; bottom: 28px; width: min(760px, calc(100% - 32px)); transform: translateX(-50%); }
+    .signal { display: grid; grid-template-columns: 48px 1fr; align-items: center; gap: 13px; padding: 14px 17px; border: 1px solid var(--line); border-left: 5px solid #83919c; border-radius: 14px; background: var(--glass); box-shadow: 0 14px 48px #0008; backdrop-filter: blur(18px); }
+    .signal.correct { border-left-color: var(--green); background: rgba(8, 39, 26, .86); }
+    .signal.adjust { border-left-color: var(--red); background: rgba(47, 14, 18, .87); }
+    .signal.neutral { border-left-color: var(--blue); }
+    .signal-icon { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; background: #687784; color: white; font-size: 1.3rem; font-weight: 900; }
+    .correct .signal-icon { background: var(--green); color: #052314; }
+    .adjust .signal-icon { background: var(--red); }
+    .neutral .signal-icon { background: var(--blue); color: #031722; }
+    .signal strong { display: block; margin-bottom: 3px; font-size: clamp(1rem, 2.3vw, 1.28rem); }
+    .signal p { margin: 0; color: #c7d1d9; line-height: 1.42; font-size: .9rem; }
+    .progress { height: 4px; margin: 8px 8px 0; overflow: hidden; border-radius: 999px; background: #ffffff22; }
+    .progress span { display: block; width: 0; height: 100%; background: var(--blue); transition: width .18s linear; }
+    .controls { display: flex; justify-content: center; gap: 8px; margin-top: 9px; }
+    .button { border: 1px solid #647586; border-radius: 9px; padding: 9px 14px; color: white; background: #17232e; font-weight: 700; }
+    .button.primary { color: #03131d; border-color: #88d4ff; background: #76caff; }
+    .button.safe { color: #062016; border-color: #55e59b; background: #3ad587; }
+    .button.skip { color: #ffe3a3; border-color: #8c6d32; background: #2d2517dd; }
+    .button.ghost { background: #111a22cc; }
+    .button:disabled { cursor: not-allowed; opacity: .45; }
+    .start { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; }
+    .start-inner { width: min(540px, 100%); padding: 25px; border: 1px solid var(--line); border-radius: 18px; background: rgba(7, 13, 19, .88); box-shadow: 0 24px 80px #000b; backdrop-filter: blur(18px); text-align: center; }
+    .start h1 { margin: 0 0 8px; font-size: clamp(1.65rem, 4vw, 2.5rem); }
+    .start p { margin: 0 auto 18px; max-width: 430px; color: var(--muted); line-height: 1.55; }
+    .start .button { padding: 12px 22px; font-size: 1rem; }
+    .sheet { position: absolute; left: 50%; bottom: 22px; width: min(820px, calc(100% - 28px)); max-height: calc(100% - 44px); overflow: auto; transform: translateX(-50%); padding: 18px; border: 1px solid var(--line); border-radius: 16px; background: rgba(7, 13, 19, .94); box-shadow: 0 24px 80px #000c; backdrop-filter: blur(18px); }
+    .sheet h2 { margin: 0 0 6px; }
+    .sheet > p { margin: 0 0 14px; color: var(--muted); }
+    .manual-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+    .check { display: flex; align-items: flex-start; gap: 9px; padding: 11px; border: 1px solid #293845; border-radius: 9px; background: #101820; line-height: 1.4; }
+    .check input { width: 20px; height: 20px; flex: 0 0 auto; accent-color: var(--red); }
+    .time-field { grid-column: 1 / -1; display: grid; gap: 6px; color: #c9d3da; }
+    .time-field input { width: 100%; padding: 10px; color: white; border: 1px solid #334553; border-radius: 8px; background: #0a1118; }
+    .sheet-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 13px; }
+    .decision { padding: 13px 14px; border-radius: 10px; background: #252116; color: #ffd273; font-size: 1.12rem; font-weight: 800; }
+    .decision.emergency { background: #4b171c; color: #ff9ca3; }
+    .decision.warning { background: #422716; color: #ffc077; }
+    .decision.clear { background: #123622; color: #74e5a2; }
+    .results { display: grid; grid-template-columns: 1fr; gap: 7px; margin-top: 11px; }
+    .result { display: grid; grid-template-columns: 48px minmax(130px, .7fr) minmax(220px, 2fr); align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid #32414e; border-radius: 8px; color: #adb9c2; background: #0d151c; }
+    .result.positive { color: #ff9da4; border-color: #b94b54; }
+    .result.negative { color: #80e5a8; border-color: #3b8f5e; }
+    .result.skipped { color: #ffd77a; border-color: #8c6d32; }
+    .result strong { display: block; font-size: 1.08rem; }
+    .result-status { font-weight: 750; }
+    .result-detail { color: #d1d9df; line-height: 1.38; font-size: .88rem; }
+    [hidden] { display: none !important; }
+    @media (max-width: 680px) {
+      .topbar { height: 58px; padding: 0 12px; }
+      .top-actions { gap: 5px; }
+      .brand-sub { display: none; }
+      .camera-picker { padding: 0 5px; }
+      .camera-picker > span { display: none; }
+      .camera-picker select { width: 118px; max-width: 118px; font-size: .72rem; }
+      .workspace, .video { min-height: calc(100vh - 96px); height: calc(100vh - 96px); }
+      .status { top: 8px; left: 8px; max-width: min(230px, calc(100% - 16px)); }
+      .steps { top: 54px; left: 50%; right: auto; transform: translateX(-50%); }
+      .guide { bottom: 14px; }
+      .signal { grid-template-columns: 38px 1fr; padding: 12px; }
+      .signal-icon { width: 34px; height: 34px; }
+      .manual-grid { grid-template-columns: 1fr; }
+      .time-field { grid-column: auto; }
+      .result { grid-template-columns: 42px 1fr; gap: 5px 9px; }
+      .result-detail { grid-column: 2; }
+    }
+    @media (max-width: 460px) {
+      .topbar { gap: 6px; padding: 0 7px; }
+      .brand { gap: 5px; font-size: .76rem; }
+      .brand-mark { width: 25px; height: 25px; border-radius: 7px; }
+      .top-actions { gap: 4px; }
+      .camera-picker { height: 34px; padding: 0 3px; }
+      .camera-picker select { width: 96px; max-width: 96px; padding-right: 15px; font-size: .68rem; }
+      .language { padding: 2px; }
+      .language button { min-width: 35px; padding: 6px 4px; font-size: .72rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark">P</span><div><div id="brandTitle">Pi BE-FAST 筛查 Demo</div><div id="brandSub" class="brand-sub">Camera-guided screening prototype</div></div></div>
+      <div class="top-actions">
+        <label class="camera-picker"><span id="cameraLabel">摄像头</span><select id="cameraSourceSelect" onchange="switchCameraSource(this.value)" aria-label="摄像头来源"><option id="hostCameraOption" value="host">主机摄像头</option><option id="clientCameraOption" value="client">手机 / 当前设备</option></select></label>
+        <div id="languageSwitch" class="language" aria-label="语言"><button id="zhButton" class="active" onclick="setLanguage('zh')">中文</button><button id="enButton" onclick="setLanguage('en')">EN</button></div>
+      </div>
+    </header>
+    <div id="emergencyText" class="emergency">⚠ 突然出现任何 BE-FAST 症状，请立即拨打 120，不要等待本 Demo 完成。</div>
+
+    <main class="workspace">
+      <img id="liveVideo" class="video" src="/video_feed" alt="实时摄像头画面">
+      <video id="clientVideo" class="video client-video" autoplay muted playsinline hidden></video>
+      <canvas id="clientCanvas" hidden></canvas>
+      <div class="shade"></div>
+      <div id="runtime" class="status starting"><span class="dot"></span><span id="runtimeText">正在连接摄像头……</span></div>
+      <div id="steps" class="steps" aria-label="筛查进度">
+        <span class="step" data-code="E">E</span><span class="step" data-code="F">F</span><span class="step" data-code="A">A</span><span class="step" data-code="B">B</span><span class="step" data-code="S">S</span>
+      </div>
+      <span id="eyeTarget" class="eye-target center" aria-label="眼动目标"></span>
+
+      <section id="startOverlay" class="start">
+        <div class="start-inner">
+          <h1 id="startTitle">Pi BE-FAST 筛查 Demo</h1>
+          <p id="startText">摄像头是主要操作区域。开始后，请按照画面中的红绿提示完成 E、F、A、B 动作。</p>
+          <button id="startButton" class="button primary" onclick="startScreening()">开始筛查</button>
+        </div>
+      </section>
+
+      <section id="guideOverlay" class="guide" hidden>
+        <div id="actionSignal" class="signal neutral">
+          <span id="signalIcon" class="signal-icon">→</span>
+          <div><strong id="guideTitle">准备检测</strong><p id="guideText">请按照画面提示操作。</p></div>
+        </div>
+        <div class="progress"><span id="progressBar"></span></div>
+        <div class="controls">
+          <button id="safetyButton" class="button safe" onclick="confirmBalanceSafety()" hidden>已有人看护，可以安全站立</button>
+          <button id="continueButton" class="button primary" onclick="advanceCurrentStage()" hidden>开始检测</button>
+          <button id="skipButton" class="button skip" onclick="skipCurrentStage()">跳过本项</button>
+          <button id="standbyButton" class="button ghost" onclick="returnToStandby()">退出筛查</button>
+        </div>
+      </section>
+
+      <section id="manualSheet" class="sheet" hidden>
+        <h2 id="manualTitle">最后一步：言语与发病时间</h2>
+        <p id="manualText">让受试者复述一句话，并确认异常是否为突然出现。</p>
+        <div class="manual-grid">
+          <label class="check"><input id="balance_problem" type="checkbox"><span id="balanceLabel">突然失去平衡或协调困难</span></label>
+          <label class="check"><input id="speech_problem" type="checkbox"><span id="speechLabel">说话含混、复述错误或理解困难</span></label>
+          <label class="check"><input id="new_or_sudden" type="checkbox"><span id="suddenLabel">以上任一异常是新出现或突然发生</span></label>
+          <label class="time-field"><span id="onsetLabel">首次发现异常时间（可留空）</span><input id="onset_time" type="datetime-local"></label>
+        </div>
+        <div class="sheet-actions"><button class="button ghost" onclick="returnToStandby()" id="cancelButton">取消</button><button class="button primary" onclick="submitManual()" id="submitButton">查看结果</button></div>
+      </section>
+
+      <section id="resultSheet" class="sheet" hidden>
+        <h2 id="resultTitle">筛查结果</h2>
+        <div id="decision" class="decision">评估未完成</div>
+        <div id="results" class="results"></div>
+        <p id="resultNote">本结果不能诊断或排除脑卒中。</p>
+        <div class="sheet-actions"><button class="button ghost" onclick="startScreening()" id="againButton">重新筛查</button><button class="button primary" onclick="returnToStandby()" id="finishButton">完成</button></div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const text = {
+      zh: {
+        title: 'Pi BE-FAST 筛查 Demo', sub: '摄像头引导式筛查研究原型', emergency: '⚠ 突然出现任何 BE-FAST 症状，请立即拨打 120，不要等待本 Demo 完成。', cameraAlt: '当前选择的摄像头实时画面', languageLabel: '语言', progressLabel: '筛查进度', eyeTargetLabel: '眼动目标', cameraLabel:'摄像头', cameraSourceLabel:'摄像头来源', hostOption:'主机摄像头', autoHostOption:'自动切换（E/F 电脑 · A/B 手机）', faceHostCamera:'电脑前置摄像头 · E/F', poseHostCamera:'手机摄像头 · A/B', fallbackHostCamera:'目标摄像头不可用 · 当前摄像头回退', clientOption:'手机 / 当前设备',
+        startText: '请先在右上角选择主机摄像头，或选择当前浏览器设备的摄像头；手机打开页面时即可使用手机前置摄像头。然后按照红绿提示完成 E、F、A、B。', start: '开始筛查', exit: '退出筛查',
+        standbyGuide: ['准备开始', '请先确认摄像头画面清晰。'],
+        idle: ['E · 眼动准备', '正对当前选择的摄像头，让面部和双眼清晰入镜。'],
+        eyes: ['E · 跟随目标', '头保持不动，只用眼睛跟随蓝色目标点。'],
+        eyes_center: ['E · 看中间', '目标在画面中间，头保持不动，只移动眼睛。'],
+        eyes_left: ['E · 看左侧', '跟随蓝点看向画面左侧，头保持不动。'],
+        eyes_right: ['E · 看右侧', '跟随蓝点看向画面右侧，头保持不动。'],
+        ready_face: ['F · 面部准备', '正对摄像头，闭嘴并放松面部。'],
+        face_neutral: ['F · 保持自然表情', '暂时不要微笑，系统正在记录中性基线。'],
+        face_smile: ['F · 现在微笑', '自然微笑并保持，直到进度完成。'],
+        ready_arms: ['A · 双臂准备', '退后或调整镜头，坐稳并将双臂向前平举。'],
+        arms: ['A · 保持双臂平举', '保持动作，不要转动身体。'],
+        ready_balance: ['B · 安全准备', '必须有人在旁看护。确认安全后，让全身和脚踝进入画面并站立。'],
+        balance: ['B · 保持自然站立', '看护者请在旁保护；感觉不稳立即停止。'],
+        review: ['S/T · 完成人工观察', '检查言语是否清晰，并记录异常首次出现时间。'],
+        correct: '动作正确', adjust: '请调整动作', waiting: '等待动作识别', remainingSeconds:'约剩 {seconds} 秒', continueStage: '开始检测', retryStage: '重新检测本项', skipStage:'跳过本项', skipConfirm:'确定跳过当前检测吗？报告会标记为“已跳过”，不会视为正常结果。',
+        safety: '已有人看护，可以安全站立', manualTitle: '最后一步：言语与发病时间', manualText: '让受试者复述“今天天气很好”，并确认异常是否为突然出现。',
+        balanceLabel: '突然失去平衡或协调困难', speechLabel: '说话含混、复述错误或理解困难', suddenLabel: '以上任一异常是新出现或突然发生', onsetLabel: '首次发现异常时间（可留空）', cancel: '取消', submit: '查看结果',
+        resultTitle: '筛查结果', resultNote: '本 Demo 不能诊断或排除脑卒中；突然出现任何异常请立即拨打 120。', again: '重新筛查', finish: '完成',
+        decisions: {standby:'等待开始', emergency:'发现新发异常：立即拨打 120', warning:'发现异常：请确认是否突然出现', clear:'本次未发现明显 BE-FAST 异常', incomplete:'评估未完成或质量不足'},
+        runtimeWaiting: '正在连接摄像头', live: '画面已连接', previewOnly: '画面已连接，部分模型未就绪', runtimeError: '摄像头或模型不可用', hostCamera: '主机', hostVideo: '本地视频', clientCamera:'当前设备', cameraSecureRequired:'当前地址不能调用手机摄像头。请通过 HTTPS 打开页面，或在运行服务的电脑上使用 localhost。', cameraPermissionDenied:'无法打开当前设备摄像头，请检查浏览器摄像头权限。', cameraSwitchIdle:'请先退出当前筛查，再切换摄像头。', statuses: {positive:'发现异常', negative:'未见明显异常', insufficient:'数据质量不足', skipped:'已跳过', checking:'检测中', pending:'待检测'},
+        itemNames: {B:'平衡', E:'眼动', F:'面部', A:'手臂', S:'言语'}, sides: {left:'左', right:'右', unknown:'侧别未确定'}, detailUnavailable: '尚无可解释的检测详情。',
+        resultReasons: {reported_balance_problem:'本人或照护者报告突然失去平衡或协调困难。', persistent_lateral_body_offset:'身体中心持续向{side}偏离双脚支撑中心。', large_standing_sway:'站立期间左右摆动范围超过当前工程阈值。', no_clear_pose_based_balance_asymmetry:'本次站立未发现明显持续侧偏或过大摆动。', stable_standing_pose_not_visible_long_enough:'全身、髋部或脚踝没有持续清晰入镜，无法完成站立平衡判断。', reduced_visual_target_response:'左右眼对屏幕左右目标的水平跟随幅度均不足。', asymmetric_eye_excursion:'{side}眼的水平移动范围明显小于另一只眼。', asymmetric_conjugate_gaze:'双眼跟随同一目标时运动不同步，存在共轭眼动不协调。', no_visible_eye_movement_abnormality:'本次未发现明显的水平眼动范围不足、左右不对称或双眼不同步。', face_or_irises_not_visible_long_enough:'面部或虹膜没有持续清晰可见，无法完成眼动判断。', head_moved_during_eye_test:'测试时头部移动过多，无法区分眼动和转头动作。', asymmetric_mouth_corner_movement:'微笑时{side}嘴角移动明显弱于另一侧。', asymmetric_smile_activation:'MediaPipe 表情特征显示{side}微笑激活明显较弱。', no_clear_smile_asymmetry:'本次中性表情与微笑对比未发现明显左右不对称。', face_not_visible_during_neutral_and_smile:'中性表情或微笑阶段面部未持续清晰入镜。', smile_expression_not_detected:'没有识别到足够明确的微笑动作，无法判断面部对称性。', persistent_arm_height_asymmetry:'保持平举时{side}手臂持续低于另一侧。', asymmetric_arm_drift:'保持过程中{side}手臂下落幅度明显更大。', no_clear_arm_asymmetry:'本次双臂平举未发现明显高度差或单侧下落。', arms_not_visible_long_enough:'双肩或双手腕没有持续清晰入镜，无法完成手臂判断。', both_arms_were_not_held_up:'未持续识别到双臂向前平举动作。', reported_speech_problem:'人工观察发现说话含混、复述错误或理解困难。', not_reported:'人工观察未报告明显言语异常。', not_checked:'尚未完成人工观察。', not_fully_checked:'该项目尚未完成自动检测和人工确认。', user_skipped:'使用者跳过了此项，本项没有产生检测结论。', checking:'正在采集并分析当前动作。', not_run:'该项目尚未检测。'},
+        reasons: {show_face_and_eyes:'请靠近一些，让双眼清晰可见', face_and_eyes_ready:'面部和双眼已识别', show_full_face:'请让完整面部进入画面', neutral_face_ready:'中性表情已识别', relax_face_first:'请先放松面部，不要微笑', smile_now:'请自然微笑', smile_detected:'微笑动作已识别', show_shoulders_and_wrists:'请让双肩和双手腕进入画面', raise_both_arms:'请将双臂向前抬起', arms_detected_hold_still:'双臂动作已识别，请保持', show_full_body_and_stand_safely:'请让全身和脚踝入镜，并在看护下站立', standing_pose_ready:'站立动作已识别，请保持', collecting_action:'正在开始采集', face_or_irises_not_visible_long_enough:'双眼未持续清晰可见，请重新调整', head_moved_during_eye_test:'头部移动过多，请保持头不动', face_not_visible_during_neutral_and_smile:'面部未持续清晰可见，请重新调整', smile_expression_not_detected:'没有识别到微笑，请重新尝试', arms_not_visible_long_enough:'双肩或手腕未持续入镜，请重新调整', both_arms_were_not_held_up:'没有识别到抬臂动作，请重新尝试', stable_standing_pose_not_visible_long_enough:'全身或脚踝未持续入镜，请重新调整'}
+      },
+      en: {
+        title: 'Pi BE-FAST Screening Demo', sub: 'Camera-guided screening research prototype', emergency: '⚠ If any BE-FAST sign appears suddenly, call emergency services now. Do not wait for this demo.', cameraAlt: 'Live view from the selected camera', languageLabel: 'Language', progressLabel: 'Screening progress', eyeTargetLabel:'Eye-movement target', cameraLabel:'Camera', cameraSourceLabel:'Camera source', hostOption:'Host camera', autoHostOption:'Auto (E/F Mac · A/B phone)', faceHostCamera:'Mac front camera · E/F', poseHostCamera:'Phone camera · A/B', fallbackHostCamera:'Target unavailable · current camera fallback', clientOption:'Phone / this device',
+        startText: 'Choose the host camera or this browser device in the top-right selector. When opened on a phone, the second option uses the phone front camera. Then follow the red/green prompts for E, F, A, and B.', start: 'Start screening', exit: 'Exit screening',
+        standbyGuide: ['Ready to begin', 'Confirm that the live camera view is clear.'],
+        idle: ['E · Eye setup', 'Face the selected camera and keep both eyes clearly visible.'],
+        eyes: ['E · Follow the target', 'Keep your head still and follow the blue target using only your eyes.'],
+        eyes_center: ['E · Look at center', 'The target is in the center. Keep your head still and move only your eyes.'],
+        eyes_left: ['E · Look left', 'Follow the blue target to the left side of the screen without turning your head.'],
+        eyes_right: ['E · Look right', 'Follow the blue target to the right side of the screen without turning your head.'],
+        ready_face: ['F · Face setup', 'Face the camera, close your mouth, and relax your expression.'],
+        face_neutral: ['F · Keep a neutral face', 'Do not smile yet while the neutral baseline is recorded.'],
+        face_smile: ['F · Smile now', 'Smile naturally and hold it until the progress completes.'],
+        ready_arms: ['A · Arm setup', 'Step back if needed, sit safely, and raise both arms forward.'],
+        arms: ['A · Hold both arms up', 'Keep the pose and do not rotate your body.'],
+        ready_balance: ['B · Safety setup', 'A caregiver must be present. When safe, show your full body and ankles and stand up.'],
+        balance: ['B · Stand naturally', 'Keep a caregiver nearby and stop immediately if unsteady.'],
+        review: ['S/T · Manual observation', 'Check speech and record when the change was first noticed.'],
+        correct: 'Action recognized', adjust: 'Adjust your position or action', waiting: 'Waiting for the action', remainingSeconds:'about {seconds}s left', continueStage: 'Start this check', retryStage: 'Restart this check', skipStage:'Skip this check', skipConfirm:'Skip the current check? The report will mark it as skipped, not as a normal result.',
+        safety: 'Caregiver present — safe to stand', manualTitle: 'Final step: speech and onset time', manualText: 'Ask the person to repeat “The sky is blue” and confirm whether any change was sudden.',
+        balanceLabel: 'Sudden loss of balance or coordination', speechLabel: 'Slurred, incorrect, or difficult-to-understand speech', suddenLabel: 'Any sign above is new or sudden', onsetLabel: 'First-known abnormal time (optional)', cancel: 'Cancel', submit: 'View result',
+        resultTitle: 'Screening result', resultNote: 'This demo cannot diagnose or rule out stroke. Call emergency services for any sudden sign.', again: 'Screen again', finish: 'Finish',
+        decisions: {standby:'Waiting to start', emergency:'New sudden sign detected — call emergency services', warning:'A sign was detected — confirm whether it was sudden', clear:'No obvious BE-FAST sign in this screen', incomplete:'Screen incomplete or quality insufficient'},
+        runtimeWaiting: 'Connecting camera', live: 'Video connected', previewOnly: 'Video connected; some models are unavailable', runtimeError: 'Camera or model unavailable', hostCamera: 'host', hostVideo: 'local video', clientCamera:'this device', cameraSecureRequired:'This address cannot open a phone camera. Use HTTPS, or use localhost on the machine running the service.', cameraPermissionDenied:'Unable to open this device camera. Check browser camera permission.', cameraSwitchIdle:'Exit the active screening before switching cameras.', statuses: {positive:'specific sign detected', negative:'no obvious sign', insufficient:'insufficient data quality', skipped:'skipped', checking:'checking', pending:'pending'},
+        itemNames: {B:'Balance', E:'Eyes', F:'Face', A:'Arms', S:'Speech'}, sides: {left:'left', right:'right', unknown:'undetermined side'}, detailUnavailable: 'No interpretable detection detail is available yet.',
+        resultReasons: {reported_balance_problem:'The person or caregiver reported sudden loss of balance or coordination.', persistent_lateral_body_offset:'The body center remained displaced toward the {side} side relative to the foot-support center.', large_standing_sway:'Side-to-side standing sway exceeded the current engineering threshold.', no_clear_pose_based_balance_asymmetry:'No clear persistent lateral lean or excessive standing sway was observed.', stable_standing_pose_not_visible_long_enough:'The full body, hips, or ankles were not continuously visible, so standing balance could not be assessed.', reduced_visual_target_response:'Both eyes showed insufficient horizontal movement while following the left/right screen targets.', asymmetric_eye_excursion:'The {side} eye had a clearly smaller horizontal movement range than the other eye.', asymmetric_conjugate_gaze:'The two eyes did not move together consistently while following the same target.', no_visible_eye_movement_abnormality:'No obvious reduction, left/right asymmetry, or binocular coordination problem was observed in horizontal eye movement.', face_or_irises_not_visible_long_enough:'The face or irises were not continuously visible, so eye movement could not be assessed.', head_moved_during_eye_test:'Head movement was too large to separate eye movement from head turning.', asymmetric_mouth_corner_movement:'The {side} mouth corner moved less than the other side during the smile.', asymmetric_smile_activation:'MediaPipe expression features showed weaker smile activation on the {side} side.', no_clear_smile_asymmetry:'The neutral-to-smile comparison showed no obvious left/right asymmetry.', face_not_visible_during_neutral_and_smile:'The face was not continuously visible during both neutral and smile phases.', smile_expression_not_detected:'No sufficiently clear smile was detected, so facial symmetry could not be assessed.', persistent_arm_height_asymmetry:'The {side} arm remained lower than the other arm during the hold.', asymmetric_arm_drift:'The {side} arm dropped more during the hold.', no_clear_arm_asymmetry:'No obvious persistent height difference or one-sided arm drift was observed.', arms_not_visible_long_enough:'Both shoulders or wrists were not continuously visible, so arm symmetry could not be assessed.', both_arms_were_not_held_up:'A sustained bilateral forward arm raise was not detected.', reported_speech_problem:'Manual observation found slurred speech, repetition errors, or difficulty understanding speech.', not_reported:'Manual observation did not report an obvious speech problem.', not_checked:'Manual observation has not been completed.', not_fully_checked:'Automated capture and manual confirmation are not both complete.', user_skipped:'The user skipped this check, so it produced no screening conclusion.', checking:'The current action is being captured and analyzed.', not_run:'This item has not been checked.'},
+        reasons: {show_face_and_eyes:'Move closer and keep both eyes visible', face_and_eyes_ready:'Face and eyes recognized', show_full_face:'Keep your full face inside the frame', neutral_face_ready:'Neutral expression recognized', relax_face_first:'Relax your face and do not smile yet', smile_now:'Smile naturally now', smile_detected:'Smile recognized', show_shoulders_and_wrists:'Keep both shoulders and wrists visible', raise_both_arms:'Raise both arms forward', arms_detected_hold_still:'Arm action recognized — keep holding', show_full_body_and_stand_safely:'Show your full body and ankles, then stand only with supervision', standing_pose_ready:'Standing pose recognized — hold still', collecting_action:'Starting capture', face_or_irises_not_visible_long_enough:'Eyes were not continuously visible — adjust and retry', head_moved_during_eye_test:'Too much head movement — keep your head still', face_not_visible_during_neutral_and_smile:'Face was not continuously visible — adjust and retry', smile_expression_not_detected:'No smile was detected — try again', arms_not_visible_long_enough:'Shoulders or wrists were not continuously visible — retry', both_arms_were_not_held_up:'The arm-raise action was not detected — retry', stable_standing_pose_not_visible_long_enough:'Full body or ankles were not continuously visible — retry'}
+      }
+    };
+
+    let language = localStorage.getItem('pibe-fast-language') || 'zh';
+    let latest = {runtime:{}, befast:{mode:'standby',stage:'idle',guidance:{}}, monitoring:{}};
+    let readyTicks = 0;
+    let transitionBusy = false;
+    let balanceSafetyConfirmed = false;
+    let clientStream = null;
+    let clientUploadTimer = null;
+    let clientUploadBusy = false;
+    let clientCaptureActive = false;
+    let cameraErrorMessage = '';
+    const nextStageMap = {idle:'eyes', retry_eyes:'eyes', ready_face:'face', retry_face:'face', ready_arms:'arms', retry_arms:'arms', ready_balance:'balance', retry_balance:'balance'};
+    const activeStages = new Set(['eyes','face','arms','balance']);
+
+    async function postJson(url, body = {}) {
+      const response = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.error || 'Request failed');
+      return payload;
+    }
+
+    function setClientPreviewVisible(visible) {
+      document.getElementById('liveVideo').hidden = visible;
+      document.getElementById('clientVideo').hidden = !visible;
+    }
+
+    function stopClientCamera() {
+      if (clientUploadTimer) clearInterval(clientUploadTimer);
+      clientUploadTimer = null;
+      clientUploadBusy = false;
+      if (clientStream) clientStream.getTracks().forEach(track => track.stop());
+      clientStream = null;
+      clientCaptureActive = false;
+      document.getElementById('clientVideo').srcObject = null;
+      setClientPreviewVisible(false);
+    }
+
+    function showCameraError(message) {
+      cameraErrorMessage = message;
+      const runtime = document.getElementById('runtime');
+      runtime.className = 'status camera_error';
+      document.getElementById('runtimeText').textContent = message;
+    }
+
+    async function uploadClientFrame() {
+      const video = document.getElementById('clientVideo');
+      if (!clientCaptureActive || clientUploadBusy || video.readyState < 2) return;
+      clientUploadBusy = true;
+      try {
+        const canvas = document.getElementById('clientCanvas');
+        const scale = Math.min(1, 640 / Math.max(video.videoWidth, video.videoHeight, 1));
+        canvas.width = Math.max(160, Math.round(video.videoWidth * scale));
+        canvas.height = Math.max(120, Math.round(video.videoHeight * scale));
+        canvas.getContext('2d', {alpha:false}).drawImage(video, 0, 0, canvas.width, canvas.height);
+        const jpeg = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.74));
+        if (!jpeg) throw new Error('Unable to encode camera frame');
+        const response = await fetch('/api/camera/frame', {method:'POST', headers:{'Content-Type':'image/jpeg'}, body:jpeg, cache:'no-store'});
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({}));
+          throw new Error(payload.error || 'Client camera upload failed');
+        }
+      } catch (error) {
+        showCameraError(error.message);
+      } finally {
+        clientUploadBusy = false;
+      }
+    }
+
+    async function switchCameraSource(source) {
+      const select = document.getElementById('cameraSourceSelect');
+      const t = text[language];
+      if ((latest.befast || {}).mode === 'screening') {
+        select.value = (latest.runtime || {}).camera_mode || 'host';
+        showCameraError(t.cameraSwitchIdle);
+        return;
+      }
+      select.disabled = true;
+      cameraErrorMessage = '';
+      try {
+        if (source === 'host') {
+          stopClientCamera();
+          await postJson('/api/camera/source', {source:'host'});
+        } else {
+          if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+            throw new Error(t.cameraSecureRequired);
+          }
+          stopClientCamera();
+          clientStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'user', width:{ideal:640}, height:{ideal:480}}, audio:false});
+          const video = document.getElementById('clientVideo');
+          video.srcObject = clientStream;
+          await video.play();
+          await postJson('/api/camera/source', {source:'client'});
+          clientCaptureActive = true;
+          setClientPreviewVisible(true);
+          await uploadClientFrame();
+          clientUploadTimer = setInterval(uploadClientFrame, 160);
+        }
+        cameraErrorMessage = '';
+        await refresh();
+      } catch (error) {
+        stopClientCamera();
+        select.value = 'host';
+        await postJson('/api/camera/source', {source:'host'}).catch(() => {});
+        showCameraError(error.name === 'NotAllowedError' ? t.cameraPermissionDenied : error.message);
+      } finally {
+        select.disabled = false;
+      }
+    }
+
+    function setLanguage(next) {
+      language = next;
+      localStorage.setItem('pibe-fast-language', next);
+      document.documentElement.lang = next === 'zh' ? 'zh-CN' : 'en';
+      document.getElementById('zhButton').classList.toggle('active', next === 'zh');
+      document.getElementById('enButton').classList.toggle('active', next === 'en');
+      renderStatic();
+      render(latest);
+    }
+
+    function renderStatic() {
+      const t = text[language];
+      document.title = t.title;
+      for (const [id, value] of Object.entries({brandTitle:t.title, brandSub:t.sub, emergencyText:t.emergency, cameraLabel:t.cameraLabel, hostCameraOption:t.hostOption, clientCameraOption:t.clientOption, startTitle:t.title, startText:t.startText, startButton:t.start, standbyButton:t.exit, safetyButton:t.safety, continueButton:t.continueStage, skipButton:t.skipStage, manualTitle:t.manualTitle, manualText:t.manualText, balanceLabel:t.balanceLabel, speechLabel:t.speechLabel, suddenLabel:t.suddenLabel, onsetLabel:t.onsetLabel, cancelButton:t.cancel, submitButton:t.submit, resultTitle:t.resultTitle, resultNote:t.resultNote, againButton:t.again, finishButton:t.finish})) {
+        document.getElementById(id).textContent = value;
+      }
+      document.getElementById('liveVideo').alt = t.cameraAlt;
+      document.getElementById('languageSwitch').setAttribute('aria-label', t.languageLabel);
+      document.getElementById('cameraSourceSelect').setAttribute('aria-label', t.cameraSourceLabel);
+      document.getElementById('steps').setAttribute('aria-label', t.progressLabel);
+      document.getElementById('eyeTarget').setAttribute('aria-label', t.eyeTargetLabel);
+    }
+
+    async function startScreening() {
+      balanceSafetyConfirmed = false;
+      readyTicks = 0;
+      await postJson('/api/monitoring/trigger', {source:'user', reason:'demo_started'});
+      await refresh();
+    }
+
+    async function returnToStandby() {
+      await postJson('/api/monitoring/standby');
+      balanceSafetyConfirmed = false;
+      readyTicks = 0;
+      await refresh();
+    }
+
+    function confirmBalanceSafety() {
+      balanceSafetyConfirmed = true;
+      readyTicks = 0;
+      render(latest);
+    }
+
+    async function submitManual() {
+      await postJson('/api/befast/manual', {
+        balance_problem: document.getElementById('balance_problem').checked,
+        speech_problem: document.getElementById('speech_problem').checked,
+        new_or_sudden: document.getElementById('new_or_sudden').checked,
+        onset_time: document.getElementById('onset_time').value || null
+      });
+      await refresh();
+    }
+
+    function stageCopy(befast) {
+      const t = text[language];
+      const stage = befast.stage || 'idle';
+      if (stage === 'eyes') {
+        const targetCopy = t[`eyes_${befast.eye_target || 'center'}`] || t.eyes;
+        const remaining = Number(befast.eye_target_remaining);
+        const countdown = Number.isFinite(remaining)
+          ? t.remainingSeconds.replace('{seconds}', remaining.toFixed(1))
+          : '';
+        return [targetCopy[0], countdown ? `${targetCopy[1]} · ${countdown}` : targetCopy[1]];
+      }
+      if (stage === 'face') return befast.face_phase === 'smile' ? t.face_smile : t.face_neutral;
+      if (stage === 'arms') return t.arms;
+      if (stage === 'balance') return t.balance;
+      if (stage === 'review') return t.review;
+      if (stage === 'ready_face' || stage === 'retry_face') return t.ready_face;
+      if (stage === 'ready_arms' || stage === 'retry_arms') return t.ready_arms;
+      if (stage === 'ready_balance' || stage === 'retry_balance') return t.ready_balance;
+      return t.idle;
+    }
+
+    function activeCode(stage) {
+      if (['idle','retry_eyes','eyes'].includes(stage)) return 'E';
+      if (['ready_face','retry_face','face'].includes(stage)) return 'F';
+      if (['ready_arms','retry_arms','arms'].includes(stage)) return 'A';
+      if (['ready_balance','retry_balance','balance'].includes(stage)) return 'B';
+      return 'S';
+    }
+
+    function completedCodes(stage) {
+      const order = ['E','F','A','B','S'];
+      const index = order.indexOf(activeCode(stage));
+      return new Set(order.slice(0, Math.max(index, 0)));
+    }
+
+    async function advanceCurrentStage() {
+      const befast = latest.befast || {};
+      const runtime = latest.runtime || {};
+      const next = nextStageMap[befast.stage];
+      const stalled = activeStages.has(befast.stage) && Number(befast.progress || 0) >= 1;
+      const ready = Boolean(befast.guidance && befast.guidance.ready && runtime.camera_ready && runtime.has_live_frame);
+      const target = next || (stalled ? befast.stage : null);
+      if (!target || (!stalled && !ready) || (target === 'balance' && !balanceSafetyConfirmed) || transitionBusy) return;
+      transitionBusy = true;
+      readyTicks = 0;
+      try {
+        await postJson('/api/befast/stage', {stage:target});
+        await refresh();
+      } catch (error) {
+        showError(error);
+      } finally {
+        transitionBusy = false;
+      }
+    }
+
+    async function skipCurrentStage() {
+      const t = text[language];
+      if (transitionBusy || !window.confirm(t.skipConfirm)) return;
+      transitionBusy = true;
+      readyTicks = 0;
+      try {
+        await postJson('/api/befast/skip');
+        await refresh();
+      } catch (error) {
+        showError(error);
+      } finally {
+        transitionBusy = false;
+      }
+    }
+
+    function maybeAdvance(befast, runtime) {
+      const next = nextStageMap[befast.stage];
+      const ready = Boolean(befast.guidance && befast.guidance.ready && runtime.camera_ready && runtime.has_live_frame);
+      const needsSafety = next === 'balance' && !balanceSafetyConfirmed;
+      if (!next || !ready || needsSafety || transitionBusy) { readyTicks = 0; return; }
+      readyTicks += 1;
+      if (readyTicks >= 2) advanceCurrentStage();
+    }
+
+    function resultDetail(item, t) {
+      const side = t.sides[item.affected_side] || t.sides.unknown;
+      const template = t.resultReasons[item.reason] || t.detailUnavailable;
+      return template.replaceAll('{side}', side);
+    }
+
+    function render(status) {
+      latest = status;
+      const t = text[language];
+      const runtime = status.runtime || {};
+      const befast = status.befast || {mode:'standby',stage:'idle',guidance:{}};
+      const standby = befast.mode !== 'screening';
+      const review = befast.stage === 'review';
+      const finished = Boolean(befast.manual_complete);
+      document.getElementById('startOverlay').hidden = !standby;
+      document.getElementById('guideOverlay').hidden = standby || review;
+      document.getElementById('manualSheet').hidden = !review || finished;
+      document.getElementById('resultSheet').hidden = !finished;
+
+      const runtimeEl = document.getElementById('runtime');
+      runtimeEl.className = cameraErrorMessage ? 'status camera_error' : `status ${runtime.phase || 'starting'}`;
+      const errorPhase = ['error','camera_error','stopped'].includes(runtime.phase);
+      const runtimeMessage = errorPhase
+        ? t.runtimeError
+        : (runtime.phase === 'preview_only' ? t.previewOnly : (runtime.has_live_frame ? t.live : t.runtimeWaiting));
+      const captureMessage = runtime.camera_mode === 'client'
+        ? t.clientCamera
+        : (runtime.capture_source === 'local_video'
+          ? t.hostVideo
+          : (runtime.auto_camera_switch
+            ? (runtime.camera_fallback ? t.fallbackHostCamera : (runtime.camera_role === 'face' ? t.faceHostCamera : t.poseHostCamera))
+            : t.hostCamera));
+      document.getElementById('runtimeText').textContent = cameraErrorMessage || `${runtimeMessage} · ${captureMessage}`;
+      const cameraSelect = document.getElementById('cameraSourceSelect');
+      document.getElementById('hostCameraOption').textContent = runtime.auto_camera_switch ? t.autoHostOption : t.hostOption;
+      cameraSelect.value = runtime.camera_mode || 'host';
+      cameraSelect.disabled = !standby || transitionBusy;
+      cameraSelect.title = standby ? '' : t.cameraSwitchIdle;
+      const localClientVisible = clientCaptureActive && runtime.camera_mode === 'client';
+      setClientPreviewVisible(localClientVisible);
+
+      const guidance = befast.guidance || {};
+      const copy = stageCopy(befast);
+      const ready = Boolean(guidance.ready);
+      const signal = document.getElementById('actionSignal');
+      signal.className = `signal ${ready ? 'correct' : 'adjust'}`;
+      document.getElementById('signalIcon').textContent = ready ? '✓' : '!';
+      document.getElementById('guideTitle').textContent = copy[0];
+      document.getElementById('guideText').textContent = befast.stage === 'eyes'
+        ? copy[1]
+        : (t.reasons[guidance.reason] || copy[1]);
+      document.getElementById('progressBar').style.width = `${Math.round(Number(befast.progress || 0) * 100)}%`;
+
+      const eyeTarget = document.getElementById('eyeTarget');
+      eyeTarget.className = `eye-target ${befast.eye_target || 'center'}${befast.stage === 'eyes' ? ' visible' : ''}`;
+      const safetyStage = ['ready_balance','retry_balance'].includes(befast.stage);
+      document.getElementById('safetyButton').hidden = !safetyStage || balanceSafetyConfirmed;
+      const next = nextStageMap[befast.stage];
+      const stalled = activeStages.has(befast.stage) && Number(befast.progress || 0) >= 1;
+      const canContinue = Boolean(next && ready && (next !== 'balance' || balanceSafetyConfirmed));
+      const continueButton = document.getElementById('continueButton');
+      continueButton.hidden = !canContinue && !stalled;
+      continueButton.disabled = transitionBusy;
+      continueButton.textContent = stalled ? t.retryStage : t.continueStage;
+      document.getElementById('skipButton').disabled = transitionBusy;
+
+      const code = activeCode(befast.stage);
+      const done = completedCodes(befast.stage);
+      for (const step of document.querySelectorAll('.step')) {
+        const item = (befast.items || {})[step.dataset.code] || {};
+        const skipped = item.status === 'skipped';
+        step.classList.toggle('active', !standby && step.dataset.code === code);
+        step.classList.toggle('done', !standby && done.has(step.dataset.code) && !skipped);
+        step.classList.toggle('skipped', !standby && skipped);
+      }
+
+      const decision = befast.decision || 'incomplete';
+      const decisionEl = document.getElementById('decision');
+      decisionEl.className = `decision ${decision}`;
+      decisionEl.textContent = t.decisions[decision] || decision;
+      const results = document.getElementById('results');
+      results.replaceChildren();
+      for (const itemCode of ['B','E','F','A','S']) {
+        const item = (befast.items || {})[itemCode] || {status:'pending'};
+        const node = document.createElement('div');
+        node.className = `result ${item.status}`;
+        const mark = item.status === 'positive' ? '+' : item.status === 'negative' ? '−' : item.status === 'skipped' ? '↷' : '?';
+        const codeNode = document.createElement('strong');
+        codeNode.textContent = `${itemCode} ${mark}`;
+        const statusNode = document.createElement('span');
+        statusNode.className = 'result-status';
+        statusNode.textContent = `${t.itemNames[itemCode]} · ${t.statuses[item.status] || item.status}`;
+        const detailNode = document.createElement('span');
+        detailNode.className = 'result-detail';
+        detailNode.textContent = resultDetail(item, t);
+        node.append(codeNode, statusNode, detailNode);
+        results.appendChild(node);
+      }
+      if (!standby && !review) maybeAdvance(befast, runtime);
+    }
+
+    function showError(error) {
+      const signal = document.getElementById('actionSignal');
+      signal.className = 'signal adjust';
+      document.getElementById('guideTitle').textContent = text[language].adjust;
+      document.getElementById('guideText').textContent = error.message;
+    }
+
+    async function refresh() {
+      try {
+        const response = await fetch('/api/status', {cache:'no-store'});
+        if (!response.ok) throw new Error('Status unavailable');
+        render(await response.json());
+      } catch (error) { showError(error); }
+    }
+
+    renderStatic();
+    setLanguage(language);
+    setInterval(refresh, 500);
+    refresh();
+  </script>
+</body>
+</html>
