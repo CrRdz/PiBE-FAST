@@ -25,12 +25,14 @@ class FrameSource:
         height: int = 480,
         fps: int = 15,
         camera_backend: str = "opencv",
+        camera_index: int = 0,
     ) -> None:
         self.source = source
         self.width = width
         self.height = height
         self.requested_fps = fps
         self.camera_backend = camera_backend
+        self.camera_index = int(camera_index)
         self.capture: cv2.VideoCapture | None = None
         self.picam2 = None
         self._fps = float(fps)
@@ -74,6 +76,42 @@ class FrameSource:
             self.picam2.close()
             self.picam2 = None
 
+    def switch_camera(self, camera_index: int) -> bool:
+        """Switch an open OpenCV camera while keeping the frame source alive.
+
+        Returns ``True`` when a different camera was opened. If opening the new
+        device fails, the previous device is reopened before the error is raised.
+        Video files and Picamera2 intentionally remain single-source.
+        """
+
+        target_index = int(camera_index)
+        if self.source != "camera" or self.camera_backend != "opencv":
+            return False
+        if target_index == self.camera_index and self.capture is not None:
+            return False
+
+        previous_index = self.camera_index
+        if self.capture is not None:
+            self.capture.release()
+            self.capture = None
+        self.camera_index = target_index
+        try:
+            self._open_opencv()
+        except Exception as switch_error:
+            self.camera_index = previous_index
+            try:
+                self._open_opencv()
+            except Exception as fallback_error:
+                raise RuntimeError(
+                    f"Unable to switch from camera {previous_index} to "
+                    f"{target_index}; reopening camera {previous_index} also failed"
+                ) from fallback_error
+            raise RuntimeError(
+                f"Unable to switch from camera {previous_index} to {target_index}; "
+                f"camera {previous_index} was restored"
+            ) from switch_error
+        return True
+
     def __enter__(self) -> "FrameSource":
         return self.open()
 
@@ -83,8 +121,8 @@ class FrameSource:
     def _open_opencv(self) -> None:
         source_arg: str | int
         if self.source == "camera":
-            # OpenCV 里 0 通常表示默认摄像头。
-            source_arg = 0
+            # OpenCV 里 0 通常表示默认摄像头，可用 --camera-index 选择其他设备。
+            source_arg = self.camera_index
         else:
             # 本地视频要先确认文件存在，避免 OpenCV 给出不清楚的打开失败。
             path = Path(self.source)
@@ -94,6 +132,11 @@ class FrameSource:
 
         capture = cv2.VideoCapture(source_arg)
         if not capture.isOpened():
+            capture.release()
+            if self.source == "camera":
+                raise RuntimeError(
+                    f"Unable to open camera index {self.camera_index} with OpenCV"
+                )
             raise RuntimeError(f"Unable to open video source: {self.source}")
 
         if self.source == "camera":
