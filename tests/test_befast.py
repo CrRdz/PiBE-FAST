@@ -1,6 +1,6 @@
 import unittest
 
-from app.befast import BefastConfig, BefastSession
+from app.befast import BefastConfig, BefastSession, MotionResult
 from app.face_landmarker import FaceObservation
 from app.keypoints import KEYPOINT_NAMES
 
@@ -208,7 +208,6 @@ class BefastSessionTest(unittest.TestCase):
         self.session.submit_manual(
             {
                 "balance_problem": False,
-                "speech_problem": False,
             },
             new_or_sudden=False,
         )
@@ -226,7 +225,6 @@ class BefastSessionTest(unittest.TestCase):
         self.session.submit_manual(
             {
                 "balance_problem": False,
-                "speech_problem": False,
             },
             new_or_sudden=True,
             onset_time="2026-07-19T10:30",
@@ -255,9 +253,19 @@ class BefastSessionTest(unittest.TestCase):
         self.session.submit_manual(
             {
                 "balance_problem": False,
-                "speech_problem": False,
             },
             new_or_sudden=False,
+        )
+        self.session.prepare_component("S", now=3.3)
+        self.session.start_speech_recording(now=3.4)
+        self.session.submit_speech_result(
+            MotionResult(
+                status="negative",
+                reason="no_clear_speech_abnormality",
+                quality=0.9,
+            ),
+            new_or_sudden=False,
+            now=3.5,
         )
 
         result = self.session.snapshot()
@@ -329,8 +337,18 @@ class BefastSessionTest(unittest.TestCase):
             self.assertEqual(snapshot["items"][item_code]["reason"], "user_skipped")
 
         self.session.submit_manual(
-            {"balance_problem": False, "speech_problem": False},
+            {"balance_problem": False},
             new_or_sudden=False,
+        )
+        self.session.prepare_component("S", now=6.0)
+        self.session.submit_speech_result(
+            MotionResult(
+                status="negative",
+                reason="no_clear_speech_abnormality",
+                quality=0.9,
+            ),
+            new_or_sudden=False,
+            now=6.1,
         )
         report = self.session.snapshot()
 
@@ -347,6 +365,66 @@ class BefastSessionTest(unittest.TestCase):
             self.session.skip_current_stage(now=3.0 + index)
         with self.assertRaises(ValueError):
             self.session.skip_current_stage(now=8.0)
+
+    def test_independent_component_finishes_with_an_immediate_report(self):
+        self.session.prepare_component("A", now=0.0)
+        self.assertEqual(self.session.snapshot(now=0.1)["stage"], "ready_arms")
+
+        result = self.run_arm_screen(lambda _: standing_points())
+
+        self.assertEqual(result["current_report"]["component"], "A")
+        self.assertEqual(result["current_report"]["attempt"], 1)
+        self.assertEqual(result["current_report"]["item"]["status"], "negative")
+        self.assertEqual(result["attempt_counts"]["A"], 1)
+        self.assertEqual(len(result["reports"]), 1)
+
+    def test_independent_component_can_be_repeated_without_losing_history(self):
+        for _ in range(2):
+            self.session.prepare_component("A", now=0.0)
+            self.run_arm_screen(lambda _: standing_points())
+
+        result = self.session.snapshot(now=2.0)
+
+        self.assertEqual(result["attempt_counts"]["A"], 2)
+        self.assertEqual([report["attempt"] for report in result["reports"]], [1, 2])
+        self.assertEqual(result["current_report"]["attempt"], 2)
+
+    def test_speech_component_produces_its_own_report(self):
+        self.session.prepare_component("S", now=1.0)
+        self.session.start_speech_recording(now=1.5)
+        self.session.submit_speech_result(
+            MotionResult(
+                status="positive",
+                reason="speech_content_mismatch",
+                quality=0.88,
+                details={"transcript": "今天天气"},
+            ),
+            new_or_sudden=True,
+            onset_time="2026-07-24T10:30",
+            now=2.0,
+        )
+
+        result = self.session.snapshot(now=2.0)
+
+        self.assertEqual(result["stage"], "report")
+        self.assertEqual(result["current_report"]["component"], "S")
+        self.assertEqual(result["current_report"]["decision"], "emergency")
+        self.assertEqual(result["current_report"]["item"]["status"], "positive")
+
+    def test_balance_negative_observation_continues_to_safe_pose_check(self):
+        self.session.prepare_component("B", now=1.0)
+        self.session.submit_component_observation(
+            "B",
+            problem=False,
+            new_or_sudden=False,
+            now=2.0,
+        )
+
+        result = self.session.snapshot(now=2.0)
+
+        self.assertEqual(result["stage"], "ready_balance")
+        self.assertIsNone(result["current_report"])
+        self.assertEqual(result["reports"], [])
 
 
 if __name__ == "__main__":
