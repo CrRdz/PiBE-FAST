@@ -24,13 +24,15 @@
     button { cursor: pointer; }
     .app { min-height: 100vh; display: grid; grid-template-rows: auto auto 1fr; }
     .topbar { height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 22px; border-bottom: 1px solid #18212a; background: #090e14; }
-    .brand { display: flex; align-items: center; gap: 11px; font-weight: 760; letter-spacing: -.02em; }
-    .brand-mark { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px; background: linear-gradient(145deg, #28b5ff, #2569e8); box-shadow: 0 7px 22px #217ee055; }
+    .brand { display: flex; align-items: center; font-weight: 760; letter-spacing: -.02em; }
     .brand-sub { color: var(--muted); font-size: .76rem; font-weight: 520; letter-spacing: .01em; }
     .top-actions { display: flex; align-items: center; gap: 8px; }
     .camera-picker { display: flex; align-items: center; gap: 7px; height: 38px; padding: 0 8px 0 11px; border: 1px solid #263442; border-radius: 9px; color: #9eafbd; background: #101720; font-size: .78rem; white-space: nowrap; }
     .camera-picker select { max-width: 190px; padding: 5px 24px 5px 7px; border: 0; border-radius: 6px; outline: 0; color: #e7f1f8; background: #18232d; }
     .camera-picker select:disabled { opacity: .55; cursor: not-allowed; }
+    .history-entry { height: 38px; padding: 0 12px; border: 1px solid #2e4659; border-radius: 9px; color: #cceaff; background: #112130; font-size: .78rem; font-weight: 750; white-space: nowrap; }
+    .history-entry:hover, .history-entry:focus-visible { border-color: #69c5fb; background: #173149; outline: none; }
+    .history-entry:disabled { cursor: not-allowed; opacity: .45; }
     .language { display: flex; padding: 3px; border: 1px solid #263442; border-radius: 9px; background: #101720; }
     .language button { min-width: 52px; padding: 6px 10px; border: 0; border-radius: 6px; color: #8fa0af; background: transparent; }
     .language button.active { color: #071018; background: #d9efff; font-weight: 750; }
@@ -45,8 +47,8 @@
     .status.running .dot, .status.standby .dot { background: var(--green); box-shadow: 0 0 0 4px #31d07f22; }
     .status.preview_only .dot { background: var(--yellow); }
     .status.error .dot, .status.camera_error .dot, .status.stopped .dot { background: var(--red); }
-    .steps { position: absolute; top: 18px; right: 18px; display: flex; align-items: center; gap: 6px; padding: 7px 9px; border: 1px solid var(--line); border-radius: 999px; background: var(--glass); backdrop-filter: blur(15px); }
-    .step { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; color: #7f8d99; background: #1d2730; font-size: .75rem; font-weight: 760; }
+    .steps { position: absolute; top: 18px; right: 18px; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 9px 7px; border: 1px solid var(--line); border-radius: 999px; background: var(--glass); backdrop-filter: blur(15px); }
+    .step { width: 28px; height: 28px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; color: #7f8d99; background: #1d2730; font-size: .75rem; font-weight: 760; }
     .step.done { color: #07150e; background: var(--green); }
     .step.skipped { color: #241a03; background: var(--yellow); box-shadow: none; }
     .step.active { color: #04131e; background: #8cd4ff; box-shadow: 0 0 0 4px #35a9ff24; }
@@ -82,11 +84,51 @@
     .sheet { position: absolute; left: 50%; bottom: 22px; width: min(820px, calc(100% - 28px)); max-height: calc(100% - 44px); overflow: auto; transform: translateX(-50%); padding: 18px; border: 1px solid var(--line); border-radius: 16px; background: rgba(7, 13, 19, .94); box-shadow: 0 24px 80px #000c; backdrop-filter: blur(18px); }
     .sheet h2 { margin: 0 0 6px; }
     .sheet > p { margin: 0 0 14px; color: var(--muted); }
+    .component-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 9px; margin-top: 14px; }
+    .component-card { min-height: 112px; padding: 13px 10px; border: 1px solid #304252; border-radius: 11px; color: #eaf4fb; background: #101a23; text-align: left; }
+    .component-card:hover, .component-card:focus-visible { border-color: #69c5fb; background: #142637; outline: none; }
+    .component-card strong { display: block; color: #81d1ff; font-size: 1.55rem; }
+    .component-card span { display: block; margin-top: 3px; font-weight: 750; }
+    .component-card small { display: block; margin-top: 7px; color: #9eafbd; line-height: 1.35; }
+    .history-title { margin: 17px 0 7px; color: #dce8f0; font-size: .92rem; }
+    .history { display: flex; flex-wrap: wrap; gap: 7px; }
+    .history button { padding: 7px 10px; border: 1px solid #344655; border-radius: 8px; color: #d8e5ed; background: #101820; }
+    .history button.positive { border-color: #b94b54; color: #ffacb2; }
+    .history button.negative { border-color: #3b8f5e; color: #80e5a8; }
+    .history-empty { color: #82919d; font-size: .85rem; }
+    .history-sheet { width: min(980px, calc(100% - 28px)); }
+    .history-filters { display: grid; grid-template-columns: repeat(3, minmax(130px, 1fr)) auto; align-items: end; gap: 9px; margin: 14px 0; }
+    .history-filter { display: grid; gap: 6px; color: #aebdca; font-size: .78rem; }
+    .history-filter select { width: 100%; min-height: 40px; padding: 8px 10px; border: 1px solid #334a5c; border-radius: 8px; outline: none; color: #eef7fd; background: #101b24; }
+    .history-filter select:focus-visible { border-color: #69c5fb; }
+    .history-summary { min-height: 20px; margin-bottom: 9px; color: #91a4b3; font-size: .82rem; }
+    .history-records { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .history-record { min-width: 0; overflow: hidden; border: 1px solid #334552; border-radius: 11px; background: #0d161d; }
+    .history-frame { width: 100%; height: clamp(190px, 28vh, 320px); display: block; object-fit: cover; background: #060a0e; }
+    .history-frame-placeholder { width: 100%; height: clamp(190px, 28vh, 320px); display: grid; place-items: center; padding: 18px; color: #728391; background: #080d12; font-size: .82rem; text-align: center; }
+    .history-record-body { display: grid; gap: 6px; padding: 11px 12px 12px; }
+    .history-record-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .history-record-title strong { color: #8bd5ff; font-size: 1rem; }
+    .history-record-title span { color: #ff9da4; font-size: .76rem; font-weight: 750; }
+    .history-record-reason { color: #d5dfe6; line-height: 1.4; font-size: .86rem; }
+    .history-record-meta { color: #8799a7; line-height: 1.45; font-size: .75rem; }
+    .history-empty-panel { grid-column: 1 / -1; padding: 30px 16px; border: 1px dashed #334552; border-radius: 11px; color: #8798a5; text-align: center; }
     .manual-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
     .check { display: flex; align-items: flex-start; gap: 9px; padding: 11px; border: 1px solid #293845; border-radius: 9px; background: #101820; line-height: 1.4; }
     .check input { width: 20px; height: 20px; flex: 0 0 auto; accent-color: var(--red); }
     .time-field { grid-column: 1 / -1; display: grid; gap: 6px; color: #c9d3da; }
     .time-field input { width: 100%; padding: 10px; color: white; border: 1px solid #334553; border-radius: 8px; background: #0a1118; }
+    .speech-prompt { margin: 14px 0 10px; padding: 15px; border: 1px solid #31526a; border-radius: 11px; background: #0d1c27; }
+    .speech-prompt span { display: block; margin-bottom: 6px; color: #89a9be; font-size: .76rem; font-weight: 700; }
+    .speech-prompt strong { display: block; color: #e8f6ff; font-size: clamp(1.08rem, 3vw, 1.4rem); line-height: 1.5; }
+    .speech-state { display: grid; grid-template-columns: 34px 1fr; align-items: center; gap: 10px; padding: 11px 12px; border: 1px solid #334653; border-radius: 10px; background: #0d151c; }
+    .speech-state-icon { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; color: #06131c; background: #80d2ff; font-weight: 900; }
+    .speech-state strong { display: block; margin-bottom: 2px; }
+    .speech-state small { display: block; color: #8fa3b2; line-height: 1.35; }
+    .speech-progress { height: 5px; margin: 9px 4px 14px; overflow: hidden; border-radius: 999px; background: #ffffff1c; }
+    .speech-progress span { display: block; width: 0; height: 100%; background: var(--blue); transition: width .2s linear; }
+    .speech-audio { width: 100%; height: 38px; margin-top: 4px; }
+    .speech-transcript { color: #a8c9dd; font-size: .8rem; line-height: 1.45; }
     .sheet-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 13px; }
     .decision { padding: 13px 14px; border-radius: 10px; background: #252116; color: #ffd273; font-size: 1.12rem; font-weight: 800; }
     .decision.emergency { background: #4b171c; color: #ff9ca3; }
@@ -100,6 +142,7 @@
     .result strong { display: block; font-size: 1.08rem; }
     .result-status { font-weight: 750; }
     .result-detail { color: #d1d9df; line-height: 1.38; font-size: .88rem; }
+    .report-meta { margin: 0 0 10px; color: #9fb0bd; font-size: .84rem; }
     [hidden] { display: none !important; }
     @media (max-width: 680px) {
       .topbar { height: 58px; padding: 0 12px; }
@@ -108,35 +151,43 @@
       .camera-picker { padding: 0 5px; }
       .camera-picker > span { display: none; }
       .camera-picker select { width: 118px; max-width: 118px; font-size: .72rem; }
+      .history-entry { padding: 0 9px; }
       .workspace, .video { min-height: calc(100vh - 96px); height: calc(100vh - 96px); }
       .status { top: 8px; left: 8px; max-width: min(230px, calc(100% - 16px)); }
-      .steps { top: 54px; left: 50%; right: auto; transform: translateX(-50%); }
+      .steps { top: 54px; right: 8px; left: auto; transform: none; }
       .guide { bottom: 14px; }
       .signal { grid-template-columns: 38px 1fr; padding: 12px; }
       .signal-icon { width: 34px; height: 34px; }
       .manual-grid { grid-template-columns: 1fr; }
+      .component-grid { grid-template-columns: 1fr 1fr; }
+      .history-filters { grid-template-columns: 1fr 1fr; }
+      .history-records { grid-template-columns: 1fr; }
       .time-field { grid-column: auto; }
       .result { grid-template-columns: 42px 1fr; gap: 5px 9px; }
       .result-detail { grid-column: 2; }
     }
     @media (max-width: 460px) {
       .topbar { gap: 6px; padding: 0 7px; }
-      .brand { gap: 5px; font-size: .76rem; }
-      .brand-mark { width: 25px; height: 25px; border-radius: 7px; }
+      .brand { font-size: .76rem; }
       .top-actions { gap: 4px; }
       .camera-picker { height: 34px; padding: 0 3px; }
       .camera-picker select { width: 96px; max-width: 96px; padding-right: 15px; font-size: .68rem; }
+      .history-entry { width: 36px; height: 34px; overflow: hidden; padding: 0; font-size: 0; }
+      .history-entry::before { content: "⌕"; font-size: 1.05rem; }
       .language { padding: 2px; }
       .language button { min-width: 35px; padding: 6px 4px; font-size: .72rem; }
+      .component-grid { grid-template-columns: 1fr; }
+      .component-card { min-height: 86px; }
     }
   </style>
 </head>
 <body>
   <div class="app">
     <header class="topbar">
-      <div class="brand"><span class="brand-mark">P</span><div><div id="brandTitle">Pi BE-FAST 筛查 Demo</div><div id="brandSub" class="brand-sub">Camera-guided screening prototype</div></div></div>
+      <div class="brand"><div><div id="brandTitle">Pi BE-FAST 筛查 Demo</div><div id="brandSub" class="brand-sub">Camera-guided screening prototype</div></div></div>
       <div class="top-actions">
         <label class="camera-picker"><span id="cameraLabel">摄像头</span><select id="cameraSourceSelect" onchange="switchCameraSource(this.value)" aria-label="摄像头来源"><option id="hostCameraOption" value="host">主机摄像头</option><option id="clientCameraOption" value="client">手机 / 当前设备</option></select></label>
+        <button id="persistentHistoryButton" class="history-entry" onclick="openPersistentHistory()">异常历史</button>
         <div id="languageSwitch" class="language" aria-label="语言"><button id="zhButton" class="active" onclick="setLanguage('zh')">中文</button><button id="enButton" onclick="setLanguage('en')">EN</button></div>
       </div>
     </header>
@@ -149,16 +200,45 @@
       <div class="shade"></div>
       <div id="runtime" class="status starting"><span class="dot"></span><span id="runtimeText">正在连接摄像头……</span></div>
       <div id="steps" class="steps" aria-label="筛查进度">
-        <span class="step" data-code="E">E</span><span class="step" data-code="F">F</span><span class="step" data-code="A">A</span><span class="step" data-code="B">B</span><span class="step" data-code="S">S</span>
+        <button class="step" data-code="B" onclick="startComponent('B')" aria-label="平衡检测">B</button><button class="step" data-code="E" onclick="startComponent('E')" aria-label="眼动检测">E</button><button class="step" data-code="F" onclick="startComponent('F')" aria-label="面部检测">F</button><button class="step" data-code="A" onclick="startComponent('A')" aria-label="手臂检测">A</button><button class="step" data-code="S" onclick="startComponent('S')" aria-label="言语检测">S</button>
       </div>
       <span id="eyeTarget" class="eye-target center" aria-label="眼动目标"></span>
 
       <section id="startOverlay" class="start">
         <div class="start-inner">
           <h1 id="startTitle">Pi BE-FAST 筛查 Demo</h1>
-          <p id="startText">摄像头是主要操作区域。开始后，请按照画面中的红绿提示完成 E、F、A、B 动作。</p>
-          <button id="startButton" class="button primary" onclick="startScreening()">开始筛查</button>
+          <p id="startText">进入后可单独选择 B、E、F、A 或 S；每项完成后立即生成报告，并可不限次数重复。</p>
+          <button id="startButton" class="button primary" onclick="startScreening()">选择检测项目</button>
         </div>
+      </section>
+
+      <section id="componentSheet" class="sheet" hidden>
+        <h2 id="componentTitle">选择单项检测</h2>
+        <p id="componentText">各项目彼此独立。完成一项即可查看该次报告，也可以随时重复。</p>
+        <div class="component-grid">
+          <button class="component-card" onclick="startComponent('B')"><strong>B</strong><span id="componentBTitle">平衡</span><small id="componentBText">人工失衡观察 + 安全站立检测</small></button>
+          <button class="component-card" onclick="startComponent('E')"><strong>E</strong><span id="componentETitle">眼动</span><small id="componentEText">跟随左右目标，检查眼动范围</small></button>
+          <button class="component-card" onclick="startComponent('F')"><strong>F</strong><span id="componentFTitle">面部</span><small id="componentFText">自然表情与微笑对称性</small></button>
+          <button class="component-card" onclick="startComponent('A')"><strong>A</strong><span id="componentATitle">手臂</span><small id="componentAText">双臂平举与单侧下落</small></button>
+          <button class="component-card" onclick="startComponent('S')"><strong>S</strong><span id="componentSTitle">言语</span><small id="componentSText">复述句子并人工确认言语情况</small></button>
+        </div>
+        <h3 id="historyTitle" class="history-title">本轮单项报告</h3>
+        <div id="reportHistory" class="history"></div>
+        <div class="sheet-actions"><button class="button ghost" onclick="returnToStandby()" id="menuFinishButton">完成并退出</button></div>
+      </section>
+
+      <section id="persistentHistorySheet" class="sheet history-sheet" hidden>
+        <h2 id="persistentHistoryTitle">异常历史记录</h2>
+        <p id="persistentHistoryText">查看已保存的异常报告和对应画面。</p>
+        <div class="history-filters">
+          <label class="history-filter"><span id="historyComponentLabel">BE-FAST 项目</span><select id="historyComponentFilter" onchange="loadPersistentHistory()"><option id="historyComponentAll" value="">全部</option><option value="B">B · Balance</option><option value="E">E · Eyes</option><option value="F">F · Face</option><option value="A">A · Arms</option><option value="S">S · Speech</option></select></label>
+          <label class="history-filter"><span id="historySideLabel">侧别</span><select id="historySideFilter" onchange="loadPersistentHistory()"><option id="historySideAll" value="">全部</option><option id="historySideLeft" value="left">左侧</option><option id="historySideRight" value="right">右侧</option></select></label>
+          <label class="history-filter"><span id="historySuddenLabel">突发情况</span><select id="historySuddenFilter" onchange="loadPersistentHistory()"><option id="historySuddenAll" value="">全部</option><option id="historySuddenYes" value="true">新发 / 突然</option><option id="historySuddenNo" value="false">非突发</option></select></label>
+          <button id="historyRefreshButton" class="button ghost" onclick="loadPersistentHistory()">刷新</button>
+        </div>
+        <div id="persistentHistorySummary" class="history-summary"></div>
+        <div id="persistentHistoryRecords" class="history-records"></div>
+        <div class="sheet-actions"><button id="historyCloseButton" class="button primary" onclick="closePersistentHistory()">关闭</button></div>
       </section>
 
       <section id="guideOverlay" class="guide" hidden>
@@ -176,23 +256,41 @@
       </section>
 
       <section id="manualSheet" class="sheet" hidden>
-        <h2 id="manualTitle">最后一步：言语与发病时间</h2>
-        <p id="manualText">让受试者复述一句话，并确认异常是否为突然出现。</p>
+        <h2 id="manualTitle">B · 平衡观察</h2>
+        <p id="manualText">如果已经突然失去平衡或协调困难，请直接勾选，无需冒险站立。</p>
         <div class="manual-grid">
           <label class="check"><input id="balance_problem" type="checkbox"><span id="balanceLabel">突然失去平衡或协调困难</span></label>
-          <label class="check"><input id="speech_problem" type="checkbox"><span id="speechLabel">说话含混、复述错误或理解困难</span></label>
           <label class="check"><input id="new_or_sudden" type="checkbox"><span id="suddenLabel">以上任一异常是新出现或突然发生</span></label>
           <label class="time-field"><span id="onsetLabel">首次发现异常时间（可留空）</span><input id="onset_time" type="datetime-local"></label>
         </div>
-        <div class="sheet-actions"><button class="button ghost" onclick="returnToStandby()" id="cancelButton">取消</button><button class="button primary" onclick="submitManual()" id="submitButton">查看结果</button></div>
+        <div class="sheet-actions"><button class="button ghost" onclick="openComponentMenu()" id="cancelButton">返回项目选择</button><button class="button primary" onclick="submitCurrentManual()" id="submitButton">继续</button></div>
+      </section>
+
+      <section id="speechSheet" class="sheet" hidden>
+        <h2 id="speechTitle">S · 麦克风言语检测</h2>
+        <p id="speechText">靠近树莓派麦克风，点击开始后完整复述下面的句子。</p>
+        <div class="speech-prompt">
+          <span id="speechPromptLabel">请复述</span>
+          <strong id="speechPrompt">今天天气很好，我们一起去公园散步</strong>
+        </div>
+        <div class="speech-state">
+          <span id="speechStateIcon" class="speech-state-icon">●</span>
+          <div><strong id="speechStateTitle">等待开始录音</strong><small id="speechStateText">录音和识别均在树莓派本地完成。</small></div>
+        </div>
+        <div class="speech-progress"><span id="speechProgressBar"></span></div>
+        <div class="manual-grid">
+          <label class="check"><input id="speech_new_or_sudden" type="checkbox"><span id="speechSuddenLabel">言语变化是新出现或突然发生</span></label>
+          <label class="time-field"><span id="speechOnsetLabel">首次发现异常时间（可留空）</span><input id="speech_onset_time" type="datetime-local"></label>
+        </div>
+        <div class="sheet-actions"><button class="button ghost" onclick="cancelSpeechCapture()" id="speechCancelButton">返回项目选择</button><button class="button primary" onclick="startSpeechCapture()" id="speechStartButton">开始录音</button></div>
       </section>
 
       <section id="resultSheet" class="sheet" hidden>
-        <h2 id="resultTitle">筛查结果</h2>
+        <h2 id="resultTitle">单项检测报告</h2>
+        <div id="reportMeta" class="report-meta"></div>
         <div id="decision" class="decision">评估未完成</div>
         <div id="results" class="results"></div>
-        <p id="resultNote">本结果不能诊断或排除脑卒中。</p>
-        <div class="sheet-actions"><button class="button ghost" onclick="startScreening()" id="againButton">重新筛查</button><button class="button primary" onclick="returnToStandby()" id="finishButton">完成</button></div>
+        <div class="sheet-actions"><button class="button ghost" onclick="repeatCurrentComponent()" id="againButton">重新检测本项</button><button class="button primary" onclick="openComponentMenu()" id="otherButton">检测其他项目</button><button class="button ghost" onclick="returnToStandby()" id="finishButton">完成并退出</button></div>
       </section>
     </main>
   </div>
@@ -201,7 +299,9 @@
     const text = {
       zh: {
         title: 'Pi BE-FAST 筛查 Demo', sub: '摄像头引导式筛查研究原型', emergency: '⚠ 突然出现任何 BE-FAST 症状，请立即拨打 120，不要等待本 Demo 完成。', cameraAlt: '当前选择的摄像头实时画面', languageLabel: '语言', progressLabel: '筛查进度', eyeTargetLabel: '眼动目标', cameraLabel:'摄像头', cameraSourceLabel:'摄像头来源', hostOption:'主机摄像头', autoHostOption:'自动切换（E/F 电脑 · A/B 手机）', faceHostCamera:'电脑前置摄像头 · E/F', poseHostCamera:'手机摄像头 · A/B', fallbackHostCamera:'目标摄像头不可用 · 当前摄像头回退', clientOption:'手机 / 当前设备',
-        startText: '请先在右上角选择主机摄像头，或选择当前浏览器设备的摄像头；手机打开页面时即可使用手机前置摄像头。然后按照红绿提示完成 E、F、A、B。', start: '开始筛查', exit: '退出筛查',
+        startText: '先选择摄像头，再进入单项检测。B、E、F、A、S 可任意选择、独立完成并不限次数重复；自动项目仍会用红绿提示引导，每次完成都会立即生成报告。', start: '选择检测项目', exit: '退出筛查',
+        componentTitle:'选择单项检测', componentText:'各项目彼此独立。完成一项即可查看该次报告，也可以随时重复。', componentNames:{B:'平衡',E:'眼动',F:'面部',A:'手臂',S:'言语'}, componentDescriptions:{B:'人工失衡观察 + 安全站立检测',E:'跟随左右目标，检查眼动范围',F:'自然表情与微笑对称性',A:'双臂平举与单侧下落',S:'树莓派麦克风录音 + 本地离线言语分析'}, historyTitle:'本轮单项报告', historyEmpty:'尚无报告，选择任一项目开始。', menuFinish:'完成并退出',
+        historyEntry:'异常历史', persistentHistoryTitle:'异常历史记录', persistentHistoryText:'查看已保存的异常报告、画面和言语录音。', historyComponentLabel:'BE-FAST 项目', historySideLabel:'侧别', historySuddenLabel:'突发情况', historyAll:'全部', historyLeft:'左侧', historyRight:'右侧', historySuddenYes:'新发 / 突然', historySuddenNo:'非突发', historyRefresh:'刷新', historyClose:'关闭', historyLoading:'正在加载异常历史…', historyLoadError:'无法加载异常历史。', historyEmptyPersistent:'暂无符合当前筛选条件的异常记录。', historyCount:'共 {count} 条异常记录', historyFrameUnavailable:'没有保存画面', historyFrameLoadError:'画面文件无法加载，请刷新后重试。', historyDetectedAt:'检测时间', historyAttemptLabel:'第 {attempt} 次', historySuddenUnknown:'未确认是否突发',
         standbyGuide: ['准备开始', '请先确认摄像头画面清晰。'],
         idle: ['E · 眼动准备', '正对当前选择的摄像头，让面部和双眼清晰入镜。'],
         eyes: ['E · 跟随目标', '头保持不动，只用眼睛跟随蓝色目标点。'],
@@ -217,18 +317,21 @@
         balance: ['B · 保持自然站立', '看护者请在旁保护；感觉不稳立即停止。'],
         review: ['S/T · 完成人工观察', '检查言语是否清晰，并记录异常首次出现时间。'],
         correct: '动作正确', adjust: '请调整动作', waiting: '等待动作识别', remainingSeconds:'约剩 {seconds} 秒', continueStage: '开始检测', retryStage: '重新检测本项', skipStage:'跳过本项', skipConfirm:'确定跳过当前检测吗？报告会标记为“已跳过”，不会视为正常结果。',
-        safety: '已有人看护，可以安全站立', manualTitle: '最后一步：言语与发病时间', manualText: '让受试者复述“今天天气很好”，并确认异常是否为突然出现。',
-        balanceLabel: '突然失去平衡或协调困难', speechLabel: '说话含混、复述错误或理解困难', suddenLabel: '以上任一异常是新出现或突然发生', onsetLabel: '首次发现异常时间（可留空）', cancel: '取消', submit: '查看结果',
-        resultTitle: '筛查结果', resultNote: '本 Demo 不能诊断或排除脑卒中；突然出现任何异常请立即拨打 120。', again: '重新筛查', finish: '完成',
-        decisions: {standby:'等待开始', emergency:'发现新发异常：立即拨打 120', warning:'发现异常：请确认是否突然出现', clear:'本次未发现明显 BE-FAST 异常', incomplete:'评估未完成或质量不足'},
-        runtimeWaiting: '正在连接摄像头', live: '画面已连接', previewOnly: '画面已连接，部分模型未就绪', runtimeError: '摄像头或模型不可用', hostCamera: '主机', hostVideo: '本地视频', clientCamera:'当前设备', cameraSecureRequired:'当前地址不能调用手机摄像头。请通过 HTTPS 打开页面，或在运行服务的电脑上使用 localhost。', cameraPermissionDenied:'无法打开当前设备摄像头，请检查浏览器摄像头权限。', cameraSwitchIdle:'请先退出当前筛查，再切换摄像头。', statuses: {positive:'发现异常', negative:'未见明显异常', insufficient:'数据质量不足', skipped:'已跳过', checking:'检测中', pending:'待检测'},
+        safety: '已有人看护，可以安全站立', manualTitle: 'B · 平衡观察', manualText: '如果已经突然失去平衡或协调困难，请直接勾选，无需冒险站立；未发现时再继续安全站立检测。', balanceManualTitle:'B · 平衡观察', balanceManualText:'如果已经突然失去平衡或协调困难，请直接勾选，无需冒险站立；未发现时再继续安全站立检测。',
+        balanceLabel: '突然失去平衡或协调困难', suddenLabel: '该异常是新出现或突然发生', onsetLabel: '首次发现异常时间（可留空）', cancel: '返回项目选择', submit: '继续',
+        speechTitle:'S · 麦克风言语检测', speechText:'靠近树莓派麦克风，点击开始后完整复述下面的句子。录音与识别均在本地完成。', speechPromptLabel:'请复述', speechPromptDefault:'今天天气很好，我们一起去公园散步', speechSuddenLabel:'言语变化是新出现或突然发生', speechOnsetLabel:'首次发现异常时间（可留空）', speechCancel:'返回项目选择', speechStart:'开始录音', speechReady:'等待开始录音', speechReadyText:'系统将采集约 7 秒音频，并在树莓派本地分析。', speechRecording:'正在录音', speechRecordingText:'请完整复述提示句，不要让其他人同时说话。', speechAnalyzing:'正在本地分析', speechAnalyzingText:'正在检查音频质量、复述内容、语速和停顿。', speechCompleting:'正在生成报告', speechBackendMissing:'本地语音引擎尚未就绪', speechTranscriptLabel:'识别文本',
+        resultTitle: '单项检测报告', again: '重新检测本项', other:'检测其他项目', finish: '完成并退出', reportAttempt:'{name} · 第 {attempt} 次报告', historyAttempt:'{code} 第{attempt}次',
+        decisions: {standby:'等待开始', emergency:'发现新发异常：立即拨打 120', warning:'本项发现异常：请确认是否突然出现', clear:'本项未见明显异常', incomplete:'本项数据质量不足或已跳过'},
+        runtimeWaiting: '正在连接摄像头', live: '画面已连接', previewOnly: '画面已连接，部分模型未就绪', runtimeError: '摄像头或模型不可用', hostCamera: '主机', hostVideo: '本地视频', clientCamera:'当前设备', cameraSecureRequired:'当前地址不能调用手机摄像头。请通过 HTTPS 打开页面，或在运行服务的电脑上使用 localhost。', cameraPermissionDenied:'无法打开当前设备摄像头，请检查浏览器摄像头权限。', cameraSwitchIdle:'请在待机页或项目选择页切换摄像头。', statuses: {positive:'发现异常', negative:'未见明显异常', insufficient:'数据质量不足', skipped:'已跳过', checking:'检测中', pending:'待检测'},
         itemNames: {B:'平衡', E:'眼动', F:'面部', A:'手臂', S:'言语'}, sides: {left:'左', right:'右', unknown:'侧别未确定'}, detailUnavailable: '尚无可解释的检测详情。',
         resultReasons: {reported_balance_problem:'本人或照护者报告突然失去平衡或协调困难。', persistent_lateral_body_offset:'身体中心持续向{side}偏离双脚支撑中心。', large_standing_sway:'站立期间左右摆动范围超过当前工程阈值。', no_clear_pose_based_balance_asymmetry:'本次站立未发现明显持续侧偏或过大摆动。', stable_standing_pose_not_visible_long_enough:'全身、髋部或脚踝没有持续清晰入镜，无法完成站立平衡判断。', reduced_visual_target_response:'左右眼对屏幕左右目标的水平跟随幅度均不足。', asymmetric_eye_excursion:'{side}眼的水平移动范围明显小于另一只眼。', asymmetric_conjugate_gaze:'双眼跟随同一目标时运动不同步，存在共轭眼动不协调。', no_visible_eye_movement_abnormality:'本次未发现明显的水平眼动范围不足、左右不对称或双眼不同步。', face_or_irises_not_visible_long_enough:'面部或虹膜没有持续清晰可见，无法完成眼动判断。', head_moved_during_eye_test:'测试时头部移动过多，无法区分眼动和转头动作。', asymmetric_mouth_corner_movement:'微笑时{side}嘴角移动明显弱于另一侧。', asymmetric_smile_activation:'MediaPipe 表情特征显示{side}微笑激活明显较弱。', no_clear_smile_asymmetry:'本次中性表情与微笑对比未发现明显左右不对称。', face_not_visible_during_neutral_and_smile:'中性表情或微笑阶段面部未持续清晰入镜。', smile_expression_not_detected:'没有识别到足够明确的微笑动作，无法判断面部对称性。', persistent_arm_height_asymmetry:'保持平举时{side}手臂持续低于另一侧。', asymmetric_arm_drift:'保持过程中{side}手臂下落幅度明显更大。', no_clear_arm_asymmetry:'本次双臂平举未发现明显高度差或单侧下落。', arms_not_visible_long_enough:'双肩或双手腕没有持续清晰入镜，无法完成手臂判断。', both_arms_were_not_held_up:'未持续识别到双臂向前平举动作。', reported_speech_problem:'人工观察发现说话含混、复述错误或理解困难。', not_reported:'人工观察未报告明显言语异常。', not_checked:'尚未完成人工观察。', not_fully_checked:'该项目尚未完成自动检测和人工确认。', user_skipped:'使用者跳过了此项，本项没有产生检测结论。', checking:'正在采集并分析当前动作。', not_run:'该项目尚未检测。'},
         reasons: {show_face_and_eyes:'请靠近一些，让双眼清晰可见', face_and_eyes_ready:'面部和双眼已识别', show_full_face:'请让完整面部进入画面', neutral_face_ready:'中性表情已识别', relax_face_first:'请先放松面部，不要微笑', smile_now:'请自然微笑', smile_detected:'微笑动作已识别', show_shoulders_and_wrists:'请让双肩和双手腕进入画面', raise_both_arms:'请将双臂向前抬起', arms_detected_hold_still:'双臂动作已识别，请保持', show_full_body_and_stand_safely:'请让全身和脚踝入镜，并在看护下站立', standing_pose_ready:'站立动作已识别，请保持', collecting_action:'正在开始采集', face_or_irises_not_visible_long_enough:'双眼未持续清晰可见，请重新调整', head_moved_during_eye_test:'头部移动过多，请保持头不动', face_not_visible_during_neutral_and_smile:'面部未持续清晰可见，请重新调整', smile_expression_not_detected:'没有识别到微笑，请重新尝试', arms_not_visible_long_enough:'双肩或手腕未持续入镜，请重新调整', both_arms_were_not_held_up:'没有识别到抬臂动作，请重新尝试', stable_standing_pose_not_visible_long_enough:'全身或脚踝未持续入镜，请重新调整'}
       },
       en: {
         title: 'Pi BE-FAST Screening Demo', sub: 'Camera-guided screening research prototype', emergency: '⚠ If any BE-FAST sign appears suddenly, call emergency services now. Do not wait for this demo.', cameraAlt: 'Live view from the selected camera', languageLabel: 'Language', progressLabel: 'Screening progress', eyeTargetLabel:'Eye-movement target', cameraLabel:'Camera', cameraSourceLabel:'Camera source', hostOption:'Host camera', autoHostOption:'Auto (E/F Mac · A/B phone)', faceHostCamera:'Mac front camera · E/F', poseHostCamera:'Phone camera · A/B', fallbackHostCamera:'Target unavailable · current camera fallback', clientOption:'Phone / this device',
-        startText: 'Choose the host camera or this browser device in the top-right selector. When opened on a phone, the second option uses the phone front camera. Then follow the red/green prompts for E, F, A, and B.', start: 'Start screening', exit: 'Exit screening',
+        startText: 'Choose a camera, then select any B, E, F, A, or S check. Each check runs independently, can be repeated without limit, and produces a report immediately.', start: 'Choose a check', exit: 'Exit screening',
+        componentTitle:'Choose one check', componentText:'Each check is independent. Finish any one to view its report, or repeat it at any time.', componentNames:{B:'Balance',E:'Eyes',F:'Face',A:'Arms',S:'Speech'}, componentDescriptions:{B:'Manual balance observation + safe standing check',E:'Follow left/right targets to assess eye movement',F:'Neutral face and smile symmetry',A:'Bilateral arm hold and one-sided drift',S:'Pi microphone recording + local offline speech analysis'}, historyTitle:'Reports from this session', historyEmpty:'No reports yet. Choose any check to begin.', menuFinish:'Finish and exit',
+        historyEntry:'Abnormal history', persistentHistoryTitle:'Abnormal history', persistentHistoryText:'View saved abnormal reports, captured frames, and speech recordings.', historyComponentLabel:'BE-FAST check', historySideLabel:'Side', historySuddenLabel:'Onset', historyAll:'All', historyLeft:'Left', historyRight:'Right', historySuddenYes:'New / sudden', historySuddenNo:'Not sudden', historyRefresh:'Refresh', historyClose:'Close', historyLoading:'Loading abnormal history…', historyLoadError:'Unable to load abnormal history.', historyEmptyPersistent:'No abnormal records match the current filters.', historyCount:'{count} abnormal records', historyFrameUnavailable:'No captured frame', historyFrameLoadError:'The captured frame could not be loaded. Refresh and retry.', historyDetectedAt:'Detected', historyAttemptLabel:'Attempt {attempt}', historySuddenUnknown:'Sudden onset unconfirmed',
         standbyGuide: ['Ready to begin', 'Confirm that the live camera view is clear.'],
         idle: ['E · Eye setup', 'Face the selected camera and keep both eyes clearly visible.'],
         eyes: ['E · Follow the target', 'Keep your head still and follow the blue target using only your eyes.'],
@@ -244,14 +347,46 @@
         balance: ['B · Stand naturally', 'Keep a caregiver nearby and stop immediately if unsteady.'],
         review: ['S/T · Manual observation', 'Check speech and record when the change was first noticed.'],
         correct: 'Action recognized', adjust: 'Adjust your position or action', waiting: 'Waiting for the action', remainingSeconds:'about {seconds}s left', continueStage: 'Start this check', retryStage: 'Restart this check', skipStage:'Skip this check', skipConfirm:'Skip the current check? The report will mark it as skipped, not as a normal result.',
-        safety: 'Caregiver present — safe to stand', manualTitle: 'Final step: speech and onset time', manualText: 'Ask the person to repeat “The sky is blue” and confirm whether any change was sudden.',
-        balanceLabel: 'Sudden loss of balance or coordination', speechLabel: 'Slurred, incorrect, or difficult-to-understand speech', suddenLabel: 'Any sign above is new or sudden', onsetLabel: 'First-known abnormal time (optional)', cancel: 'Cancel', submit: 'View result',
-        resultTitle: 'Screening result', resultNote: 'This demo cannot diagnose or rule out stroke. Call emergency services for any sudden sign.', again: 'Screen again', finish: 'Finish',
-        decisions: {standby:'Waiting to start', emergency:'New sudden sign detected — call emergency services', warning:'A sign was detected — confirm whether it was sudden', clear:'No obvious BE-FAST sign in this screen', incomplete:'Screen incomplete or quality insufficient'},
-        runtimeWaiting: 'Connecting camera', live: 'Video connected', previewOnly: 'Video connected; some models are unavailable', runtimeError: 'Camera or model unavailable', hostCamera: 'host', hostVideo: 'local video', clientCamera:'this device', cameraSecureRequired:'This address cannot open a phone camera. Use HTTPS, or use localhost on the machine running the service.', cameraPermissionDenied:'Unable to open this device camera. Check browser camera permission.', cameraSwitchIdle:'Exit the active screening before switching cameras.', statuses: {positive:'specific sign detected', negative:'no obvious sign', insufficient:'insufficient data quality', skipped:'skipped', checking:'checking', pending:'pending'},
+        safety: 'Caregiver present — safe to stand', manualTitle: 'B · Balance observation', manualText: 'If sudden loss of balance or coordination is already present, check the box and do not risk standing. Otherwise continue to the supported standing check.', balanceManualTitle:'B · Balance observation', balanceManualText:'If sudden loss of balance or coordination is already present, check the box and do not risk standing. Otherwise continue to the supported standing check.',
+        balanceLabel: 'Sudden loss of balance or coordination', suddenLabel: 'This sign is new or sudden', onsetLabel: 'First-known abnormal time (optional)', cancel: 'Back to checks', submit: 'Continue',
+        speechTitle:'S · Microphone speech check', speechText:'Move near the Raspberry Pi microphone, then repeat the sentence after recording starts. Audio and recognition stay local.', speechPromptLabel:'Repeat this sentence', speechPromptDefault:'The sky is blue and we are walking in the park', speechSuddenLabel:'The speech change is new or sudden', speechOnsetLabel:'First-known abnormal time (optional)', speechCancel:'Back to checks', speechStart:'Start recording', speechReady:'Ready to record', speechReadyText:'The system records about 7 seconds and analyzes it locally on the Raspberry Pi.', speechRecording:'Recording', speechRecordingText:'Repeat the full sentence and keep other speakers quiet.', speechAnalyzing:'Analyzing locally', speechAnalyzingText:'Checking audio quality, repeated content, speaking rate, and pauses.', speechCompleting:'Creating report', speechBackendMissing:'Local speech engine is not ready', speechTranscriptLabel:'Transcript',
+        resultTitle: 'Individual check report', again: 'Repeat this check', other:'Choose another check', finish: 'Finish and exit', reportAttempt:'{name} · report #{attempt}', historyAttempt:'{code} #{attempt}',
+        decisions: {standby:'Waiting to start', emergency:'New sudden sign detected — call emergency services', warning:'This check found a sign — confirm whether it was sudden', clear:'No obvious sign in this check', incomplete:'This check had insufficient data or was skipped'},
+        runtimeWaiting: 'Connecting camera', live: 'Video connected', previewOnly: 'Video connected; some models are unavailable', runtimeError: 'Camera or model unavailable', hostCamera: 'host', hostVideo: 'local video', clientCamera:'this device', cameraSecureRequired:'This address cannot open a phone camera. Use HTTPS, or use localhost on the machine running this service.', cameraPermissionDenied:'Unable to open this device camera. Check browser camera permission.', cameraSwitchIdle:'Switch cameras from standby or the check-selection screen.', statuses: {positive:'specific sign detected', negative:'no obvious sign', insufficient:'insufficient data quality', skipped:'skipped', checking:'checking', pending:'pending'},
         itemNames: {B:'Balance', E:'Eyes', F:'Face', A:'Arms', S:'Speech'}, sides: {left:'left', right:'right', unknown:'undetermined side'}, detailUnavailable: 'No interpretable detection detail is available yet.',
         resultReasons: {reported_balance_problem:'The person or caregiver reported sudden loss of balance or coordination.', persistent_lateral_body_offset:'The body center remained displaced toward the {side} side relative to the foot-support center.', large_standing_sway:'Side-to-side standing sway exceeded the current engineering threshold.', no_clear_pose_based_balance_asymmetry:'No clear persistent lateral lean or excessive standing sway was observed.', stable_standing_pose_not_visible_long_enough:'The full body, hips, or ankles were not continuously visible, so standing balance could not be assessed.', reduced_visual_target_response:'Both eyes showed insufficient horizontal movement while following the left/right screen targets.', asymmetric_eye_excursion:'The {side} eye had a clearly smaller horizontal movement range than the other eye.', asymmetric_conjugate_gaze:'The two eyes did not move together consistently while following the same target.', no_visible_eye_movement_abnormality:'No obvious reduction, left/right asymmetry, or binocular coordination problem was observed in horizontal eye movement.', face_or_irises_not_visible_long_enough:'The face or irises were not continuously visible, so eye movement could not be assessed.', head_moved_during_eye_test:'Head movement was too large to separate eye movement from head turning.', asymmetric_mouth_corner_movement:'The {side} mouth corner moved less than the other side during the smile.', asymmetric_smile_activation:'MediaPipe expression features showed weaker smile activation on the {side} side.', no_clear_smile_asymmetry:'The neutral-to-smile comparison showed no obvious left/right asymmetry.', face_not_visible_during_neutral_and_smile:'The face was not continuously visible during both neutral and smile phases.', smile_expression_not_detected:'No sufficiently clear smile was detected, so facial symmetry could not be assessed.', persistent_arm_height_asymmetry:'The {side} arm remained lower than the other arm during the hold.', asymmetric_arm_drift:'The {side} arm dropped more during the hold.', no_clear_arm_asymmetry:'No obvious persistent height difference or one-sided arm drift was observed.', arms_not_visible_long_enough:'Both shoulders or wrists were not continuously visible, so arm symmetry could not be assessed.', both_arms_were_not_held_up:'A sustained bilateral forward arm raise was not detected.', reported_speech_problem:'Manual observation found slurred speech, repetition errors, or difficulty understanding speech.', not_reported:'Manual observation did not report an obvious speech problem.', not_checked:'Manual observation has not been completed.', not_fully_checked:'Automated capture and manual confirmation are not both complete.', user_skipped:'The user skipped this check, so it produced no screening conclusion.', checking:'The current action is being captured and analyzed.', not_run:'This item has not been checked.'},
         reasons: {show_face_and_eyes:'Move closer and keep both eyes visible', face_and_eyes_ready:'Face and eyes recognized', show_full_face:'Keep your full face inside the frame', neutral_face_ready:'Neutral expression recognized', relax_face_first:'Relax your face and do not smile yet', smile_now:'Smile naturally now', smile_detected:'Smile recognized', show_shoulders_and_wrists:'Keep both shoulders and wrists visible', raise_both_arms:'Raise both arms forward', arms_detected_hold_still:'Arm action recognized — keep holding', show_full_body_and_stand_safely:'Show your full body and ankles, then stand only with supervision', standing_pose_ready:'Standing pose recognized — hold still', collecting_action:'Starting capture', face_or_irises_not_visible_long_enough:'Eyes were not continuously visible — adjust and retry', head_moved_during_eye_test:'Too much head movement — keep your head still', face_not_visible_during_neutral_and_smile:'Face was not continuously visible — adjust and retry', smile_expression_not_detected:'No smile was detected — try again', arms_not_visible_long_enough:'Shoulders or wrists were not continuously visible — retry', both_arms_were_not_held_up:'The arm-raise action was not detected — retry', stable_standing_pose_not_visible_long_enough:'Full body or ankles were not continuously visible — retry'}
+      }
+    };
+
+    const speechReasonText = {
+      zh: {
+        speech_recording_too_short:'录音时间太短，无法形成可靠的言语样本。',
+        speech_audio_too_quiet:'麦克风收到的声音过小，请靠近麦克风后重试。',
+        speech_audio_clipped:'录音出现明显削波失真，请稍微远离麦克风后重试。',
+        speech_not_detected:'录音中没有检测到足够长的说话声音。',
+        speech_recognizer_unavailable:'本地离线识别引擎或模型尚未就绪，不能把本次结果判为正常。',
+        speech_transcription_empty:'本地识别没有得到可用文本，请在安静环境中重试。',
+        speech_content_mismatch:'识别文本与提示句差异较大，可能存在复述错误或言语不清。',
+        speech_delivery_irregular:'本次复述的语速或停顿比例超出当前工程阈值。',
+        no_clear_speech_abnormality:'本次录音的复述内容、语速和停顿未见明显异常。',
+        microphone_unavailable:'树莓派麦克风采集不可用，请检查 ALSA 设备和 arecord。',
+        speech_processing_failed:'本地录音或识别处理失败，本次没有形成有效结论。',
+        recording_speech:'正在采集麦克风音频。'
+      },
+      en: {
+        speech_recording_too_short:'The recording was too short for a reliable speech sample.',
+        speech_audio_too_quiet:'The microphone signal was too quiet. Move closer and retry.',
+        speech_audio_clipped:'The recording was clipped. Move slightly farther from the microphone and retry.',
+        speech_not_detected:'Not enough voiced speech was detected in the recording.',
+        speech_recognizer_unavailable:'The local offline recognizer or model is not ready, so this attempt cannot be marked clear.',
+        speech_transcription_empty:'The local recognizer returned no usable text. Retry in a quiet setting.',
+        speech_content_mismatch:'The transcript differed substantially from the prompt, suggesting a repetition error or unclear speech.',
+        speech_delivery_irregular:'Speaking rate or pause proportion exceeded the current engineering threshold.',
+        no_clear_speech_abnormality:'No obvious issue was found in repeated content, speaking rate, or pauses.',
+        microphone_unavailable:'Raspberry Pi microphone capture is unavailable. Check ALSA and arecord.',
+        speech_processing_failed:'Local recording or recognition failed, so this attempt has no valid conclusion.',
+        recording_speech:'Microphone audio is being captured.'
       }
     };
 
@@ -265,8 +400,18 @@
     let clientUploadBusy = false;
     let clientCaptureActive = false;
     let cameraErrorMessage = '';
-    const nextStageMap = {idle:'eyes', retry_eyes:'eyes', ready_face:'face', retry_face:'face', ready_arms:'arms', retry_arms:'arms', ready_balance:'balance', retry_balance:'balance'};
+    let selectedReport = null;
+    let persistentHistoryOpen = false;
+    let persistentHistoryRecords = [];
+    let persistentHistoryTotal = 0;
+    let persistentHistoryLoading = false;
+    let persistentHistoryError = '';
+    let persistentHistoryRequestId = 0;
+    let speechFinalizeBusy = false;
+    let speechCompletionError = '';
+    const nextStageMap = {retry_eyes:'eyes', ready_face:'face', retry_face:'face', ready_arms:'arms', retry_arms:'arms', ready_balance:'balance', retry_balance:'balance'};
     const activeStages = new Set(['eyes','face','arms','balance']);
+    const lockedStages = new Set([...activeStages, 'speech_recording']);
 
     async function postJson(url, body = {}) {
       const response = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
@@ -325,7 +470,9 @@
     async function switchCameraSource(source) {
       const select = document.getElementById('cameraSourceSelect');
       const t = text[language];
-      if ((latest.befast || {}).mode === 'screening') {
+      const screen = latest.befast || {};
+      const cameraSwitchAllowed = screen.mode !== 'screening' || screen.stage === 'idle';
+      if (!cameraSwitchAllowed) {
         select.value = (latest.runtime || {}).camera_mode || 'host';
         showCameraError(t.cameraSwitchIdle);
         return;
@@ -371,12 +518,39 @@
       document.getElementById('enButton').classList.toggle('active', next === 'en');
       renderStatic();
       render(latest);
+      if (persistentHistoryOpen) renderPersistentHistory();
     }
 
     function renderStatic() {
       const t = text[language];
       document.title = t.title;
-      for (const [id, value] of Object.entries({brandTitle:t.title, brandSub:t.sub, emergencyText:t.emergency, cameraLabel:t.cameraLabel, hostCameraOption:t.hostOption, clientCameraOption:t.clientOption, startTitle:t.title, startText:t.startText, startButton:t.start, standbyButton:t.exit, safetyButton:t.safety, continueButton:t.continueStage, skipButton:t.skipStage, manualTitle:t.manualTitle, manualText:t.manualText, balanceLabel:t.balanceLabel, speechLabel:t.speechLabel, suddenLabel:t.suddenLabel, onsetLabel:t.onsetLabel, cancelButton:t.cancel, submitButton:t.submit, resultTitle:t.resultTitle, resultNote:t.resultNote, againButton:t.again, finishButton:t.finish})) {
+      for (const [id, value] of Object.entries({
+        brandTitle:t.title, brandSub:t.sub, emergencyText:t.emergency,
+        cameraLabel:t.cameraLabel, hostCameraOption:t.hostOption, clientCameraOption:t.clientOption,
+        persistentHistoryButton:t.historyEntry, startTitle:t.title, startText:t.startText, startButton:t.start,
+        componentTitle:t.componentTitle, componentText:t.componentText,
+        componentBTitle:t.componentNames.B, componentETitle:t.componentNames.E,
+        componentFTitle:t.componentNames.F, componentATitle:t.componentNames.A,
+        componentSTitle:t.componentNames.S, componentBText:t.componentDescriptions.B,
+        componentEText:t.componentDescriptions.E, componentFText:t.componentDescriptions.F,
+        componentAText:t.componentDescriptions.A, componentSText:t.componentDescriptions.S,
+        historyTitle:t.historyTitle, menuFinishButton:t.menuFinish,
+        persistentHistoryTitle:t.persistentHistoryTitle, persistentHistoryText:t.persistentHistoryText,
+        historyComponentLabel:t.historyComponentLabel, historySideLabel:t.historySideLabel,
+        historySuddenLabel:t.historySuddenLabel, historyComponentAll:t.historyAll,
+        historySideAll:t.historyAll, historySideLeft:t.historyLeft, historySideRight:t.historyRight,
+        historySuddenAll:t.historyAll, historySuddenYes:t.historySuddenYes,
+        historySuddenNo:t.historySuddenNo, historyRefreshButton:t.historyRefresh,
+        historyCloseButton:t.historyClose, standbyButton:t.exit, safetyButton:t.safety,
+        continueButton:t.continueStage, skipButton:t.skipStage, manualTitle:t.manualTitle,
+        manualText:t.manualText, balanceLabel:t.balanceLabel, suddenLabel:t.suddenLabel,
+        onsetLabel:t.onsetLabel, cancelButton:t.cancel, submitButton:t.submit,
+        speechTitle:t.speechTitle, speechText:t.speechText,
+        speechPromptLabel:t.speechPromptLabel, speechSuddenLabel:t.speechSuddenLabel,
+        speechOnsetLabel:t.speechOnsetLabel, speechCancelButton:t.speechCancel,
+        speechStartButton:t.speechStart, resultTitle:t.resultTitle, againButton:t.again,
+        otherButton:t.other, finishButton:t.finish
+      })) {
         document.getElementById(id).textContent = value;
       }
       document.getElementById('liveVideo').alt = t.cameraAlt;
@@ -389,14 +563,72 @@
     async function startScreening() {
       balanceSafetyConfirmed = false;
       readyTicks = 0;
+      selectedReport = null;
+      persistentHistoryOpen = false;
+      speechCompletionError = '';
       await postJson('/api/monitoring/trigger', {source:'user', reason:'demo_started'});
       await refresh();
     }
 
+    async function startComponent(code) {
+      if (transitionBusy) return;
+      transitionBusy = true;
+      readyTicks = 0;
+      balanceSafetyConfirmed = false;
+      selectedReport = null;
+      persistentHistoryOpen = false;
+      speechCompletionError = '';
+      try {
+        if ((latest.speech || {}).state && (latest.speech || {}).state !== 'idle') {
+          await postJson('/api/speech/cancel');
+        }
+        await postJson('/api/befast/component', {component:code});
+        document.getElementById('balance_problem').checked = false;
+        document.getElementById('new_or_sudden').checked = false;
+        document.getElementById('onset_time').value = '';
+        document.getElementById('speech_new_or_sudden').checked = false;
+        document.getElementById('speech_onset_time').value = '';
+        await refresh();
+      } catch (error) {
+        showError(error);
+      } finally {
+        transitionBusy = false;
+      }
+    }
+
+    async function openComponentMenu() {
+      selectedReport = null;
+      persistentHistoryOpen = false;
+      balanceSafetyConfirmed = false;
+      readyTicks = 0;
+      speechCompletionError = '';
+      if ((latest.speech || {}).state && (latest.speech || {}).state !== 'idle') {
+        await postJson('/api/speech/cancel');
+      }
+      await postJson('/api/befast/menu');
+      await refresh();
+    }
+
+    function repeatCurrentComponent() {
+      const report = selectedReport || (latest.befast || {}).current_report;
+      if (report && report.component) startComponent(report.component);
+    }
+
+    function viewReport(reportId) {
+      selectedReport = ((latest.befast || {}).reports || []).find(report => report.id === reportId) || null;
+      render(latest);
+    }
+
     async function returnToStandby() {
+      if ((latest.speech || {}).state && (latest.speech || {}).state !== 'idle') {
+        await postJson('/api/speech/cancel');
+      }
       await postJson('/api/monitoring/standby');
       balanceSafetyConfirmed = false;
       readyTicks = 0;
+      selectedReport = null;
+      persistentHistoryOpen = false;
+      speechCompletionError = '';
       await refresh();
     }
 
@@ -406,14 +638,113 @@
       render(latest);
     }
 
-    async function submitManual() {
-      await postJson('/api/befast/manual', {
-        balance_problem: document.getElementById('balance_problem').checked,
-        speech_problem: document.getElementById('speech_problem').checked,
+    async function submitCurrentManual() {
+      await postJson('/api/befast/manual-item', {
+        component:'B',
+        problem:document.getElementById('balance_problem').checked,
         new_or_sudden: document.getElementById('new_or_sudden').checked,
         onset_time: document.getElementById('onset_time').value || null
       });
       await refresh();
+    }
+
+    async function startSpeechCapture() {
+      if (transitionBusy || speechFinalizeBusy) return;
+      transitionBusy = true;
+      speechCompletionError = '';
+      try {
+        const payload = await postJson('/api/speech/start', {
+          language,
+          new_or_sudden:document.getElementById('speech_new_or_sudden').checked,
+          onset_time:document.getElementById('speech_onset_time').value || null
+        });
+        latest = {...latest, speech:payload.speech, befast:payload.befast};
+        render(latest);
+      } catch (error) {
+        showSpeechError(error);
+      } finally {
+        transitionBusy = false;
+      }
+    }
+
+    async function finalizeSpeechCapture() {
+      if (speechFinalizeBusy) return;
+      speechFinalizeBusy = true;
+      renderSpeechState(latest.speech || {});
+      try {
+        const payload = await postJson('/api/speech/complete');
+        latest = {...latest, speech:payload.speech, befast:payload.befast};
+        render(latest);
+      } catch (error) {
+        speechCompletionError = error.message || String(error);
+        showSpeechError(error);
+      } finally {
+        speechFinalizeBusy = false;
+      }
+    }
+
+    async function cancelSpeechCapture() {
+      if (transitionBusy) return;
+      transitionBusy = true;
+      speechCompletionError = '';
+      try {
+        await postJson('/api/speech/cancel');
+        await postJson('/api/befast/menu');
+        selectedReport = null;
+        await refresh();
+      } catch (error) {
+        showSpeechError(error);
+      } finally {
+        transitionBusy = false;
+      }
+    }
+
+    function renderSpeechState(speech) {
+      const t = text[language];
+      const state = speechFinalizeBusy ? 'completing' : (speech.state || 'idle');
+      let title = t.speechReady;
+      let detail = t.speechReadyText;
+      let icon = '●';
+      let progress = 0;
+      if (speechCompletionError) {
+        title = t.speechBackendMissing;
+        detail = speechCompletionError;
+        icon = '!';
+        progress = 1;
+      } else if (state === 'recording') {
+        title = t.speechRecording;
+        detail = t.speechRecordingText;
+        icon = '●';
+        progress = Number(speech.progress || 0);
+      } else if (state === 'analyzing') {
+        title = t.speechAnalyzing;
+        detail = t.speechAnalyzingText;
+        icon = '…';
+        progress = 1;
+      } else if (state === 'ready' || state === 'completing') {
+        title = t.speechCompleting;
+        detail = t.speechAnalyzingText;
+        icon = '✓';
+        progress = 1;
+      } else if (
+        speech.capture_ready === false
+        || speech.recognizer_ready === false
+      ) {
+        title = t.speechBackendMissing;
+        detail = speech.capture_reason || speech.recognizer_reason || t.speechReadyText;
+        icon = '!';
+      }
+      document.getElementById('speechPrompt').textContent =
+        state === 'idle' ? t.speechPromptDefault : (speech.expected_text || t.speechPromptDefault);
+      document.getElementById('speechStateIcon').textContent = icon;
+      document.getElementById('speechStateTitle').textContent = title;
+      document.getElementById('speechStateText').textContent = detail;
+      document.getElementById('speechProgressBar').style.width = `${Math.round(Math.min(1, progress) * 100)}%`;
+      const recording = ['recording','analyzing','ready','completing'].includes(state);
+      document.getElementById('speechStartButton').disabled = transitionBusy || recording;
+      document.getElementById('speechCancelButton').disabled = transitionBusy || speechFinalizeBusy;
+      document.getElementById('speech_new_or_sudden').disabled = recording;
+      document.getElementById('speech_onset_time').disabled = recording;
     }
 
     function stageCopy(befast) {
@@ -443,12 +774,6 @@
       if (['ready_arms','retry_arms','arms'].includes(stage)) return 'A';
       if (['ready_balance','retry_balance','balance'].includes(stage)) return 'B';
       return 'S';
-    }
-
-    function completedCodes(stage) {
-      const order = ['E','F','A','B','S'];
-      const index = order.indexOf(activeCode(stage));
-      return new Set(order.slice(0, Math.max(index, 0)));
     }
 
     async function advanceCurrentStage() {
@@ -497,8 +822,209 @@
 
     function resultDetail(item, t) {
       const side = t.sides[item.affected_side] || t.sides.unknown;
-      const template = t.resultReasons[item.reason] || t.detailUnavailable;
+      const template = speechReasonText[language][item.reason] || t.resultReasons[item.reason] || t.detailUnavailable;
       return template.replaceAll('{side}', side);
+    }
+
+    function renderHistory(befast, t) {
+      const history = document.getElementById('reportHistory');
+      history.replaceChildren();
+      const reports = befast.reports || [];
+      if (!reports.length) {
+        const empty = document.createElement('span');
+        empty.className = 'history-empty';
+        empty.textContent = t.historyEmpty;
+        history.appendChild(empty);
+        return;
+      }
+      for (const report of [...reports].reverse()) {
+        const button = document.createElement('button');
+        button.className = report.item?.status || '';
+        button.textContent = t.historyAttempt
+          .replace('{code}', report.component)
+          .replace('{attempt}', report.attempt);
+        button.onclick = () => viewReport(report.id);
+        history.appendChild(button);
+      }
+    }
+
+    async function openPersistentHistory() {
+      const befast = latest.befast || {};
+      if (transitionBusy || lockedStages.has(befast.stage)) return;
+      selectedReport = null;
+      persistentHistoryOpen = true;
+      readyTicks = 0;
+      render(latest);
+      await loadPersistentHistory();
+    }
+
+    function closePersistentHistory() {
+      persistentHistoryOpen = false;
+      render(latest);
+    }
+
+    async function loadPersistentHistory() {
+      const requestId = ++persistentHistoryRequestId;
+      const params = new URLSearchParams({limit:'100'});
+      const component = document.getElementById('historyComponentFilter').value;
+      const side = document.getElementById('historySideFilter').value;
+      const sudden = document.getElementById('historySuddenFilter').value;
+      if (component) params.set('component', component);
+      if (side) params.set('affected_side', side);
+      if (sudden) params.set('new_or_sudden', sudden);
+      persistentHistoryLoading = true;
+      persistentHistoryError = '';
+      renderPersistentHistory();
+      try {
+        const response = await fetch(`/api/history?${params}`, {cache:'no-store'});
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || text[language].historyLoadError);
+        if (requestId !== persistentHistoryRequestId) return;
+        persistentHistoryRecords = Array.isArray(payload.items) ? payload.items : [];
+        persistentHistoryTotal = Number(payload.total || 0);
+      } catch (error) {
+        if (requestId !== persistentHistoryRequestId) return;
+        persistentHistoryRecords = [];
+        persistentHistoryTotal = 0;
+        persistentHistoryError = error.message || text[language].historyLoadError;
+      } finally {
+        if (requestId === persistentHistoryRequestId) {
+          persistentHistoryLoading = false;
+          renderPersistentHistory();
+        }
+      }
+    }
+
+    function renderPersistentHistory() {
+      const t = text[language];
+      const summary = document.getElementById('persistentHistorySummary');
+      const records = document.getElementById('persistentHistoryRecords');
+      records.replaceChildren();
+      if (persistentHistoryLoading) {
+        summary.textContent = t.historyLoading;
+        return;
+      }
+      if (persistentHistoryError) {
+        summary.textContent = t.historyLoadError;
+        const errorNode = document.createElement('div');
+        errorNode.className = 'history-empty-panel';
+        errorNode.textContent = persistentHistoryError;
+        records.appendChild(errorNode);
+        return;
+      }
+      summary.textContent = t.historyCount.replace('{count}', persistentHistoryTotal);
+      if (!persistentHistoryRecords.length) {
+        const empty = document.createElement('div');
+        empty.className = 'history-empty-panel';
+        empty.textContent = t.historyEmptyPersistent;
+        records.appendChild(empty);
+        return;
+      }
+      for (const record of persistentHistoryRecords) {
+        const card = document.createElement('article');
+        card.className = 'history-record';
+        if (record.frame_url) {
+          const frameLink = document.createElement('a');
+          frameLink.href = record.frame_url;
+          frameLink.target = '_blank';
+          frameLink.rel = 'noreferrer';
+          const frame = document.createElement('img');
+          frame.className = 'history-frame';
+          frame.src = record.frame_url;
+          frame.alt = `${record.component} ${t.itemNames[record.component] || record.component}`;
+          frame.loading = 'lazy';
+          frame.addEventListener('error', () => {
+            const placeholder = document.createElement('div');
+            placeholder.className = 'history-frame-placeholder';
+            placeholder.textContent = t.historyFrameLoadError;
+            frameLink.replaceWith(placeholder);
+          }, {once:true});
+          frameLink.appendChild(frame);
+          card.appendChild(frameLink);
+        } else {
+          const placeholder = document.createElement('div');
+          placeholder.className = 'history-frame-placeholder';
+          placeholder.textContent = t.historyFrameUnavailable;
+          card.appendChild(placeholder);
+        }
+
+        const body = document.createElement('div');
+        body.className = 'history-record-body';
+        const title = document.createElement('div');
+        title.className = 'history-record-title';
+        const name = document.createElement('strong');
+        name.textContent = `${record.component} · ${t.itemNames[record.component] || record.component}`;
+        const attempt = document.createElement('span');
+        attempt.textContent = t.historyAttemptLabel.replace('{attempt}', record.attempt);
+        title.append(name, attempt);
+
+        const reason = document.createElement('div');
+        reason.className = 'history-record-reason';
+        reason.textContent = resultDetail(record, t);
+
+        const completedAt = new Date(Number(record.completed_at) * 1000);
+        const detectedAt = Number.isNaN(completedAt.getTime())
+          ? '—'
+          : completedAt.toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US');
+        const sudden = record.new_or_sudden === true
+          ? t.historySuddenYes
+          : (record.new_or_sudden === false ? t.historySuddenNo : t.historySuddenUnknown);
+        const meta = document.createElement('div');
+        meta.className = 'history-record-meta';
+        meta.textContent = `${t.historyDetectedAt}: ${detectedAt} · ${sudden}`;
+        body.append(title, reason, meta);
+        if (record.details?.transcript) {
+          const transcript = document.createElement('div');
+          transcript.className = 'speech-transcript';
+          transcript.textContent = `${t.speechTranscriptLabel}: ${record.details.transcript}`;
+          body.appendChild(transcript);
+        }
+        if (record.audio_url) {
+          const audio = document.createElement('audio');
+          audio.className = 'speech-audio';
+          audio.controls = true;
+          audio.preload = 'metadata';
+          audio.src = record.audio_url;
+          body.appendChild(audio);
+        }
+        card.appendChild(body);
+        records.appendChild(card);
+      }
+    }
+
+    function renderSingleReport(report, t) {
+      const decision = report?.decision || 'incomplete';
+      const decisionEl = document.getElementById('decision');
+      decisionEl.className = `decision ${decision}`;
+      decisionEl.textContent = t.decisions[decision] || decision;
+      const results = document.getElementById('results');
+      results.replaceChildren();
+      if (!report) return;
+
+      const itemCode = report.component;
+      const item = report.item || {status:'pending'};
+      document.getElementById('reportMeta').textContent = t.reportAttempt
+        .replace('{name}', `${itemCode} · ${t.itemNames[itemCode]}`)
+        .replace('{attempt}', report.attempt);
+      const node = document.createElement('div');
+      node.className = `result ${item.status}`;
+      const mark = item.status === 'positive' ? '+' : item.status === 'negative' ? '−' : item.status === 'skipped' ? '↷' : '?';
+      const codeNode = document.createElement('strong');
+      codeNode.textContent = `${itemCode} ${mark}`;
+      const statusNode = document.createElement('span');
+      statusNode.className = 'result-status';
+      statusNode.textContent = `${t.itemNames[itemCode]} · ${t.statuses[item.status] || item.status}`;
+      const detailNode = document.createElement('span');
+      detailNode.className = 'result-detail';
+      detailNode.textContent = resultDetail(item, t);
+      node.append(codeNode, statusNode, detailNode);
+      if (item.details?.transcript) {
+        const transcript = document.createElement('span');
+        transcript.className = 'speech-transcript';
+        transcript.textContent = `${t.speechTranscriptLabel}: ${item.details.transcript}`;
+        node.appendChild(transcript);
+      }
+      results.appendChild(node);
     }
 
     function render(status) {
@@ -507,12 +1033,21 @@
       const runtime = status.runtime || {};
       const befast = status.befast || {mode:'standby',stage:'idle',guidance:{}};
       const standby = befast.mode !== 'screening';
-      const review = befast.stage === 'review';
-      const finished = Boolean(befast.manual_complete);
-      document.getElementById('startOverlay').hidden = !standby;
-      document.getElementById('guideOverlay').hidden = standby || review;
-      document.getElementById('manualSheet').hidden = !review || finished;
-      document.getElementById('resultSheet').hidden = !finished;
+      const manual = befast.stage === 'manual_balance';
+      const speech = ['speech_ready','speech_recording'].includes(befast.stage);
+      const report = selectedReport || befast.current_report;
+      const menu = !standby && befast.stage === 'idle' && !report;
+      document.getElementById('startOverlay').hidden = !standby || persistentHistoryOpen;
+      document.getElementById('componentSheet').hidden = !menu || persistentHistoryOpen;
+      document.getElementById('persistentHistorySheet').hidden = !persistentHistoryOpen;
+      document.getElementById('guideOverlay').hidden = standby || menu || manual || speech || Boolean(report) || persistentHistoryOpen;
+      document.getElementById('manualSheet').hidden = !manual || Boolean(report) || persistentHistoryOpen;
+      document.getElementById('speechSheet').hidden = !speech || Boolean(report) || persistentHistoryOpen;
+      document.getElementById('resultSheet').hidden = !report || persistentHistoryOpen;
+      renderHistory(befast, t);
+      document.getElementById('manualTitle').textContent = t.balanceManualTitle;
+      document.getElementById('manualText').textContent = t.balanceManualText;
+      renderSpeechState(status.speech || {});
 
       const runtimeEl = document.getElementById('runtime');
       runtimeEl.className = cameraErrorMessage ? 'status camera_error' : `status ${runtime.phase || 'starting'}`;
@@ -531,8 +1066,11 @@
       const cameraSelect = document.getElementById('cameraSourceSelect');
       document.getElementById('hostCameraOption').textContent = runtime.auto_camera_switch ? t.autoHostOption : t.hostOption;
       cameraSelect.value = runtime.camera_mode || 'host';
-      cameraSelect.disabled = !standby || transitionBusy;
-      cameraSelect.title = standby ? '' : t.cameraSwitchIdle;
+      const cameraSwitchAllowed = standby || befast.stage === 'idle';
+      cameraSelect.disabled = !cameraSwitchAllowed || transitionBusy;
+      cameraSelect.title = cameraSwitchAllowed ? '' : t.cameraSwitchIdle;
+      const historyButton = document.getElementById('persistentHistoryButton');
+      historyButton.disabled = transitionBusy || lockedStages.has(befast.stage);
       const localClientVisible = clientCaptureActive && runtime.camera_mode === 'client';
       setClientPreviewVisible(localClientVisible);
 
@@ -561,39 +1099,29 @@
       continueButton.textContent = stalled ? t.retryStage : t.continueStage;
       document.getElementById('skipButton').disabled = transitionBusy;
 
-      const code = activeCode(befast.stage);
-      const done = completedCodes(befast.stage);
+      const code = report
+        ? report.component
+        : (befast.active_component || (menu ? null : activeCode(befast.stage)));
       for (const step of document.querySelectorAll('.step')) {
         const item = (befast.items || {})[step.dataset.code] || {};
         const skipped = item.status === 'skipped';
-        step.classList.toggle('active', !standby && step.dataset.code === code);
-        step.classList.toggle('done', !standby && done.has(step.dataset.code) && !skipped);
+        const attempted = Number((befast.attempt_counts || {})[step.dataset.code] || 0) > 0;
+        step.disabled = transitionBusy;
+        step.classList.toggle('active', !standby && !menu && !report && step.dataset.code === code);
+        step.classList.toggle('done', !standby && attempted && !skipped);
         step.classList.toggle('skipped', !standby && skipped);
       }
 
-      const decision = befast.decision || 'incomplete';
-      const decisionEl = document.getElementById('decision');
-      decisionEl.className = `decision ${decision}`;
-      decisionEl.textContent = t.decisions[decision] || decision;
-      const results = document.getElementById('results');
-      results.replaceChildren();
-      for (const itemCode of ['B','E','F','A','S']) {
-        const item = (befast.items || {})[itemCode] || {status:'pending'};
-        const node = document.createElement('div');
-        node.className = `result ${item.status}`;
-        const mark = item.status === 'positive' ? '+' : item.status === 'negative' ? '−' : item.status === 'skipped' ? '↷' : '?';
-        const codeNode = document.createElement('strong');
-        codeNode.textContent = `${itemCode} ${mark}`;
-        const statusNode = document.createElement('span');
-        statusNode.className = 'result-status';
-        statusNode.textContent = `${t.itemNames[itemCode]} · ${t.statuses[item.status] || item.status}`;
-        const detailNode = document.createElement('span');
-        detailNode.className = 'result-detail';
-        detailNode.textContent = resultDetail(item, t);
-        node.append(codeNode, statusNode, detailNode);
-        results.appendChild(node);
+      renderSingleReport(report, t);
+      if (
+        !speechFinalizeBusy
+        && !speechCompletionError
+        && befast.stage === 'speech_recording'
+        && (status.speech || {}).state === 'ready'
+      ) {
+        finalizeSpeechCapture();
       }
-      if (!standby && !review) maybeAdvance(befast, runtime);
+      if (!persistentHistoryOpen && !standby && !menu && !manual && !speech && !report) maybeAdvance(befast, runtime);
     }
 
     function showError(error) {
@@ -601,6 +1129,13 @@
       signal.className = 'signal adjust';
       document.getElementById('guideTitle').textContent = text[language].adjust;
       document.getElementById('guideText').textContent = error.message;
+    }
+
+    function showSpeechError(error) {
+      const t = text[language];
+      document.getElementById('speechStateIcon').textContent = '!';
+      document.getElementById('speechStateTitle').textContent = t.speechBackendMissing;
+      document.getElementById('speechStateText').textContent = error.message || String(error);
     }
 
     async function refresh() {
