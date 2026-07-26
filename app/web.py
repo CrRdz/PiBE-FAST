@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Any
+from typing import Any, Mapping
 
 import cv2
 import numpy as np
-from flask import Flask, Response, jsonify, render_template, request
+from flask import Flask, Response, jsonify, render_template, request, send_file
 
 from app.befast import BefastSession
+from app.history import AbnormalHistoryStore, BEFAST_COMPONENTS
+from app.speech_audio import SpeechCaptureService
 
 
 class PreviewState:
@@ -244,12 +246,41 @@ def create_app(
     state: PreviewState,
     stop_event: threading.Event | None = None,
     befast_session: BefastSession | None = None,
+    history_store: AbnormalHistoryStore | None = None,
+    speech_service: SpeechCaptureService | None = None,
 ) -> Flask:
     app = Flask(__name__)
 
+    def persist_current_positive(
+        screen: Mapping[str, Any],
+        audio_path: str | None = None,
+    ) -> None:
+        """Attach current frame and optional microphone audio to a positive report."""
+
+        if history_store is None:
+            return
+        report = screen.get("current_report")
+        if not isinstance(report, Mapping):
+            return
+        jpeg, status = state.snapshot()
+        runtime = status.get("runtime", {})
+        has_live_frame = bool(
+            isinstance(runtime, Mapping) and runtime.get("has_live_frame")
+        )
+        captured_at = status.get("ts", time.time())
+        try:
+            history_store.save_positive_report(
+                report,
+                jpeg if has_live_frame else None,
+                float(captured_at),
+                audio_path=audio_path,
+            )
+        except Exception:
+            app.logger.exception("Unable to save abnormal BE-FAST history")
+
     @app.after_request
     def configure_client_sensor_access(response: Response) -> Response:
-        # Client-camera mode is opt-in and same-origin; microphone access remains disabled.
+        # Speech uses the Pi-attached ALSA microphone, not the browser microphone.
         response.headers["Permissions-Policy"] = "camera=(self), microphone=()"
         return response
 
@@ -268,8 +299,105 @@ def create_app(
     def api_status() -> Response:
         _, status = state.snapshot()
         if befast_session is not None:
-            status["befast"] = befast_session.snapshot()
+            screen = befast_session.snapshot()
+            persist_current_positive(screen)
+            status["befast"] = screen
+        if speech_service is not None:
+            status["speech"] = speech_service.snapshot()
         return jsonify(status)
+
+    @app.get("/api/history")
+    def api_history() -> Response:
+        if history_store is None:
+            return jsonify({"error": "abnormal history storage is unavailable"}), 503
+        raw_components = str(request.args.get("component", "")).strip()
+        components = tuple(
+            value.strip().upper()
+            for value in raw_components.split(",")
+            if value.strip()
+        )
+        invalid_components = [
+            value for value in components if value not in BEFAST_COMPONENTS
+        ]
+        if invalid_components:
+            return jsonify(
+                {
+                    "error": (
+                        "component must contain only B, E, F, A, or S"
+                    )
+                }
+            ), 400
+        try:
+            limit = int(request.args.get("limit", 50))
+            offset = int(request.args.get("offset", 0))
+        except (TypeError, ValueError):
+            return jsonify({"error": "limit and offset must be integers"}), 400
+        try:
+            sudden = _optional_query_bool(request.args.get("new_or_sudden"))
+            affected_side = _optional_query_choice(
+                request.args.get("affected_side"), {"left", "right"}
+            )
+            records, total = history_store.list_records(
+                components=components,
+                reason=_optional_query_text(request.args.get("reason")),
+                affected_side=affected_side,
+                new_or_sudden=sudden,
+                limit=limit,
+                offset=offset,
+            )
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        return jsonify(
+            {
+                "items": records,
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+                "filters": {
+                    "component": list(components),
+                    "reason": _optional_query_text(request.args.get("reason")),
+                    "affected_side": affected_side,
+                    "new_or_sudden": sudden,
+                },
+            }
+        )
+
+    @app.get("/api/history/<int:record_id>")
+    def api_history_record(record_id: int) -> Response:
+        if history_store is None:
+            return jsonify({"error": "abnormal history storage is unavailable"}), 503
+        record = history_store.get_record(record_id)
+        if record is None:
+            return jsonify({"error": "history record not found"}), 404
+        return jsonify(record)
+
+    @app.get("/api/history/<int:record_id>/frame")
+    def api_history_frame(record_id: int) -> Response:
+        if history_store is None:
+            return jsonify({"error": "abnormal history storage is unavailable"}), 503
+        path = history_store.get_frame_path(record_id)
+        if path is None:
+            return jsonify({"error": "history frame not found"}), 404
+        return send_file(
+            path.resolve(),
+            mimetype="image/jpeg",
+            conditional=True,
+            max_age=0,
+        )
+
+    @app.get("/api/history/<int:record_id>/audio")
+    def api_history_audio(record_id: int) -> Response:
+        if history_store is None:
+            return jsonify({"error": "abnormal history storage is unavailable"}), 503
+        path = history_store.get_audio_path(record_id)
+        if path is None:
+            return jsonify({"error": "history audio not found"}), 404
+        return send_file(
+            path.resolve(),
+            mimetype="audio/wav",
+            conditional=True,
+            max_age=0,
+        )
 
     @app.post("/api/camera/source")
     def api_camera_source() -> Response:
@@ -281,9 +409,18 @@ def create_app(
             current_source = current_status.get("runtime", {}).get(
                 "camera_mode", "host"
             )
-            if screen.get("mode") == "screening" and requested_source != current_source:
+            camera_switch_locked = (
+                screen.get("mode") == "screening"
+                and screen.get("stage") != "idle"
+            )
+            if camera_switch_locked and requested_source != current_source:
                 return jsonify(
-                    {"error": "camera source can only change while screening is idle"}
+                    {
+                        "error": (
+                            "camera source can only change from standby "
+                            "or the component menu"
+                        )
+                    }
                 ), 409
         try:
             runtime = state.set_camera_mode(requested_source)
@@ -320,6 +457,8 @@ def create_app(
     def api_monitoring_standby() -> Response:
         if befast_session is None:
             return jsonify({"error": "BE-FAST session is unavailable"}), 503
+        if speech_service is not None:
+            speech_service.cancel()
         befast_session.reset()
         return jsonify({"befast": befast_session.snapshot()})
 
@@ -334,6 +473,29 @@ def create_app(
             return jsonify({"error": str(exc)}), 400
         return jsonify({"befast": befast_session.snapshot()})
 
+    @app.post("/api/befast/component")
+    def api_befast_component() -> Response:
+        if befast_session is None:
+            return jsonify({"error": "BE-FAST session is unavailable"}), 503
+        payload = request.get_json(silent=True) or {}
+        component = str(payload.get("component", "")).strip().upper()
+        try:
+            if speech_service is not None and component in BEFAST_COMPONENTS:
+                speech_service.cancel()
+            befast_session.prepare_component(component)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        return jsonify({"befast": befast_session.snapshot()})
+
+    @app.post("/api/befast/menu")
+    def api_befast_menu() -> Response:
+        if befast_session is None:
+            return jsonify({"error": "BE-FAST session is unavailable"}), 503
+        if speech_service is not None:
+            speech_service.cancel()
+        befast_session.open_component_menu()
+        return jsonify({"befast": befast_session.snapshot()})
+
     @app.post("/api/befast/skip")
     def api_befast_skip() -> Response:
         if befast_session is None:
@@ -344,6 +506,113 @@ def create_app(
             return jsonify({"error": str(exc)}), 409
         return jsonify(
             {"skipped": skipped, "befast": befast_session.snapshot()}
+        )
+
+    @app.post("/api/befast/manual-item")
+    def api_befast_manual_item() -> Response:
+        if befast_session is None:
+            return jsonify({"error": "BE-FAST session is unavailable"}), 503
+        payload = request.get_json(silent=True) or {}
+        invalid = [
+            key
+            for key in ("problem", "new_or_sudden")
+            if not isinstance(payload.get(key), bool)
+        ]
+        if invalid:
+            return jsonify(
+                {"error": f"boolean fields required: {', '.join(invalid)}"}
+            ), 400
+        try:
+            befast_session.submit_component_observation(
+                str(payload.get("component", "")),
+                problem=payload["problem"],
+                new_or_sudden=payload["new_or_sudden"],
+                onset_time=payload.get("onset_time"),
+            )
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        screen = befast_session.snapshot()
+        persist_current_positive(screen)
+        return jsonify({"befast": screen})
+
+    @app.get("/api/speech/status")
+    def api_speech_status() -> Response:
+        if speech_service is None:
+            return jsonify({"error": "speech capture service is unavailable"}), 503
+        return jsonify({"speech": speech_service.snapshot()})
+
+    @app.post("/api/speech/start")
+    def api_speech_start() -> Response:
+        if befast_session is None or speech_service is None:
+            return jsonify({"error": "speech screening is unavailable"}), 503
+        payload = request.get_json(silent=True) or {}
+        sudden = payload.get("new_or_sudden")
+        if not isinstance(sudden, bool):
+            return jsonify({"error": "new_or_sudden must be a boolean"}), 400
+        language = str(payload.get("language", "zh")).strip().lower()
+        if language not in {"zh", "en"}:
+            return jsonify({"error": "language must be 'zh' or 'en'"}), 400
+        try:
+            speech_service.start(
+                language=language,
+                new_or_sudden=sudden,
+                onset_time=payload.get("onset_time"),
+            )
+            befast_session.start_speech_recording()
+        except ValueError as exc:
+            speech_service.cancel()
+            return jsonify({"error": str(exc)}), 409
+        return jsonify(
+            {
+                "speech": speech_service.snapshot(),
+                "befast": befast_session.snapshot(),
+            }
+        )
+
+    @app.post("/api/speech/complete")
+    def api_speech_complete() -> Response:
+        if befast_session is None or speech_service is None:
+            return jsonify({"error": "speech screening is unavailable"}), 503
+        audio_path = None
+        try:
+            result, audio_path, sudden, onset_time = speech_service.consume_result()
+            befast_session.submit_speech_result(
+                result,
+                new_or_sudden=sudden,
+                onset_time=onset_time,
+            )
+            screen = befast_session.snapshot()
+            persist_current_positive(
+                screen,
+                str(audio_path) if audio_path is not None else None,
+            )
+            return jsonify(
+                {
+                    "speech": speech_service.snapshot(),
+                    "befast": screen,
+                }
+            )
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 409
+        finally:
+            SpeechCaptureService.discard_consumed_audio(audio_path)
+
+    @app.post("/api/speech/cancel")
+    def api_speech_cancel() -> Response:
+        if befast_session is None or speech_service is None:
+            return jsonify({"error": "speech screening is unavailable"}), 503
+        speech_service.cancel()
+        screen = befast_session.snapshot()
+        if (
+            screen.get("active_component") == "S"
+            and screen.get("stage") in {"speech_ready", "speech_recording"}
+        ):
+            befast_session.prepare_component("S")
+        return jsonify(
+            {
+                "speech": speech_service.snapshot(),
+                "befast": befast_session.snapshot(),
+            }
         )
 
     @app.post("/api/befast/manual")
@@ -381,3 +650,35 @@ def _mjpeg_stream(state: PreviewState, stop_event: threading.Event | None):
         jpeg, _ = state.snapshot()
         yield b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + jpeg + b"\r\n"
         time.sleep(0.5 if stop_event is not None and stop_event.is_set() else 0.03)
+
+
+def _optional_query_text(value: str | None) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _optional_query_bool(value: str | None) -> bool | None:
+    text = _optional_query_text(value)
+    if text is None:
+        return None
+    normalized = text.lower()
+    if normalized in {"true", "1", "yes"}:
+        return True
+    if normalized in {"false", "0", "no"}:
+        return False
+    raise ValueError("new_or_sudden must be true or false")
+
+
+def _optional_query_choice(
+    value: str | None, allowed: set[str]
+) -> str | None:
+    text = _optional_query_text(value)
+    if text is None:
+        return None
+    normalized = text.lower()
+    if normalized not in allowed:
+        choices = ", ".join(sorted(allowed))
+        raise ValueError(f"value must be one of: {choices}")
+    return normalized
