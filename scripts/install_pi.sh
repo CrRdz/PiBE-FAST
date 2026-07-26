@@ -15,5 +15,5 @@ python -m pip install tflite-runtime || {
 }
 
 mkdir -p data/clips data/keypoints data/snapshots models samples
+"$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/install_speech_pi.sh" --skip-apt-update
 echo "Done. Put movenet_lightning.tflite in models/ before running the service."
-
