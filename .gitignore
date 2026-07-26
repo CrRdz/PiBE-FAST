@@ -16,6 +16,7 @@ data/snapshots/*
 data/keypoints/*
 !data/keypoints/.gitkeep
 data/cache/
+data/history/
 
 *.mp4
 *.mov
