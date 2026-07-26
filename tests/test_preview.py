@@ -1,11 +1,13 @@
 import argparse
+import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 
 from app.camera import Frame, FrameSource
-from app.befast import BefastSession
+from app.befast import BefastSession, MotionResult
+from app.history import AbnormalHistoryStore
 from app.main import (
     _camera_index_for_assessment,
     _preflight_macos_camera,
@@ -75,6 +77,7 @@ class CameraPreviewFallbackTest(unittest.TestCase):
         self.assertEqual(args.source, "camera")
         self.assertEqual(args.camera_index, 0)
         self.assertIsNone(args.face_camera_index)
+        self.assertEqual(args.history_dir, "data/history")
 
     def test_default_macos_stage_camera_routing(self):
         args = self.runtime_args(camera_index=0, face_camera_index=None)
@@ -223,7 +226,7 @@ class CameraPreviewFallbackTest(unittest.TestCase):
         args = self.runtime_args(disable_face=True)
         state = PreviewState()
         session = BefastSession()
-        session.start_screening(now=100.0)
+        session.prepare_component("E", now=100.0)
         pose_backend = MagicMock()
 
         with (
@@ -235,6 +238,42 @@ class CameraPreviewFallbackTest(unittest.TestCase):
         pose_backend.infer.assert_not_called()
         _, status = state.snapshot()
         self.assertEqual(status["monitoring"]["inference_mode"], "guidance_face")
+
+    def test_detection_worker_persists_positive_component_frame(self):
+        args = self.runtime_args(disable_face=True)
+        state = PreviewState()
+        session = BefastSession()
+        session.prepare_component("S", now=99.0)
+        session.submit_speech_result(
+            MotionResult(
+                status="positive",
+                reason="speech_content_mismatch",
+                quality=0.9,
+                details={"transcript": "今天天气"},
+            ),
+            new_or_sudden=True,
+            now=99.5,
+        )
+
+        with tempfile.TemporaryDirectory() as directory:
+            history_store = AbnormalHistoryStore(directory)
+            with (
+                patch("app.main.MoveNet", return_value=MagicMock()),
+                patch("app.main.FrameSource", return_value=_OneFrameSource()),
+            ):
+                run_detection(
+                    args,
+                    preview_state=state,
+                    befast_session=session,
+                    history_store=history_store,
+                )
+
+            records, total = history_store.list_records(components=("S",))
+            self.assertEqual(total, 1)
+            self.assertEqual(records[0]["reason"], "speech_content_mismatch")
+            self.assertIsNotNone(
+                history_store.get_frame_path(records[0]["id"])
+            )
 
 
 class FrameSourceCameraSwitchTest(unittest.TestCase):

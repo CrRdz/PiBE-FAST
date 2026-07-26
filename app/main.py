@@ -8,6 +8,7 @@ from pathlib import Path
 import sys
 import threading
 import time
+from typing import Mapping
 
 import cv2
 
@@ -17,10 +18,17 @@ from app.config import PoseClassifierConfig, RuntimeConfig
 from app.drawing import draw_befast_overlay
 from app.event_recorder import EventClipRecorder
 from app.face_landmarker import FaceObservation, MediaPipeFaceLandmarker
+from app.history import AbnormalHistoryStore
 from app.keypoint_logger import JsonlKeypointLogger
 from app.monitoring import PassiveMonitor, PassiveMonitoringConfig
 from app.movenet import MoveNet
 from app.pose_classifier import PoseClassification, PoseClassifier
+from app.speech_audio import (
+    SpeechAudioConfig,
+    SpeechCaptureService,
+    WhisperCppRecognizer,
+    default_microphone_capture,
+)
 from app.web import PreviewState, create_app
 
 
@@ -123,6 +131,45 @@ def parse_args() -> argparse.Namespace:
     # 关闭 JSONL 可以减少磁盘写入；调试姿态规则时建议保持开启。
     parser.add_argument("--no-keypoint-log", action="store_true", help="Disable JSONL keypoint logging")
     parser.add_argument("--log-dir", default="data/keypoints")
+    parser.add_argument(
+        "--history-dir",
+        default="data/history",
+        help="Store positive report metadata plus captured JPEG/WAV evidence here",
+    )
+    parser.add_argument(
+        "--speech-device",
+        default="default",
+        help=(
+            "microphone used for S: ALSA name on Linux (default/plughw:1,0) "
+            "or AVFoundation name/index on macOS"
+        ),
+    )
+    parser.add_argument(
+        "--speech-work-dir",
+        default="data/speech",
+        help="Temporary local WAV directory for microphone-based S checks",
+    )
+    parser.add_argument(
+        "--speech-capture-seconds",
+        type=float,
+        default=SpeechAudioConfig.capture_seconds,
+        help="Fixed microphone capture duration for one guided S check",
+    )
+    parser.add_argument(
+        "--speech-model",
+        default="models/ggml-base.bin",
+        help="Local whisper.cpp GGML/GGUF model used to transcribe S",
+    )
+    parser.add_argument(
+        "--whisper-cli",
+        default="whisper-cli",
+        help="Path or executable name for the local whisper.cpp CLI",
+    )
+    parser.add_argument(
+        "--disable-speech",
+        action="store_true",
+        help="Disable Pi microphone capture and offline speech recognition",
+    )
     # 默认不持续保存视频；只有显式开启后，才保存紧急筛查事件的短片段。
     parser.add_argument(
         "--save-event-clips",
@@ -138,7 +185,7 @@ def parse_args() -> argparse.Namespace:
 
 
 FACE_CAMERA_STAGES = frozenset(
-    {"idle", "retry_eyes", "eyes", "ready_face", "retry_face", "face"}
+    {"retry_eyes", "eyes", "ready_face", "retry_face", "face"}
 )
 
 
@@ -190,6 +237,7 @@ def run_detection(
     preview_state: PreviewState | None = None,
     stop_event: threading.Event | None = None,
     befast_session: BefastSession | None = None,
+    history_store: AbnormalHistoryStore | None = None,
 ) -> None:
     """Run stage-aware inference, keeping Pi CPU load to one model at a time."""
 
@@ -239,6 +287,7 @@ def run_detection(
     emergency_was_active = False
     previous_operation_mode = "standby"
     last_client_frame_sequence = 0
+    last_history_report_key: str | None = None
     initial_assessment = befast.snapshot()
     active_camera_index = _camera_index_for_assessment(args, initial_assessment)
     unavailable_camera_indices: set[int] = set()
@@ -432,7 +481,6 @@ def run_detection(
                 stage = str(assessment.get("stage", "idle"))
                 face_active_stage = operation_mode == "screening" and stage in {"eyes", "face"}
                 face_guidance_stage = operation_mode == "screening" and stage in {
-                    "idle",
                     "retry_eyes",
                     "ready_face",
                     "retry_face",
@@ -594,6 +642,43 @@ def run_detection(
                     face_observation=last_face if face_stage else None,
                     show_diagnostics=bool(getattr(args, "debug_overlay", False)),
                 )
+
+                if history_store is not None:
+                    report = assessment.get("current_report")
+                    report_key = history_store.report_key(
+                        report if isinstance(report, Mapping) else None
+                    )
+                    if report_key != last_history_report_key:
+                        try:
+                            item = (
+                                report.get("item")
+                                if isinstance(report, Mapping)
+                                else None
+                            )
+                            if (
+                                isinstance(report, Mapping)
+                                and isinstance(item, Mapping)
+                                and item.get("status") == "positive"
+                            ):
+                                ok, encoded = cv2.imencode(
+                                    ".jpg",
+                                    frame.image,
+                                    [
+                                        int(cv2.IMWRITE_JPEG_QUALITY),
+                                        int(runtime_cfg.jpeg_quality),
+                                    ],
+                                )
+                                history_store.save_positive_report(
+                                    report,
+                                    encoded.tobytes() if ok else None,
+                                    frame.ts,
+                                )
+                            last_history_report_key = report_key
+                        except Exception:
+                            LOGGER.exception(
+                                "Unable to save abnormal BE-FAST history"
+                            )
+
                 status = {
                     "ts": round(frame.ts, 4),
                     "pose": pose.pose,
@@ -801,12 +886,41 @@ def main() -> None:
 
     Path(args.log_dir).mkdir(parents=True, exist_ok=True)
     Path(args.clips_dir).mkdir(parents=True, exist_ok=True)
+    history_store = AbnormalHistoryStore(args.history_dir)
+    speech_service = None
+    if not args.disable_speech:
+        speech_service = SpeechCaptureService(
+            args.speech_work_dir,
+            capture_backend=default_microphone_capture(device=args.speech_device),
+            recognizer=WhisperCppRecognizer(
+                model_path=args.speech_model,
+                executable=args.whisper_cli,
+            ),
+            config=SpeechAudioConfig(
+                capture_seconds=max(2.0, float(args.speech_capture_seconds))
+            ),
+        )
+        speech_status = speech_service.snapshot()
+        if not speech_status["capture_ready"]:
+            LOGGER.warning(
+                "Speech microphone backend unavailable: %s",
+                speech_status["capture_reason"],
+            )
+        if not speech_status["recognizer_ready"]:
+            LOGGER.warning(
+                "Speech recognizer unavailable: %s",
+                speech_status["recognizer_reason"],
+            )
 
     if args.no_web:
         LOGGER.warning(
             "--no-web disables guided controls; use the Web UI for a complete BE-FAST screen"
         )
-        run_detection(args, befast_session=BefastSession())
+        run_detection(
+            args,
+            befast_session=BefastSession(),
+            history_store=history_store,
+        )
         return
 
     # Web 模式下，检测循环在后台线程运行，Flask 主线程负责提供页面和 MJPEG 视频流。
@@ -817,14 +931,26 @@ def main() -> None:
     if _preflight_macos_camera(args, preview_state):
         worker = threading.Thread(
             target=run_detection,
-            args=(args, preview_state, stop_event, befast_session),
+            args=(
+                args,
+                preview_state,
+                stop_event,
+                befast_session,
+                history_store,
+            ),
             daemon=True,
         )
         worker.start()
 
     scheme = "https" if args.web_cert else "http"
     LOGGER.info("Web preview: %s://%s:%s", scheme, args.web_host, args.web_port)
-    app = create_app(preview_state, stop_event, befast_session)
+    app = create_app(
+        preview_state,
+        stop_event,
+        befast_session,
+        history_store,
+        speech_service,
+    )
     try:
         ssl_context = (args.web_cert, args.web_key) if args.web_cert else None
         app.run(
@@ -835,6 +961,8 @@ def main() -> None:
         )
     finally:
         stop_event.set()
+        if speech_service is not None:
+            speech_service.cancel()
         if worker is not None:
             worker.join(timeout=2.0)
 

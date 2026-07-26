@@ -83,7 +83,8 @@ A 需要双臂平举，B 需要在安全条件下站立。标准化动作让不�
 | 等待 A/B 动作 | 继续 | 低频约 5 FPS | 暂停 | 判断肢体是否完整入镜及姿势是否安全 |
 | E/F 阶段 | 继续 | 暂停 | 默认 5 FPS | 眼动或面部标准化测量 |
 | A/B 阶段 | 继续 | 摄像头帧率 | 暂停 | 手臂或平衡标准化测量 |
-| 结果复核 | 继续 | 暂停 | 暂停 | 填写 S/T 并查看结果 |
+| 项目选择 / B 输入 / 单项报告 | 继续 | 暂停 | 暂停 | 选择项目、填写 B、查看历史报告 |
+| S 录音 / 分析 | 继续 | 暂停 | 暂停 | 短时 ALSA 采集与本地 whisper.cpp 推理 |
 
 待机时 JSONL 只在实际执行低频推理时写入，不按每个摄像头帧写盘。可以通过
 `--standby-pose-fps` 调整负载，通过 `--disable-passive-monitor` 完全关闭被动推理，
@@ -94,16 +95,16 @@ A 需要双臂平举，B 需要在安全条件下站立。标准化动作让不�
 
 ### Pi BE-FAST 筛查 Demo Web 界面
 
-打开 Web 页面后，摄像头预览占据主区域，页面不会先展示一组操作卡片。当前步骤的
-动作说明直接叠加在预览画面底部：红色表示人物位置、关键点可见性或动作尚未满足采集
-条件，绿色表示当前动作与画面质量已经适合开始测量。系统只有在动作质量连续通过后才
-自动进入该项采集；若采集期间质量不足，则回到同一步重新引导，而不会把数据不足当作
-正常结果或直接跳到下一项。同一步可以不限次数重新开始，不会因为此前的重试状态而
-卡住；动作变绿时仍提供“开始检测”按钮，若活动阶段到达 100% 后后台没有完成切换，
-页面会提供“重新检测本项”作为兜底，但不会跳过该项或伪造结果。
-每个 E/F/A/B 自动检测步骤都提供“跳过本项”；确认后立即进入下一项。
-最终报告会把该项明确标为“已跳过”，不会当作阴性结果；若没有更高优先级的异常结论，
-总体结果保持“评估未完成”。
+打开 Web 页面并进入筛查后，会先展示 B、E、F、A、S 五个独立项目。使用者可以任意
+选择其中一项，不需要按固定顺序完成整套筛查。每个项目完成后立即显示本次单项报告，
+并可直接“重新检测本项”或返回选择其他项目；同一轮中的每次重复结果都会按“第 N 次”
+保留在报告历史中，不会被后一次覆盖。
+
+E/F/A/B 自动项目的动作说明直接叠加在预览画面底部：红色表示人物位置、关键点可见性
+或动作尚未满足采集条件，绿色表示当前动作与画面质量已经适合开始测量。系统只有在动作
+质量连续通过后才自动进入该项采集；若采集期间质量不足，会立即生成“数据质量不足”的
+单项报告，使用者可不限次数重试，不会把数据不足当作正常结果。每个自动检测项目也提供
+“跳过本项”；确认后立即生成标记为“已跳过”的单项报告，不会视为阴性。
 
 页面右上角可在两种输入之间选择：
 
@@ -114,26 +115,31 @@ A 需要双臂平举，B 需要在安全条件下站立。标准化动作让不�
   必须在手机上打开该页面并选择此项。浏览器将画面缩放到最长边 640 px，
   以约 6 FPS 上传 JPEG 帧，服务端将其送入同一套 MediaPipe / MoveNet 流程。
 
-“主机自动切换”和“手机 / 当前设备”两种输入只能在待机页手动切换；主机模式内部的
+“主机自动切换”和“手机 / 当前设备”两种输入可在待机页或项目选择页手动切换；正式采集动作期间
+会锁定输入，避免中途更换视角。主机模式内部的
 E/F 与 A/B 摄像头路由会在步骤交界处自动完成，同一项测量期间不会改变视角。除 `localhost` 外，
-手机和电脑浏览器都要求可信任的 HTTPS 上下文才会允许页面调用摄像头；麦克风仍被禁用。
+手机和电脑浏览器都要求可信任的 HTTPS 上下文才会允许页面调用摄像头。浏览器麦克风仍被禁用；
+S 直接使用连接到树莓派的 ALSA 麦克风，因此不依赖手机授权、网络质量或人工勾选。
 预览帧内的大型调试文字默认关闭，需排障时可用 `--debug-overlay` 显式开启。
 
-E、F、A、B 会依次引导眼动、微笑、双臂平举和安全站立。B 开始前必须由使用者确认
-周围有支撑且站立安全；S（言语）和 T（是否突然发生、发病时间）在最后复核。页面右上
-角的 `中文 / EN` 可即时切换界面语言。这里的绿色仅代表**动作及采集质量合格**，不代表
-医学筛查结果为阴性。最终结果会逐项显示异常类型、可能涉及的侧别和数据不足原因，
+E、F、A 分别引导眼动、微笑和双臂平举。B 会先询问是否已经出现失衡：若已有异常，
+直接生成报告而不要求冒险站立；若未报告异常，再要求使用者确认周围有支撑且站立安全。
+S（言语）会采集约 7 秒固定提示句，在树莓派上完成音频质量、本地转写、复述差异、语速和
+停顿分析；T（是否突然发生、发病时间）随 B/S 记录。页面
+右上角的 `中文 / EN` 可即时切换界面语言。这里的绿色仅代表**动作及采集质量合格**，
+不代表医学筛查结果为阴性。每份单项报告会显示异常类型、可能涉及的侧别和数据不足原因，
 例如“左眼水平移动范围明显小于右眼”，而不是只显示一个“异常”标签。
 
 ## 3. 系统架构
 
 ```text
-CSI / USB 摄像头 ─┐
-浏览器前置摄像头 ──├─▶ 选定的视频输入
-                     │
-                     ▼
+CSI / USB 摄像头 ────┐
+浏览器前置摄像头 ─────┴─▶ 选定的视频输入 ─┐
+USB / I²S 麦克风 ────────────────────────┴─▶
 Raspberry Pi
   ├─ Picamera2 / OpenCV：采集视频
+  ├─ ALSA arecord：采集 S 的 16 kHz 单声道音频
+  ├─ whisper.cpp：本地离线转写
   ├─ MediaPipe Face Landmarker：E、F
   ├─ MoveNet Lightning：A、B
   ├─ BE-FAST 时序特征与保守决策
@@ -150,7 +156,8 @@ Raspberry Pi
 - E/F 阶段仅以默认 5 FPS 运行 Face Landmarker，暂停 MoveNet；
 - A/B 阶段运行 MoveNet，暂停人脸推理；
 - 等待 E/F 动作时低频运行 Face Landmarker，等待 A/B 动作时低频运行 MoveNet；
-- 结果复核阶段暂停两套推理模型；
+- 项目选择、B 人工观察、S 录音和单项报告阶段暂停两套视觉推理模型；
+- S 仅在用户点击“开始录音”后短时运行音频处理和 whisper.cpp，不持续监听；
 - 浏览器预览仍按摄像头帧率更新；
 - 任一模型不可用时保留原始预览，对应项目返回数据不足，不伪造正常结果。
 
@@ -286,12 +293,24 @@ Raspberry Pi
 
 ### S — Speech / 言语
 
-当前版本不使用自动语音模型。页面要求受试者复述“今天天气很好”，由本人或照护者
-确认是否出现说话含混、不能正确复述或理解困难。
+S 不再依赖人工勾选。用户点击“开始录音”后，服务端通过 `arecord` 从树莓派连接的
+ALSA 麦克风采集约 7 秒、16 kHz、16-bit、单声道 WAV，并用本地 `whisper.cpp`
+转写固定提示句“今天天气很好，我们一起去公园散步”。
 
-之所以保留人工确认，是因为没有临床语音数据时，普通 ASR 错误、方言、噪声、听力
-问题和原有言语障碍很容易被错误解释为卒中体征。后续可增加本地音频模型，但必须把
-“语音识别错误”和“神经功能异常”分开验证。
+当前工程特征包括：
+
+1. 录音时长、RMS 音量、削波比例和有效说话时长，用于拒绝太短、太小声、失真或无人声的样本；
+2. 识别文本与提示句的字符错误率（CER），默认达到 `0.35` 时提示复述内容差异；
+3. 有效说话区间内的停顿比例，默认达到 `0.55` 时提示表达不连续；
+4. 每秒识别字符数，默认低于 `1.0` 或高于 `8.0` 时提示语速异常。
+
+麦克风、识别程序或模型不可用时，本项返回 `insufficient`，绝不会把缺少音频或识别能力
+当作阴性。阳性 S 报告会把 WAV、识别文本和量化指标保存在异常历史中；阴性和数据不足
+录音在报告生成后删除。
+
+这些特征能检查“是否正确、连续地复述固定句子”，但还不是经过临床验证的构音障碍模型。
+方言、环境噪声、听力问题、原有言语障碍以及 ASR 本身的错误都可能影响结果，不能把
+ASR 差异直接解释为脑卒中。
 
 ### T — Time / 时间
 
@@ -311,7 +330,7 @@ Raspberry Pi
 5. F：先保持中性表情，提示后自然微笑。
 6. A：坐稳并保持双臂向前平举。
 7. B：只有在有人看护且安全时站立；不安全就跳过并报告异常。
-8. S/T：复述句子，填写是否突然出现及首次发现时间。
+8. S/T：点击录音并复述提示句，填写是否突然出现及首次发现时间；本地分析完成后自动出报告。
 9. 查看结果后点击“结束并返回待机”。
 
 ## 6. 安装与模型
@@ -338,11 +357,48 @@ python -m pip install tensorflow
 python -m pip install tflite-runtime
 ```
 
+树莓派 S 项使用 ALSA 录音工具和本地 `whisper.cpp`。先确认麦克风设备：
+
+```bash
+./scripts/install_speech_pi.sh
+
+# 或手动安装/检查：
+sudo apt update
+sudo apt install -y alsa-utils cmake build-essential git
+arecord -L
+arecord -D default -f S16_LE -r 16000 -c 1 -d 3 /tmp/pibefast-mic-test.wav
+```
+
+构建 `whisper.cpp` 并下载多语言 `base` 模型：
+
+```bash
+git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git ~/whisper.cpp
+cmake -S ~/whisper.cpp -B ~/whisper.cpp/build -DCMAKE_BUILD_TYPE=Release
+cmake --build ~/whisper.cpp/build --config Release -j2
+~/whisper.cpp/models/download-ggml-model.sh base
+cp ~/whisper.cpp/models/ggml-base.bin models/ggml-base.bin
+```
+
+项目通过命令行调用 `whisper-cli`，不引入 TensorFlow/PyTorch 语音运行时。如果模型尚未
+安装、命令不可执行或麦克风采集失败，S 会明确返回“数据质量不足”。
+
+macOS 不提供 ALSA。项目会自动改用 FFmpeg 的 AVFoundation 后端采集系统默认麦克风，
+Linux/树莓派仍使用 `arecord`：
+
+```bash
+brew install ffmpeg whisper-cpp
+ffmpeg -f avfoundation -list_devices true -i ""
+```
+
+默认 `--speech-device default` 使用系统默认麦克风；也可以传入 AVFoundation 列出的
+音频设备名称或索引。
+
 模型文件：
 
 ```text
 models/movenet_lightning.tflite
 models/face_landmarker.task
+models/ggml-base.bin
 ```
 
 下载官方 Face Landmarker 模型：
@@ -378,6 +434,9 @@ macOS 的设备索引可能因连接顺序而变化。如需覆盖自动配置�
 python -m app.main \
   --source camera \
   --camera-backend picamera2 \
+  --speech-device default \
+  --whisper-cli ~/whisper.cpp/build/bin/whisper-cli \
+  --speech-model models/ggml-base.bin \
   --web-host 0.0.0.0 \
   --web-port 8080
 ```
@@ -395,6 +454,9 @@ python -m app.main \
 - `--standby-pose-fps 2`：待机 MoveNet 频率，越低越省 CPU，但快速事件采样更稀疏；
 - `--disable-passive-monitor`：只保留手动或照护者触发；
 - `--scheduled-screen-interval-hours 12`：每 12 小时打开一次主动筛查提醒；默认 `0` 关闭。
+- `--speech-device plughw:CARD,DEV`：覆盖 ALSA 录音设备；用 `arecord -L` 查询；
+- `--speech-capture-seconds 7`：S 的单次固定录音时长；
+- `--disable-speech`：硬件尚未接入时关闭 S 后端；页面调用会返回不可用。
 
 然后在同一局域网的手机或电脑访问：
 
@@ -428,6 +490,11 @@ ssh -L 8080:localhost:8080 pi@raspberrypi.local
 
 ```text
 GET  /api/status
+GET  /api/history?component=E,F&reason=asymmetric_eye_excursion
+GET  /api/history/<记录ID>
+GET  /api/history/<记录ID>/frame
+GET  /api/history/<记录ID>/audio
+GET  /api/speech/status
 POST /api/camera/source      {"source":"host" | "client"}
 POST /api/camera/frame       Content-Type: image/jpeg
 POST /api/monitoring/trigger {"source":"user","reason":"felt_unwell"}
@@ -439,25 +506,42 @@ POST /api/befast/stage   {"stage":"balance"}
 POST /api/befast/skip
 POST /api/befast/manual
 POST /api/befast/reset
+POST /api/speech/start    {"language":"zh","new_or_sudden":false}
+POST /api/speech/complete
+POST /api/speech/cancel
 ```
 
 `/api/status` 中的 `befast.mode` 为 `standby` 或 `screening`；`monitoring` 字段显示
 当前推理调度、待机 FPS、最近被动状态和
 `medical_role=trigger_only_not_stroke_diagnosis`。
 
-人工输入示例：
+历史接口只保存状态为 `positive` 的单项报告。元数据持久化在
+`data/history/history.sqlite3`，对应 JPEG 帧保存在 `data/history/frames/`；S 的
+异常 WAV 保存在 `data/history/audio/`。
+`GET /api/history` 默认按最新时间返回，可使用以下查询参数：
+
+- `component=B,E,F,A,S`：单个项目或逗号分隔的多个项目；
+- `reason`：精确筛选异常原因；
+- `affected_side=left|right`：筛选可能受影响侧；
+- `new_or_sudden=true|false`：筛选是否新发/突发；
+- `limit=1..200` 和 `offset`：分页。
+
+可以用 `--history-dir <目录>` 修改保存位置。自动 E/F/A/B/S 阳性和人工 B 阳性使用
+同一历史存储；重复轮询同一报告不会产生重复记录。
+
+B 人工输入示例：
 
 ```json
 {
   "balance_problem": false,
-  "speech_problem": true,
-  "new_or_sudden": true,
+  "new_or_sudden": false,
   "onset_time": "2026-07-19T10:30"
 }
 ```
 
 默认 JSONL 日志只保存姿态关键点、质量、结果、原因和量化指标，不持续保存原始视频。
-只有显式启用 `--save-event-clips` 才会保存事件片段。真实患者视频、人脸、语音和身份
+只有显式启用 `--save-event-clips` 才会保存事件片段。S 阳性会有意保存单次异常 WAV，
+阴性或数据不足 WAV 会被删除。真实患者视频、人脸、语音和身份
 信息不得提交到 GitHub；采集前应取得知情同意并制定访问、加密、留存和删除策略。
 
 ## 9. 测试与性能基准
@@ -476,12 +560,24 @@ python -m scripts.benchmark_face --frames 100
 ```text
 app/
   main.py                 # 分阶段实时推理与 Web 服务入口
-  befast.py               # E/F/A/B 特征和 BE-FAST 决策
+  befast/                 # 按职责拆分的 BE-FAST 筛查包
+    balance.py            # B：平衡检测与人工结果合并
+    eyes.py               # E：眼球运动检测
+    face.py               # F：面部微笑对称性检测
+    arms.py               # A：手臂下垂检测
+    speech.py             # S：麦克风分析结果转为统一报告
+    urgency.py            # T：发病时间与紧急程度判定
+    session.py            # 筛查阶段编排与线程安全状态
+    guidance.py           # 实时取景和动作引导
+    config.py             # BE-FAST 阈值配置
+    result.py             # 统一检测结果模型
   face_landmarker.py      # MediaPipe 478 点/52 blendshape 适配器
   monitoring.py           # 低频被动触发层与树莓派待机节流
   movenet.py              # TFLite MoveNet 推理
   camera.py               # OpenCV / Picamera2 视频输入
   pose_classifier.py      # standing / sitting / lying 质量门槛
+  history.py              # 异常报告 SQLite 索引与 JPEG 帧存储
+  speech_audio.py         # ALSA 录音、whisper.cpp 适配和 S 音频特征
   web.py                  # 双语项目名、中文操作引导与 API
   drawing.py              # 姿态/面部点和状态叠加
   keypoint_logger.py      # JSONL 研究日志
@@ -553,7 +649,8 @@ a desktop computer. It:
 - hosts the Flask interface while a phone or computer acts only as a LAN client;
 - continues local screening without Internet access and optionally records JSONL
   data or short emergency event clips; and
-- can later integrate a physical help button, buzzer, microphone, or wearable.
+- captures fixed-duration S audio from an attached ALSA microphone and runs local
+  offline transcription; a physical help button, buzzer, or wearable can be added later.
 
 The current passive layer implements low-rate pose observation and a fall sequence
 requiring a rapid transition followed by sustained lying. Its output may open the
@@ -570,7 +667,8 @@ Actual inference scheduling:
 | Waiting for A/B setup | continues | about 5 FPS | paused | verify body framing and safe posture |
 | E/F | continues | paused | 5 FPS default | standardized gaze/face measurement |
 | A/B | continues | camera cadence | paused | standardized arm/balance measurement |
-| Review | continues | paused | paused | collect S/T and display results |
+| Check picker / B input / individual report | continues | paused | paused | choose a check, collect B, show report history |
+| S recording / analysis | continues | paused | paused | short ALSA capture and local whisper.cpp inference |
 
 In standby, JSONL is written only when low-rate inference actually runs, not for
 every camera frame. Tune load with `--standby-pose-fps`, disable passive inference
@@ -583,21 +681,20 @@ with `--disable-passive-monitor`, and enable periodic prompts with
 
 ### Pi BE-FAST Screening Demo Web interface
 
-The live camera preview is the primary page area; users do not have to navigate
-through a dashboard of setup cards. The current instruction appears directly over
-the bottom of the video. Red means framing, landmark visibility, or the requested
-action is not yet suitable for capture. Green means the action and capture quality
-are ready. A stage starts automatically only after readiness is observed
-consistently. If capture quality is insufficient, the interface returns to the
-same guided step instead of treating missing data as normal or advancing.
-The same step can restart repeatedly without being blocked by an earlier retry.
-When setup turns green, a manual “Start this check” control remains available;
-if an active stage reaches 100% without completing, “Restart this check” appears
-as a recovery action without skipping the item or fabricating a result.
-Each automated E/F/A/B step also provides **Skip this check**. After confirmation,
-the flow advances and the final report explicitly marks that item as `skipped`.
-A skipped item is never treated as negative; unless a higher-priority abnormal
-finding applies, the overall screen remains incomplete.
+After entering screening, the page presents five independent B, E, F, A, and S
+checks. The user may choose any check without completing a fixed sequence. Each
+finished check immediately displays its own report and offers **Repeat this
+check** or **Choose another check**. Every repeated result is retained as report
+number N in the current session instead of being overwritten.
+
+For automated E/F/A/B checks, the current instruction appears over the bottom of
+the live video. Red means framing, landmark visibility, or the requested action is
+not yet suitable for capture. Green means the action and capture quality are ready.
+A check starts automatically only after readiness is observed consistently. If
+capture quality is insufficient, an individual insufficient-data report appears
+immediately and the check can be retried without limit. Each automated check also
+provides **Skip this check**; after confirmation, an individual report marks the
+attempt as `skipped`, never as negative.
 
 The top-right selector provides two inputs:
 
@@ -610,31 +707,37 @@ The top-right selector provides two inputs:
   The browser scales frames to a 640 px maximum edge and uploads JPEG at about
   6 FPS; the service feeds them into the same MediaPipe / MoveNet pipeline.
 
-The user can switch between host routing and **Phone / this device** only while
-the screen is idle. Host E/F-to-A/B routing happens automatically between stages,
-never during one temporal measurement. Browsers require a trusted HTTPS context for camera
-access except on `localhost`; microphone access remains disabled. The large
+The user can switch between host routing and **Phone / this device** from either
+standby or the component menu. The input is locked during active capture to avoid
+changing viewpoint mid-measurement. Host E/F-to-A/B routing happens automatically
+between stages, never during one temporal measurement. Browsers require a trusted HTTPS context for camera
+access except on `localhost`; browser microphone access remains disabled because S uses the
+Pi-attached ALSA microphone directly. The large
 diagnostic text drawn into the video is off by default and can be restored with
 `--debug-overlay` when troubleshooting.
 
-The flow guides E, F, A, and B in sequence: eye motion, smile, bilateral arm hold,
-and supported standing. Balance capture requires an explicit safety confirmation.
-Speech and symptom timing are reviewed at the end. The top-right `中文 / EN`
-control switches the whole interface immediately. Green indicates **action and
-capture readiness only**; it is not a negative medical screening result. Final
-results identify the specific sign, affected side when available, and the reason
-for insufficient data—for example, “the left eye had a smaller horizontal range”
-instead of showing only “abnormal.”
+E, F, and A independently guide eye motion, smile, and bilateral arm hold. B first
+asks whether balance loss is already present: a reported problem produces a report
+without risking a standing task; otherwise supported standing still requires an
+explicit safety confirmation. S records a fixed prompt through the Raspberry Pi
+microphone and locally assesses audio quality, transcript difference, rate, and
+pauses. T (sudden onset and first-known time) is recorded with B and S.
+The top-right `中文 / EN` control switches the whole interface immediately. Green
+indicates **action and capture readiness only**; it is not a negative medical
+screening result. Each individual report identifies the specific sign, affected
+side when available, and the reason for insufficient data—for example, “the left
+eye had a smaller horizontal range” instead of showing only “abnormal.”
 
 ## 3. Architecture
 
 ```text
-CSI / USB camera ─┐
-browser front camera ──├─▶ selected video input
-                       │
-                       ▼
+CSI / USB camera ──────┐
+browser front camera ───┴─▶ selected video input ─┐
+USB / I²S microphone ─────────────────────────────┴─▶
 Raspberry Pi
   ├─ Picamera2 / OpenCV video capture
+  ├─ ALSA arecord speech capture
+  ├─ local whisper.cpp transcription
   ├─ MediaPipe Face Landmarker for E and F
   ├─ MoveNet Lightning for A and B
   ├─ temporal BE-FAST features and conservative decisions
@@ -652,7 +755,7 @@ To limit Raspberry Pi CPU load and thermal pressure, inference is stage-aware:
 - A/B runs MoveNet and pauses facial inference;
 - Face Landmarker runs at low rate while waiting for E/F setup, and MoveNet runs
   at low rate while waiting for A/B setup;
-- both models pause during result review;
+- both models pause during component selection, B input, S audio processing, and result review;
 - the browser preview continues at camera cadence; and
 - if either model is unavailable, raw preview remains available and the affected
   item becomes insufficient instead of being reported as normal.
@@ -781,14 +884,23 @@ loose clothing, and perspective distortion can affect the result.
 
 ### S — Speech
 
-The current version does not use an automatic speech model. The interface asks
-the person to repeat a short sentence, and the person or caregiver reports slurred
-speech, inability to repeat, or comprehension difficulty.
+S no longer uses a manual abnormality checkbox. After **Start recording**, the
+server captures about 7 seconds of 16 kHz, 16-bit mono WAV through `arecord` and
+the Pi-attached ALSA microphone, then transcribes a fixed prompt locally with
+`whisper.cpp`.
 
-This remains manual because, without clinical speech data, ASR errors, dialects,
-noise, hearing problems, and pre-existing speech disorders could be incorrectly
-interpreted as neurological deficits. A future on-device audio model must validate
-speech-recognition error separately from neurological impairment.
+Current engineering features are recording duration, RMS level, clipping
+fraction, voiced duration, fixed-prompt character error rate (CER), pause
+fraction, and recognized characters per voiced second. Defaults flag CER at
+`0.35`, pause fraction at `0.55`, and rate outside `1.0..8.0` characters/second.
+An unavailable microphone, CLI, or model returns `insufficient`, never a false
+negative. Positive S attempts retain the WAV, transcript, and metrics in abnormal
+history; negative and insufficient temporary recordings are deleted.
+
+This checks whether a fixed sentence was repeated accurately and continuously;
+it is not a clinically validated dysarthria model. Dialects, noise, hearing
+problems, pre-existing speech disorders, and ASR errors can affect the result and
+must not be interpreted directly as stroke.
 
 ### T — Time
 
@@ -808,7 +920,8 @@ The interface records whether a sign is new/sudden and when it was first noticed
 5. F: remain neutral, then smile when prompted.
 6. A: sit safely and hold both arms forward.
 7. B: stand only with supervision and only when safe; otherwise skip and report it.
-8. S/T: repeat the sentence and record sudden onset and first-known time.
+8. S/T: start recording, repeat the prompt, and record sudden onset and first-known time;
+   the individual report appears after local processing.
 9. Review the result and select **Return to standby**.
 
 ## 6. Installation and models
@@ -835,11 +948,46 @@ python -m pip install tensorflow
 python -m pip install tflite-runtime
 ```
 
+S also needs ALSA capture tools and a local `whisper.cpp` executable:
+
+```bash
+./scripts/install_speech_pi.sh
+
+# Or install and inspect the dependencies manually:
+sudo apt update
+sudo apt install -y alsa-utils cmake build-essential git
+arecord -L
+arecord -D default -f S16_LE -r 16000 -c 1 -d 3 /tmp/pibefast-mic-test.wav
+
+git clone --depth 1 https://github.com/ggml-org/whisper.cpp.git ~/whisper.cpp
+cmake -S ~/whisper.cpp -B ~/whisper.cpp/build -DCMAKE_BUILD_TYPE=Release
+cmake --build ~/whisper.cpp/build --config Release -j2
+~/whisper.cpp/models/download-ggml-model.sh base
+cp ~/whisper.cpp/models/ggml-base.bin models/ggml-base.bin
+```
+
+The project invokes `whisper-cli` as a process, avoiding a PyTorch speech
+runtime. A missing capture device, executable, or model yields an insufficient
+S result.
+
+macOS does not provide ALSA. The project automatically selects FFmpeg's
+AVFoundation capture backend on macOS while keeping `arecord` on Linux and
+Raspberry Pi:
+
+```bash
+brew install ffmpeg whisper-cpp
+ffmpeg -f avfoundation -list_devices true -i ""
+```
+
+The default `--speech-device default` selects the system microphone. An
+AVFoundation audio device name or index can be passed instead.
+
 Required models:
 
 ```text
 models/movenet_lightning.tflite
 models/face_landmarker.task
+models/ggml-base.bin
 ```
 
 Download the official Face Landmarker model:
@@ -878,6 +1026,9 @@ Raspberry Pi camera:
 python -m app.main \
   --source camera \
   --camera-backend picamera2 \
+  --speech-device default \
+  --whisper-cli ~/whisper.cpp/build/bin/whisper-cli \
+  --speech-model models/ggml-base.bin \
   --web-host 0.0.0.0 \
   --web-port 8080
 ```
@@ -895,6 +1046,9 @@ python -m app.main \
 - `--standby-pose-fps 2`: lower values save CPU but sample rapid events less often;
 - `--disable-passive-monitor`: retain only user/caregiver-triggered screening;
 - `--scheduled-screen-interval-hours 12`: open a screen every 12 hours; `0` disables it.
+- `--speech-device plughw:CARD,DEV`: override the ALSA capture device listed by `arecord -L`;
+- `--speech-capture-seconds 7`: fixed S recording duration;
+- `--disable-speech`: disable the S backend until microphone hardware is installed.
 
 Open `http://<raspberry-pi-ip>:8080` from a phone or computer on the same network,
 or use an SSH tunnel. This HTTP URL supports the host camera, but mobile browsers
@@ -927,6 +1081,11 @@ ssh -L 8080:localhost:8080 pi@raspberrypi.local
 
 ```text
 GET  /api/status
+GET  /api/history?component=E,F&reason=asymmetric_eye_excursion
+GET  /api/history/<record-id>
+GET  /api/history/<record-id>/frame
+GET  /api/history/<record-id>/audio
+GET  /api/speech/status
 POST /api/camera/source      {"source":"host" | "client"}
 POST /api/camera/frame       Content-Type: image/jpeg
 POST /api/monitoring/trigger {"source":"user","reason":"felt_unwell"}
@@ -938,26 +1097,37 @@ POST /api/befast/stage   {"stage":"balance"}
 POST /api/befast/skip
 POST /api/befast/manual
 POST /api/befast/reset
+POST /api/speech/start    {"language":"en","new_or_sudden":false}
+POST /api/speech/complete
+POST /api/speech/cancel
 ```
 
 In `/api/status`, `befast.mode` is `standby` or `screening`. The `monitoring`
 object reports inference scheduling, standby FPS, the last passive state, and
 `medical_role=trigger_only_not_stroke_diagnosis`.
 
-Manual-input example:
+The history API persists positive single-check reports only. Metadata is stored
+in `data/history/history.sqlite3`, with JPEG frames in `data/history/frames/`
+and abnormal S WAV files in `data/history/audio/`.
+`GET /api/history` accepts a single or comma-separated `component`, exact
+`reason`, `affected_side=left|right`, `new_or_sudden=true|false`, `limit=1..200`,
+and `offset`. Use `--history-dir` to change the storage location. Polling the
+same report does not create duplicate records.
+
+B manual-input example:
 
 ```json
 {
   "balance_problem": false,
-  "speech_problem": true,
-  "new_or_sudden": true,
+  "new_or_sudden": false,
   "onset_time": "2026-07-19T10:30"
 }
 ```
 
 By default, JSONL logs contain landmarks, quality, decisions, reasons, and numeric
 metrics, but not continuous raw video. Event clips are saved only when
-`--save-event-clips` is explicitly enabled. Do not commit real patient video,
+`--save-event-clips` is explicitly enabled. A positive S attempt intentionally
+retains its one-shot WAV; negative and insufficient WAV files are deleted. Do not commit real patient video,
 faces, speech, or identifiers to GitHub. Obtain informed consent and define
 access, encryption, retention, and deletion policies before data collection.
 
@@ -978,12 +1148,24 @@ outcomes, calibration analysis, and external validation.
 ```text
 app/
   main.py                 # stage-aware inference and Web entry point
-  befast.py               # E/F/A/B features and BE-FAST decisions
+  befast/                 # BE-FAST package split by responsibility
+    balance.py            # B: balance check and manual-result merge
+    eyes.py               # E: eye-movement check
+    face.py               # F: smile-symmetry check
+    arms.py               # A: arm-drift check
+    speech.py             # S: convert microphone analysis to a report item
+    urgency.py            # T: onset and urgency decision
+    session.py            # thread-safe screening orchestration
+    guidance.py           # live placement and action guidance
+    config.py             # BE-FAST thresholds
+    result.py             # shared result model
   face_landmarker.py      # MediaPipe 478-landmark/52-blendshape adapter
   monitoring.py           # throttled passive trigger layer for Pi standby
   movenet.py              # TFLite MoveNet inference
   camera.py               # OpenCV / Picamera2 input
   pose_classifier.py      # standing / sitting / lying quality gate
+  history.py              # abnormal-report SQLite index and JPEG frame storage
+  speech_audio.py         # ALSA capture, whisper.cpp adapter, and S audio features
   web.py                  # guided interface and API
   drawing.py              # pose/face/status overlays
   keypoint_logger.py      # JSONL research logs
@@ -1002,3 +1184,5 @@ data/
 - [MediaPipe Raspberry Pi Face Landmarker example](https://github.com/google-ai-edge/mediapipe-samples/tree/main/examples/face_landmarker/raspberry_pi)
 - [MoveNet models on TensorFlow Hub](https://www.tensorflow.org/hub/tutorials/movenet)
 - [MediaPipe Python wheel build guide](https://developers.google.com/edge/mediapipe/solutions/build_python)
+- [whisper.cpp local inference and model setup](https://github.com/ggml-org/whisper.cpp)
+- [Raspberry Pi audio documentation](https://www.raspberrypi.com/documentation/accessories/audio.html)
