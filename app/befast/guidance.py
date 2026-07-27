@@ -48,7 +48,11 @@ def face_guidance(
     if stage in {"idle", "retry_eyes", "eyes"}:
         # E 需要同时看到完整眼角、虹膜和鼻尖，指标可计算即视为取景就绪。
         metrics = (
-            eye_frame_metrics(observation, config.face_min_interocular_width)
+            eye_frame_metrics(
+                observation,
+                config.face_min_interocular_width,
+                config.eye_min_eye_width_pixels,
+            )
             if observation is not None
             else None
         )

@@ -13,7 +13,7 @@ from .balance import (
     summarize_balance_window,
 )
 from .config import BefastConfig
-from .eyes import EyeMovementScreen, eye_frame_metrics
+from .eyes import EYE_EVIDENCE_VERSION, EyeMovementScreen, eye_frame_metrics
 from .face import FaceSmileScreen, face_frame_metrics
 from .face_geometry import aligned_face_points
 from .pose_geometry import Point, percentile, visible_point
@@ -39,6 +39,7 @@ __all__ = [
     "BefastConfig",
     "BefastSession",
     "EyeMovementScreen",
+    "EYE_EVIDENCE_VERSION",
     "FaceSmileScreen",
     "MotionResult",
     "Point",

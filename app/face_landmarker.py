@@ -19,6 +19,9 @@ class FaceObservation:
     landmarks: tuple[tuple[float, float, float], ...]
     blendshapes: dict[str, float] = field(default_factory=dict)
     inference_ms: float = 0.0
+    frame_width: int = 0
+    frame_height: int = 0
+    facial_transform: tuple[tuple[float, ...], ...] | None = None
 
     def point(self, index: int) -> tuple[float, float, float] | None:
         if index < 0 or index >= len(self.landmarks):
@@ -71,7 +74,10 @@ class MediaPipeFaceLandmarker:
             min_face_presence_confidence=float(min_presence_confidence),
             min_tracking_confidence=float(min_tracking_confidence),
             output_face_blendshapes=True,
-            output_facial_transformation_matrixes=False,
+            # E 需要用头部三维姿态变化排除转头代偿。只看鼻尖二维位移会把
+            # 平移、偏航和透视变化混在一起，因此保留 Face Landmarker 输出的
+            # canonical-face transformation matrix。
+            output_facial_transformation_matrixes=True,
         )
         self.landmarker = mp.tasks.vision.FaceLandmarker.create_from_options(options)
         self.last_timestamp_ms = -1
@@ -99,12 +105,23 @@ class MediaPipeFaceLandmarker:
                 name = str(category.category_name or category.display_name or "")
                 if name:
                     blendshapes[name] = float(category.score)
+        facial_transform: tuple[tuple[float, ...], ...] | None = None
+        if result.facial_transformation_matrixes:
+            matrix = np.asarray(
+                result.facial_transformation_matrixes[0], dtype=float
+            ).reshape(4, 4)
+            facial_transform = tuple(
+                tuple(float(value) for value in row) for row in matrix
+            )
 
         return FaceObservation(
             ts=float(ts),
             landmarks=landmarks,
             blendshapes=blendshapes,
             inference_ms=inference_ms,
+            frame_width=int(rgb_frame.shape[1]),
+            frame_height=int(rgb_frame.shape[0]),
+            facial_transform=facial_transform,
         )
 
     def close(self) -> None:

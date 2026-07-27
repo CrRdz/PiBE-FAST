@@ -222,7 +222,7 @@ class CameraPreviewFallbackTest(unittest.TestCase):
         self.assertEqual(status["monitoring"]["inference_mode"], "standby_pose")
         self.assertEqual(status["monitoring"]["inference_count"], 2)
 
-    def test_guidance_mode_keeps_pose_model_paused_during_eye_setup(self):
+    def test_visual_symptom_form_keeps_both_models_paused(self):
         args = self.runtime_args(disable_face=True)
         state = PreviewState()
         session = BefastSession()
@@ -237,7 +237,7 @@ class CameraPreviewFallbackTest(unittest.TestCase):
 
         pose_backend.infer.assert_not_called()
         _, status = state.snapshot()
-        self.assertEqual(status["monitoring"]["inference_mode"], "guidance_face")
+        self.assertEqual(status["monitoring"]["inference_mode"], "preview_only")
 
     def test_detection_worker_persists_positive_component_frame(self):
         args = self.runtime_args(disable_face=True)
