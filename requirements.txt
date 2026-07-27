@@ -1,0 +1,11 @@
+Flask>=3.0
+numpy>=1.24
+opencv-contrib-python>=4.8
+# 0.10.32+ enables a Metal backend that crashes Face Landmarker on some macOS
+# hosts. Linux aarch64/Raspberry Pi has no official PyPI wheel; build/install
+# the same version using Google's documented wheel build before this file.
+mediapipe==0.10.31; platform_machine != "aarch64" or platform_system != "Linux"
+
+# Install one TFLite interpreter for your platform:
+#   Local development: python -m pip install tensorflow
+#   Raspberry Pi:      python -m pip install tflite-runtime
