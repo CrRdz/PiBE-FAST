@@ -9,7 +9,7 @@ from typing import Any, Mapping, Sequence
 from app.face_landmarker import FaceObservation
 
 from .arms import ArmDriftScreen
-from .balance import BalanceScreen
+from .balance import BalanceScreen, PersonalBalanceBaseline
 from .config import BefastConfig
 from .eyes import EyeMovementScreen
 from .face import FaceSmileScreen
@@ -37,7 +37,11 @@ class BefastSession:
     SKIP_STAGE_ALIASES = SKIP_STAGE_ALIASES
     SKIP_FLOW = SKIP_FLOW
 
-    def __init__(self, config: BefastConfig | None = None) -> None:
+    def __init__(
+        self,
+        config: BefastConfig | None = None,
+        balance_baseline: PersonalBalanceBaseline | None = None,
+    ) -> None:
         """创建所有独立检测器，并将设备初始化到待机状态。"""
 
         self.config = config or BefastConfig()
@@ -46,7 +50,7 @@ class BefastSession:
         self.eye_screen = EyeMovementScreen(self.config)
         self.face_screen = FaceSmileScreen(self.config)
         self.arm_screen = ArmDriftScreen(self.config)
-        self.balance_screen = BalanceScreen(self.config)
+        self.balance_screen = BalanceScreen(self.config, balance_baseline)
         self.reset()
 
     def reset(self) -> None:

@@ -389,6 +389,7 @@ class PassiveSpeechMonitor:
                 "baseline_profile": profile,
                 "recent_anomaly_votes": int(sum(self.recent_anomalies)),
                 "recent_window_count": len(self.recent_anomalies),
+                "recent_anomaly_history": list(self.recent_anomalies),
                 "anomaly_votes_required": self.config.anomaly_votes_required,
                 "anomaly_z_threshold": self.config.anomaly_z_threshold,
                 "min_abnormal_domains": self.config.min_abnormal_domains,

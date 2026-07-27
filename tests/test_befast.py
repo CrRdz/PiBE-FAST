@@ -1,6 +1,13 @@
+from pathlib import Path
+from tempfile import TemporaryDirectory
 import unittest
 
-from app.befast import BefastConfig, BefastSession, MotionResult
+from app.befast import (
+    BefastConfig,
+    BefastSession,
+    MotionResult,
+    PersonalBalanceBaseline,
+)
 from app.face_landmarker import FaceObservation
 from app.keypoints import KEYPOINT_NAMES
 
@@ -85,7 +92,17 @@ class BefastSessionTest(unittest.TestCase):
             balance_capture_seconds=0.8,
             balance_min_valid_samples=5,
         )
-        self.session = BefastSession(self.config)
+        balance_baseline = PersonalBalanceBaseline(self.config)
+        baseline_rolls = (-0.4, -0.2, 0.0, 0.2, 0.4)
+        baseline_velocities = (0.0, 0.002, 0.004, 0.006, 0.008)
+        for roll, velocity in zip(baseline_rolls, baseline_velocities):
+            balance_baseline.assess(
+                {
+                    "median_trunk_roll_degrees": roll,
+                    "ml_sway_mean_velocity": velocity,
+                }
+            )
+        self.session = BefastSession(self.config, balance_baseline)
 
     def run_eye_screen(self, gaze_factory):
         self.session.start_stage("eyes", now=0.0)
@@ -213,6 +230,75 @@ class BefastSessionTest(unittest.TestCase):
         )
         checked = self.session.snapshot(now=3.2)
         self.assertEqual(checked["items"]["B"]["status"], "negative")
+        self.assertIn(
+            "ml_sway_mean_velocity",
+            checked["items"]["B"]["metrics"],
+        )
+
+    def test_increased_lateral_sway_from_personal_baseline_is_positive(self):
+        result = self.run_balance_screen(
+            lambda index: standing_points(
+                body_shift=0.05 if index % 2 else -0.05
+            )
+        )
+        self.session.submit_manual(
+            {"balance_problem": False},
+            new_or_sudden=True,
+        )
+        checked = self.session.snapshot(now=3.2)
+
+        self.assertEqual(result["items"]["B"]["status"], "positive")
+        self.assertEqual(checked["items"]["B"]["status"], "positive")
+        self.assertEqual(
+            checked["items"]["B"]["reason"],
+            "increased_mediolateral_sway_velocity",
+        )
+
+    def test_zero_dispersion_baseline_does_not_invent_a_noise_floor(self):
+        baseline = PersonalBalanceBaseline(
+            BefastConfig(balance_baseline_windows=2)
+        )
+        stable = {
+            "median_trunk_roll_degrees": 0.0,
+            "ml_sway_mean_velocity": 0.0,
+        }
+        baseline.assess(stable)
+        baseline.assess(stable)
+
+        result = baseline.assess(
+            {
+                "median_trunk_roll_degrees": 1.0,
+                "ml_sway_mean_velocity": 0.1,
+            }
+        )
+
+        self.assertEqual(result["status"], "unscorable")
+        self.assertEqual(
+            set(result["unscorable_domains"]),
+            {"trunk_orientation", "mediolateral_sway"},
+        )
+
+    def test_personal_balance_baseline_persists_between_runs(self):
+        config = BefastConfig(balance_baseline_windows=2)
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / "balance-baseline.json"
+            baseline = PersonalBalanceBaseline(config, path)
+            baseline.assess(
+                {
+                    "median_trunk_roll_degrees": -0.2,
+                    "ml_sway_mean_velocity": 0.01,
+                }
+            )
+
+            restored = PersonalBalanceBaseline(config, path)
+            self.assertEqual(restored.snapshot()["windows"], 1)
+            restored.assess(
+                {
+                    "median_trunk_roll_degrees": 0.2,
+                    "ml_sway_mean_velocity": 0.02,
+                }
+            )
+            self.assertTrue(restored.ready)
 
     def test_automated_face_asymmetry_with_sudden_onset_is_emergency(self):
         self.run_face_screen(

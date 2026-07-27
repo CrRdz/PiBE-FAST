@@ -5,7 +5,13 @@
 """
 
 from .arms import ArmDriftScreen, arm_frame_metrics
-from .balance import BalanceScreen, balance_frame_metrics
+from .balance import (
+    BALANCE_EVIDENCE_VERSION,
+    BalanceScreen,
+    PersonalBalanceBaseline,
+    balance_frame_metrics,
+    summarize_balance_window,
+)
 from .config import BefastConfig
 from .eyes import EyeMovementScreen, eye_frame_metrics
 from .face import FaceSmileScreen, face_frame_metrics
@@ -28,10 +34,13 @@ _point = visible_point
 __all__ = [
     "ArmDriftScreen",
     "BalanceScreen",
+    "PersonalBalanceBaseline",
+    "BALANCE_EVIDENCE_VERSION",
     "BefastConfig",
     "BefastSession",
     "EyeMovementScreen",
     "FaceSmileScreen",
     "MotionResult",
     "Point",
+    "summarize_balance_window",
 ]

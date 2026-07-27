@@ -192,6 +192,7 @@ class PassiveSpeechTest(unittest.TestCase):
             second["latest_window"]["changed_domains"],
             ["phonation", "timing"],
         )
+        self.assertEqual(second["recent_anomaly_history"], [True, True])
         self.assertFalse(second["clinical_validation"])
         self.assertEqual(second["evidence_version"], EVIDENCE_VERSION)
 

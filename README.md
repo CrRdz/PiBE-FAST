@@ -72,7 +72,7 @@ A 需要双臂平举，B 需要在安全条件下站立。标准化动作让不�
 
 当前被动层实现了两类只用于触发后续确认的信号：
 
-- 低频人体姿态与“快速转变后持续躺倒”的跌倒序列；
+- 低频人体姿态中的“快速转变后持续躺倒”跌倒序列，以及相对个人基线的持续平衡变化；
 - 本地麦克风自然语音窗口与个人声学基线的持续变化。
 
 被动语音默认连续采集 8 秒窗口、间隔 1 秒，先用 6 个有效窗口建立个人基线。v2 根据
@@ -94,8 +94,9 @@ A 需要双臂平举，B 需要在安全条件下站立。标准化动作让不�
 | 项目选择 / B 输入 / 单项报告 | 继续 | 暂停 | 暂停 | 选择项目、填写 B、查看历史报告 |
 | S 录音 / 分析 | 继续 | 暂停 | 暂停 | 短时 ALSA 采集与本地 whisper.cpp 推理 |
 
-待机时 JSONL 只在实际执行低频推理时写入，不按每个摄像头帧写盘。自然语音基线保存在
-`data/speech/passive-baseline.json`，每个临时 WAV 在分析后立即删除。可以通过
+待机时 JSONL 只在实际执行低频推理时写入，不按每个摄像头帧写盘。平衡基线默认保存在
+`data/balance-baseline.json`，自然语音基线保存在 `data/speech/passive-baseline.json`，
+每个临时 WAV 在分析后立即删除。可以通过
 `--standby-pose-fps` 调整负载，通过 `--disable-passive-monitor` 完全关闭被动推理，
 通过 `--disable-passive-speech` 单独关闭长期语音监测，通过
 `--scheduled-screen-interval-hours` 启用周期提醒。
@@ -175,33 +176,44 @@ Raspberry Pi
 
 ### B — Balance / 平衡
 
-**目标：**发现明显的持续侧偏或站立摆动，并允许本人/照护者直接报告突然失衡。
+**目标：**在持续监控中发现相对个人基线的躯干方向或横向摆动变化，并允许
+本人/照护者直接报告突然失衡。
 
 **输入：**MoveNet 的左右肩、左右髋和左右踝关键点，以及站立姿态质量门槛。
 
 **计算：**
 
-1. 计算肩中心、髋中心和双踝支撑中心。
-2. 身体中心定义为肩中心与髋中心的平均位置。
-3. 使用肩宽进行尺度归一化：
+1. 计算肩中心、髋中心、躯干轴和双踝中点。
+2. 用肩宽归一化躯干中心相对双踝中点的横向位置；该量只是摄像头运动学代理，
+   不是力台压力中心（COP）或真实全身质心。
+3. 计算躯干轴相对画面竖直方向的角度：
 
    ```text
-   body_support_offset = (body_center_x - ankle_center_x) / shoulder_width
+   trunk_roll = atan2(shoulder_center_x - hip_center_x,
+                      hip_center_y - shoulder_center_y)
    ```
 
-4. 预热 1.5 秒后采集约 6 秒。
-5. 使用采样中位数表示持续侧偏，使用第 5–95 百分位范围表示摆动幅度。
+4. 预热 1.5 秒后采集 30 秒有效安静站立；默认积累 5 个合格窗口形成个人基线。
+5. 窗口级计算躯干方向中位数、横向摆动 RMS、第 5–95 百分位范围、路径长度及
+   平均速度。
+6. 后续窗口用 median/MAD（MAD 退化时同时参考 IQR）与个人基线比较。
 
-**当前工程规则：**
+**判定规则：**
 
-- 至少 20 个有效样本且有效帧比例不低于 55%；
-- 持续侧偏绝对值达到 `0.40 × 肩宽`：阳性；
-- 摆动范围达到 `0.50 × 肩宽`：阳性；
+- 至少 30 个有效样本且有效帧比例不低于 75%；
+- 校准完成前返回 `insufficient`，不伪造自动正常结论；
+- 移除了 `0.40 × 肩宽` 和 `0.50 × 肩宽` 固定工程阈值；
+- 躯干方向变化或横向摆动平均速度增加达到 modified Z-score `3.5` 时，仅触发
+  后续主动筛查；`3.5` 是稳健统计过程界值，不是卒中临床 cutoff；
+- 若个人基线离散度为零，变化分数不可估计时返回 `insufficient`，不加入任意噪声下限；
 - 全身、脚踝或稳定站姿持续不可见：`insufficient`；
 - 本人/照护者报告突然失衡时，无需冒险站立，B 可直接记为阳性。
 
-**限制：**单目姿态不能测量眩晕、共济失调或深度方向摆动；地面、镜头角度、辅助器具、
-骨科疾病和既往残疾都会影响结果。
+参数与论文的逐项映射见
+[持续平衡监测：证据、实现与限制](docs/balance-evidence.md)。
+
+**限制：**单目姿态不能测量 COP、眩晕、共济失调或深度方向摆动；地面、镜头角度、
+辅助器具、骨科疾病和既往残疾都会影响结果。“与个人基线一致”不能排除卒中。
 
 ### E — Eyes / 眼睛
 
@@ -474,12 +486,14 @@ python -m app.main \
   --source camera \
   --camera-backend picamera2 \
   --standby-pose-fps 2 \
+  --balance-baseline-path data/balance-baseline.json \
   --passive-speech-window-seconds 8 \
   --passive-speech-baseline-windows 6 \
   --scheduled-screen-interval-hours 0
 ```
 
 - `--standby-pose-fps 2`：待机 MoveNet 频率，越低越省 CPU，但快速事件采样更稀疏；
+- `--balance-baseline-path`：同一人的 5 个合格平衡窗口持久化位置；
 - `--disable-passive-monitor`：只保留手动或照护者触发；
 - `--passive-speech-window-seconds 8`：每个自然语音分析窗口的长度；
 - `--passive-speech-interval-seconds 1`：窗口之间的间隔；
@@ -499,6 +513,11 @@ python -m app.main \
 启动后由同一人在较安静环境中自然说话，直到 `assessment` 变为 `stable`。之后可改变
 说话节律或播放另一种频谱的语音观察多窗口投票；按 `Ctrl-C` 停止。这个脚本不会保留
 日常 WAV。macOS 首次运行时需要允许终端/FFmpeg 使用麦克风。
+
+完整 Web 服务的 `http://localhost:8080` 中，点击 S 后可选择“长期语音监测”或
+“朗读固定句”。长期监测页实时显示个人基线进度、当前响度、有效语音时长、三类
+声学域偏离分数以及最近 5 个有效窗口的异常投票。长期监听只负责提示变化；进入固定句
+检测时长期监听会暂时暂停，完成后恢复。
 
 然后在同一局域网的手机或电脑访问：
 
@@ -732,9 +751,10 @@ Actual inference scheduling:
 | S recording / analysis | continues | paused | paused | short ALSA capture and local whisper.cpp inference |
 
 In standby, JSONL is written only when low-rate inference actually runs, not for
-every camera frame. The natural-speech baseline is stored in
-`data/speech/passive-baseline.json`; each temporary WAV is deleted immediately
-after analysis. Tune load with `--standby-pose-fps`, disable pose triggers with
+every camera frame. The balance baseline defaults to `data/balance-baseline.json`,
+and the natural-speech baseline is stored in `data/speech/passive-baseline.json`;
+each temporary WAV is deleted immediately after analysis. Tune load with
+`--standby-pose-fps`, disable pose triggers with
 `--disable-passive-monitor`, disable long-running speech with
 `--disable-passive-speech`, and enable periodic prompts with
 `--scheduled-screen-interval-hours`.
@@ -828,34 +848,50 @@ To limit Raspberry Pi CPU load and thermal pressure, inference is stage-aware:
 
 ### B — Balance
 
-**Purpose:** detect persistent lateral lean or large standing sway, while allowing
-the person or caregiver to directly report sudden loss of balance.
+**Purpose:** detect sustained changes in trunk orientation or mediolateral sway
+relative to a personal baseline during long-running monitoring, while allowing the
+person or caregiver to directly report sudden loss of balance.
 
 **Inputs:** MoveNet left/right shoulders, hips, and ankles, gated by standing-pose
 quality.
 
 **Method:**
 
-1. Compute shoulder, hip, and ankle-support centers.
-2. Define the body center as the mean of the shoulder and hip centers.
-3. Normalize lateral displacement by shoulder width:
+1. Compute shoulder and hip centers, the trunk axis, and the ankle midpoint.
+2. Normalize the trunk-center position relative to the ankle midpoint by shoulder
+   width. This is a camera kinematic proxy, not force-plate COP or true whole-body
+   center of mass.
+3. Compute trunk-axis orientation relative to image vertical:
 
    ```text
-   body_support_offset = (body_center_x - ankle_center_x) / shoulder_width
+   trunk_roll = atan2(shoulder_center_x - hip_center_x,
+                      hip_center_y - shoulder_center_y)
    ```
 
-4. After a 1.5-second warm-up, collect approximately 6 seconds of data.
-5. Use the median for persistent offset and the 5th–95th percentile range for sway.
+4. After a 1.5-second warm-up, collect 30 seconds of valid quiet standing. Five
+   qualified windows form the default personal baseline.
+5. Summarize median trunk orientation, mediolateral RMS, 5th–95th percentile
+   range, path length, and mean velocity.
+6. Compare later windows with the personal median/MAD profile, using IQR when MAD
+   degenerates.
 
-**Current engineering rules:** at least 20 valid samples and 55% valid frames;
-`0.40 × shoulder width` persistent offset or `0.50 × shoulder width` sway is
-positive. Missing ankles/body or an unstable pose produces `insufficient`.
-A reported sudden balance problem can mark B positive without requiring an unsafe
-standing attempt.
+**Decision rules:** at least 30 valid samples and 75% valid frames. Calibration
+returns `insufficient` rather than a false normal result. The former
+`0.40 × shoulder width` and `0.50 × shoulder width` engineering cutoffs have been
+removed. A trunk-orientation change or increased mediolateral mean velocity at
+modified Z-score `3.5` triggers active follow-up only; `3.5` is a robust process
+monitoring boundary, not a clinical stroke cutoff. If personal-baseline dispersion
+is zero, an unscorable change returns `insufficient` instead of introducing an
+arbitrary noise floor. Missing ankles/body or an unstable pose produces
+`insufficient`. A reported sudden balance problem can mark B positive without
+requiring an unsafe standing attempt.
+
+See [Long-running balance monitoring: evidence, implementation, and
+limitations](docs/balance-evidence.md) for the paper-to-code mapping.
 
 **Limitations:** monocular pose cannot measure vertigo, ataxia, or depth-axis sway.
 Camera angle, walking aids, orthopedic disease, and pre-existing disability can
-affect the result.
+affect the result. Agreement with the personal baseline cannot rule out stroke.
 
 ### E — Eyes
 
@@ -1124,12 +1160,14 @@ python -m app.main \
   --source camera \
   --camera-backend picamera2 \
   --standby-pose-fps 2 \
+  --balance-baseline-path data/balance-baseline.json \
   --passive-speech-window-seconds 8 \
   --passive-speech-baseline-windows 6 \
   --scheduled-screen-interval-hours 0
 ```
 
 - `--standby-pose-fps 2`: lower values save CPU but sample rapid events less often;
+- `--balance-baseline-path`: persistent location for one person's five qualified balance windows;
 - `--disable-passive-monitor`: retain only user/caregiver-triggered screening;
 - `--passive-speech-window-seconds 8`: duration of each natural-speech window;
 - `--passive-speech-interval-seconds 1`: gap between windows;
@@ -1152,6 +1190,13 @@ engineering tests. Do not treat a failure to trigger as a medical negative or tr
 to imitate stroke symptoms. Press `Ctrl-C` to stop. Routine WAV files are not
 retained. On first use, macOS must allow the terminal/FFmpeg to access the
 microphone.
+
+At `http://localhost:8080`, select S and then choose either long-running
+monitoring or fixed-phrase reading. The monitoring view visualizes baseline
+progress, input level, voiced duration, three acoustic-domain deviation scores,
+and the five most recent valid-window votes. Passive monitoring remains a change
+trigger; the fixed-phrase reading check temporarily pauses passive capture while
+it runs.
 
 Open `http://<raspberry-pi-ip>:8080` from a phone or computer on the same network,
 or use an SSH tunnel. This HTTP URL supports the host camera, but mobile browsers
@@ -1290,8 +1335,14 @@ data/
 
 ## References / 参考资料
 
+- [持续平衡监测：证据、实现与限制](docs/balance-evidence.md)
 - [长期语音监测：证据、实现与限制](docs/speech-evidence.md)
-- [Speech-study BibTeX metadata](docs/references.bib)
+- [Balance and speech BibTeX metadata](docs/references.bib)
+- [Aroor et al. 2017 — BE-FAST and strokes missed by FAST](https://doi.org/10.1161/STROKEAHA.116.015169)
+- [Dai et al. 2022 — lateropulsion prevalence after stroke](https://doi.org/10.1212/WNL.0000000000200010)
+- [Aryan et al. 2023 — standing-balance force-plate reliability after stroke](https://doi.org/10.1016/j.heliyon.2023.e21046)
+- [Ruhe et al. 2010 — COP test–retest reliability review](https://doi.org/10.1016/j.gaitpost.2010.09.012)
+- [Yeung et al. 2014 — Kinect body-sway assessment](https://doi.org/10.1016/j.gaitpost.2014.06.012)
 - [De Cock et al. 2021 — acute ischemic stroke dysarthria](https://doi.org/10.1111/1460-6984.12607)
 - [Mou et al. 2018 — Mandarin post-stroke vowel acoustics](https://doi.org/10.1038/s41598-018-32429-8)
 - [Sanguedolce et al. 2025 — acoustic and glottal stroke-speech features](https://doi.org/10.21437/Interspeech.2025-2313)

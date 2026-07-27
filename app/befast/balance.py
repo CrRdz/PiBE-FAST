@@ -1,9 +1,18 @@
-"""B（Balance）：检测站立中心偏移/摆动，并与人工平衡观察合并。"""
+"""B（Balance）：个人基线上的持续侧倾与横向摆动变化监测。
+
+本模块有意使用 ``trunk kinematic proxy``（躯干运动学代理）命名。单目
+MoveNet 关键点既不是力台压力中心（COP），也不是真实全身质心（TBCM）。
+特征选择来自卒中 lateropulsion 与静态姿势描记研究；自动判定只表示相对
+个人基线的持续变化，不能诊断或排除卒中。
+"""
 
 from __future__ import annotations
 
-from math import hypot
+import json
+from math import atan2, degrees, hypot, sqrt
+from pathlib import Path
 from statistics import median
+import threading
 from typing import Any, Mapping, Sequence
 
 from app.keypoints import keypoint_map
@@ -13,13 +22,20 @@ from .pose_geometry import percentile, visible_point
 from .result import MotionResult, motion_report_item, report_item
 
 
+BALANCE_EVIDENCE_VERSION = "stroke-balance-evidence-v1"
+BALANCE_BASELINE_FEATURES = (
+    "median_trunk_roll_degrees",
+    "ml_sway_mean_velocity",
+)
+
+
 def balance_frame_metrics(
     keypoints: Sequence[Mapping[str, float]], min_score: float
 ) -> dict[str, float] | None:
-    """从单帧关键点计算身体中心相对双脚支撑中心的横向偏移。"""
+    """计算单帧躯干侧倾及躯干相对双踝中点的横向位置。"""
 
     points = keypoint_map(keypoints)
-    # 肩、胯用于估计身体中心，脚踝用于估计站立支撑中心。
+    # 肩、胯描述躯干轴，脚踝中点仅作为画面内的支撑参照；它不是 COP。
     required_names = (
         "left_shoulder",
         "right_shoulder",
@@ -38,18 +54,271 @@ def balance_frame_metrics(
         right_shoulder[0] - left_shoulder[0],
         right_shoulder[1] - left_shoulder[1],
     )
-    if shoulder_width <= 1e-4:
+    if shoulder_width <= 0.0:
         return None
-    # 所有横向距离都除以肩宽，使结果不依赖画面缩放。
+
     shoulder_center_x = (left_shoulder[0] + right_shoulder[0]) / 2.0
+    shoulder_center_y = (left_shoulder[1] + right_shoulder[1]) / 2.0
     hip_center_x = (left_hip[0] + right_hip[0]) / 2.0
-    support_center_x = (left_ankle[0] + right_ankle[0]) / 2.0
-    body_center_x = (shoulder_center_x + hip_center_x) / 2.0
+    hip_center_y = (left_hip[1] + right_hip[1]) / 2.0
+    trunk_height = hip_center_y - shoulder_center_y
+    if trunk_height <= 0.0:
+        return None
+    ankle_midpoint_x = (left_ankle[0] + right_ankle[0]) / 2.0
+    trunk_center_x = (shoulder_center_x + hip_center_x) / 2.0
+    # 正值表示肩中心相对髋中心向画面右侧倾斜，负值表示向左。
+    trunk_roll_degrees = degrees(
+        atan2(
+            shoulder_center_x - hip_center_x,
+            trunk_height,
+        )
+    )
     return {
-        "body_support_offset": (body_center_x - support_center_x) / shoulder_width,
+        "trunk_support_offset": (
+            trunk_center_x - ankle_midpoint_x
+        )
+        / shoulder_width,
+        "trunk_roll_degrees": trunk_roll_degrees,
         "torso_lateral_offset": (shoulder_center_x - hip_center_x) / shoulder_width,
         "shoulder_width": shoulder_width,
     }
+
+
+def summarize_balance_window(
+    timestamps: Sequence[float],
+    frame_metrics: Sequence[Mapping[str, float]],
+) -> dict[str, float]:
+    """把一段安静站立转换成文献常用的幅度、路径和速度类运动学代理。"""
+
+    if len(timestamps) != len(frame_metrics) or not frame_metrics:
+        raise ValueError("timestamps and frame_metrics must be non-empty and aligned")
+
+    offsets = [float(value["trunk_support_offset"]) for value in frame_metrics]
+    rolls = [float(value["trunk_roll_degrees"]) for value in frame_metrics]
+    offset_center = median(offsets)
+    roll_center = median(rolls)
+    offset_residuals = [value - offset_center for value in offsets]
+    roll_residuals = [value - roll_center for value in rolls]
+    path_length = sum(
+        abs(current - previous)
+        for previous, current in zip(offsets, offsets[1:])
+    )
+    duration = max(float(timestamps[-1]) - float(timestamps[0]), 1e-9)
+
+    return {
+        "median_trunk_support_offset": offset_center,
+        "median_trunk_roll_degrees": roll_center,
+        "ml_sway_rms": sqrt(
+            sum(value * value for value in offset_residuals)
+            / len(offset_residuals)
+        ),
+        "ml_sway_p95_range": (
+            percentile(offsets, 0.95) - percentile(offsets, 0.05)
+        ),
+        "ml_sway_path_length": path_length,
+        "ml_sway_mean_velocity": path_length / duration,
+        "trunk_roll_rms_degrees": sqrt(
+            sum(value * value for value in roll_residuals)
+            / len(roll_residuals)
+        ),
+        "window_duration_seconds": duration,
+        "valid_samples": float(len(frame_metrics)),
+    }
+
+
+class PersonalBalanceBaseline:
+    """保存个人重复站立窗口，并用 median/MAD 监测后续持续变化。"""
+
+    def __init__(
+        self,
+        config: BefastConfig | None = None,
+        path: str | Path | None = None,
+    ) -> None:
+        self.config = config or BefastConfig()
+        self.path = Path(path) if path is not None else None
+        self.lock = threading.RLock()
+        self.samples: list[dict[str, float]] = []
+        self._load()
+
+    @property
+    def ready(self) -> bool:
+        with self.lock:
+            return len(self.samples) >= max(
+                1, int(self.config.balance_baseline_windows)
+            )
+
+    def reset(self) -> None:
+        with self.lock:
+            self.samples.clear()
+            if self.path is not None:
+                self.path.unlink(missing_ok=True)
+
+    def snapshot(self) -> dict[str, Any]:
+        with self.lock:
+            return {
+                "ready": len(self.samples)
+                >= max(1, int(self.config.balance_baseline_windows)),
+                "windows": len(self.samples),
+                "target_windows": max(
+                    1, int(self.config.balance_baseline_windows)
+                ),
+                "profile": self._profile_locked(),
+                "comparison": "personal_median_mad",
+                "evidence_version": BALANCE_EVIDENCE_VERSION,
+            }
+
+    def assess(
+        self,
+        features: Mapping[str, float],
+        *,
+        learn_if_needed: bool = True,
+    ) -> dict[str, Any]:
+        """校准个人基线，或返回当前窗口相对基线的稳健变化分数。"""
+
+        sample = {
+            name: float(features[name])
+            for name in BALANCE_BASELINE_FEATURES
+            if name in features
+        }
+        if len(sample) != len(BALANCE_BASELINE_FEATURES):
+            raise ValueError("balance summary is missing baseline features")
+
+        with self.lock:
+            target = max(1, int(self.config.balance_baseline_windows))
+            if len(self.samples) < target:
+                if learn_if_needed:
+                    self.samples.append(sample)
+                    self._save_locked()
+                return {
+                    "status": "calibrating",
+                    "changed_domains": [],
+                    "unscorable_domains": [],
+                    "scores": {},
+                    "baseline_windows": len(self.samples),
+                    "baseline_target": target,
+                }
+
+            profile = self._profile_locked()
+            roll_values = profile["median_trunk_roll_degrees"]
+            velocity_values = profile["ml_sway_mean_velocity"]
+            roll_delta = abs(
+                sample["median_trunk_roll_degrees"] - roll_values["median"]
+            )
+            # Stroke balance literature associates instability with increased sway
+            # speed; a decrease is therefore not treated as an abnormal direction.
+            velocity_delta = max(
+                0.0,
+                sample["ml_sway_mean_velocity"] - velocity_values["median"],
+            )
+            roll_score = (
+                0.0
+                if roll_delta == 0.0
+                else (
+                    roll_delta / roll_values["scale"]
+                    if roll_values["scale"] > 0.0
+                    else None
+                )
+            )
+            velocity_score = (
+                0.0
+                if velocity_delta == 0.0
+                else (
+                    velocity_delta / velocity_values["scale"]
+                    if velocity_values["scale"] > 0.0
+                    else None
+                )
+            )
+            threshold = float(self.config.balance_robust_z_threshold)
+            changed_domains = []
+            unscorable_domains = []
+            if roll_score is None:
+                unscorable_domains.append("trunk_orientation")
+            elif roll_score >= threshold:
+                changed_domains.append("trunk_orientation")
+            if velocity_score is None:
+                unscorable_domains.append("mediolateral_sway")
+            elif velocity_score >= threshold:
+                changed_domains.append("mediolateral_sway")
+            status = "changed" if changed_domains else "stable"
+            if unscorable_domains and not changed_domains:
+                status = "unscorable"
+            return {
+                "status": status,
+                "changed_domains": changed_domains,
+                "unscorable_domains": unscorable_domains,
+                "scores": {
+                    "trunk_orientation": roll_score,
+                    "mediolateral_sway": velocity_score,
+                },
+                "baseline_windows": len(self.samples),
+                "baseline_target": target,
+            }
+
+    def _profile_locked(self) -> dict[str, dict[str, float]]:
+        if not self.samples:
+            return {}
+        profile: dict[str, dict[str, float]] = {}
+        for name in BALANCE_BASELINE_FEATURES:
+            values = [
+                float(sample[name])
+                for sample in self.samples
+                if name in sample
+            ]
+            if not values:
+                continue
+            center = median(values)
+            mad_scale = 1.4826 * median(
+                [abs(value - center) for value in values]
+            )
+            iqr_scale = (
+                percentile(values, 0.75) - percentile(values, 0.25)
+            ) / 1.349
+            profile[name] = {
+                "median": center,
+                # 不人为加入传感器噪声下限。若两种离散度都为零而后续值
+                # 改变，modified Z-score 无定义，调用方应返回数据不足。
+                "scale": max(mad_scale, iqr_scale),
+                "sample_count": float(len(values)),
+            }
+        return profile
+
+    def _load(self) -> None:
+        if self.path is None or not self.path.exists():
+            return
+        try:
+            payload = json.loads(self.path.read_text(encoding="utf-8"))
+            loaded = []
+            for raw in payload.get("samples", []):
+                sample = {
+                    name: float(raw[name])
+                    for name in BALANCE_BASELINE_FEATURES
+                    if name in raw
+                }
+                if len(sample) == len(BALANCE_BASELINE_FEATURES):
+                    loaded.append(sample)
+            limit = max(1, int(self.config.balance_baseline_windows))
+            self.samples = loaded[-limit:]
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            self.samples = []
+
+    def _save_locked(self) -> None:
+        if self.path is None:
+            return
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = self.path.with_suffix(self.path.suffix + ".tmp")
+        temporary.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "evidence_version": BALANCE_EVIDENCE_VERSION,
+                    "samples": self.samples,
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        temporary.replace(self.path)
 
 
 def balance_report_item(
@@ -71,10 +340,15 @@ def balance_report_item(
 
 
 class BalanceScreen:
-    """累计站立姿态样本，检测持续侧偏和较大的横向摆动。"""
+    """累计安静站立窗口，并与同一人的多窗口基线比较。"""
 
-    def __init__(self, config: BefastConfig) -> None:
+    def __init__(
+        self,
+        config: BefastConfig,
+        baseline: PersonalBalanceBaseline | None = None,
+    ) -> None:
         self.config = config
+        self.baseline = baseline or PersonalBalanceBaseline(config)
         self.reset()
 
     @property
@@ -89,7 +363,8 @@ class BalanceScreen:
         self.start_ts: float | None = None
         self.capture_frames = 0
         self.valid_frames = 0
-        self.offsets: list[float] = []
+        self.timestamps: list[float] = []
+        self.samples: list[dict[str, float]] = []
         self.live_metrics: dict[str, float] = {}
 
     def start(self, ts: float) -> None:
@@ -121,16 +396,17 @@ class BalanceScreen:
         if frame_metrics is not None and pose == "standing":
             self.valid_frames += 1
             self.live_metrics = frame_metrics
-            self.offsets.append(float(frame_metrics["body_support_offset"]))
+            self.timestamps.append(float(ts))
+            self.samples.append(frame_metrics)
         return elapsed >= self.duration_seconds
 
     def finish(self) -> MotionResult:
-        """汇总中心偏移序列，输出持续侧偏、过度摆动或阴性结果。"""
+        """汇总站立窗口，并输出相对个人基线的持续变化结果。"""
 
         valid_fraction = self.valid_frames / max(self.capture_frames, 1)
         # 关键点可见且保持站立的帧数不足时，不输出“正常”。
         if (
-            len(self.offsets) < self.config.balance_min_valid_samples
+            len(self.samples) < self.config.balance_min_valid_samples
             or valid_fraction < self.config.balance_min_valid_fraction
         ):
             return MotionResult(
@@ -138,39 +414,87 @@ class BalanceScreen:
                 reason="stable_standing_pose_not_visible_long_enough",
                 quality=valid_fraction,
                 metrics={
-                    "valid_samples": float(len(self.offsets)),
+                    "valid_samples": float(len(self.samples)),
                     "valid_fraction": valid_fraction,
+                },
+                details={
+                    "measurement": "camera_trunk_kinematic_proxy_not_cop",
+                    "evidence_version": BALANCE_EVIDENCE_VERSION,
                 },
             )
 
-        center_offset = median(self.offsets)
-        # 采用 5%～95% 范围衡量摆动，减少偶发关键点跳变的影响。
-        sway_range = percentile(self.offsets, 0.95) - percentile(self.offsets, 0.05)
+        metrics = summarize_balance_window(self.timestamps, self.samples)
         metrics = {
-            "median_body_support_offset": center_offset,
-            "sway_range": sway_range,
-            "valid_samples": float(len(self.offsets)),
+            **metrics,
             "valid_fraction": valid_fraction,
         }
-        if abs(center_offset) >= self.config.balance_offset_threshold:
-            # 正偏移表示身体中心位于支撑中心右侧，负值则位于左侧。
+        assessment = self.baseline.assess(metrics)
+        metrics.update(
+            {
+                "baseline_windows": float(assessment["baseline_windows"]),
+                "baseline_target": float(assessment["baseline_target"]),
+            }
+        )
+        for domain, metric_name in (
+            ("trunk_orientation", "trunk_orientation_change_score"),
+            ("mediolateral_sway", "mediolateral_sway_change_score"),
+        ):
+            score = assessment["scores"].get(domain)
+            if score is not None:
+                metrics[metric_name] = float(score)
+        details = {
+            "measurement": "camera_trunk_kinematic_proxy_not_cop",
+            "comparison": "personal_median_mad",
+            "statistical_change_threshold": (
+                self.config.balance_robust_z_threshold
+            ),
+            "threshold_role": "monitoring_only_not_clinical_cutoff",
+            "evidence_version": BALANCE_EVIDENCE_VERSION,
+        }
+        if assessment["status"] == "calibrating":
             return MotionResult(
-                status="positive",
-                reason="persistent_lateral_body_offset",
-                affected_side="right" if center_offset > 0 else "left",
+                status="insufficient",
+                reason="personal_balance_baseline_calibrating",
                 quality=valid_fraction,
                 metrics=metrics,
+                details=details,
             )
-        if sway_range >= self.config.balance_sway_range_threshold:
+        if assessment["status"] == "unscorable":
             return MotionResult(
-                status="positive",
-                reason="large_standing_sway",
+                status="insufficient",
+                reason="personal_balance_baseline_variability_not_estimable",
                 quality=valid_fraction,
                 metrics=metrics,
+                details={
+                    **details,
+                    "unscorable_domains": assessment["unscorable_domains"],
+                },
+            )
+        if "trunk_orientation" in assessment["changed_domains"]:
+            roll = metrics["median_trunk_roll_degrees"]
+            return MotionResult(
+                status="positive",
+                reason="sustained_trunk_orientation_change",
+                quality=valid_fraction,
+                metrics=metrics,
+                details={
+                    **details,
+                    # 只报告画面方向，不把身体倾斜方向误写成卒中患侧。
+                    "screen_direction": "right" if roll > 0 else "left",
+                },
+            )
+        if "mediolateral_sway" in assessment["changed_domains"]:
+            return MotionResult(
+                status="positive",
+                reason="increased_mediolateral_sway_velocity",
+                quality=valid_fraction,
+                metrics=metrics,
+                details=details,
             )
         return MotionResult(
             status="negative",
-            reason="no_clear_pose_based_balance_asymmetry",
+            reason="no_sustained_change_from_personal_balance_baseline",
             quality=valid_fraction,
             metrics=metrics,
+            details=details,
         )
