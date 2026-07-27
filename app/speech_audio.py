@@ -190,7 +190,7 @@ class AvfoundationMicrophoneCapture:
             "-f",
             "avfoundation",
             "-i",
-            f"none:{self.device}",
+            f":{'0' if self.device in {'', 'default'} else self.device}",
             "-t",
             str(max(1.0, float(config.capture_seconds))),
             "-ac",

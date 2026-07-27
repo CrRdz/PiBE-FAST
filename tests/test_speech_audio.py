@@ -1,9 +1,11 @@
+import io
 import tempfile
+import threading
 import unittest
 import wave
 from pathlib import Path
 from subprocess import CompletedProcess
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import numpy as np
 
@@ -70,6 +72,32 @@ class SpeechAudioTest(unittest.TestCase):
 
         self.assertIsInstance(backend, AlsaMicrophoneCapture)
         self.assertEqual(backend.device, "plughw:1,0")
+
+    def test_avfoundation_default_uses_first_audio_device(self):
+        with tempfile.TemporaryDirectory() as directory:
+            wav_path = Path(directory) / "speech.wav"
+            write_wav(wav_path)
+            process = Mock()
+            process.poll.return_value = 0
+            process.returncode = 0
+            process.stderr = io.StringIO("")
+            backend = AvfoundationMicrophoneCapture("default")
+
+            with (
+                patch("app.speech_audio.shutil.which", return_value="/bin/ffmpeg"),
+                patch(
+                    "app.speech_audio.subprocess.Popen",
+                    return_value=process,
+                ) as popen,
+            ):
+                backend.capture(
+                    wav_path,
+                    SpeechAudioConfig(capture_seconds=3.0),
+                    threading.Event(),
+                )
+
+        command = popen.call_args.args[0]
+        self.assertEqual(command[command.index("-i") + 1], ":0")
 
     def test_whisper_cpp_disables_gpu_on_macos(self):
         with tempfile.TemporaryDirectory() as directory:
