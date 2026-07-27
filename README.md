@@ -70,15 +70,23 @@ A 需要双臂平举，B 需要在安全条件下站立。标准化动作让不�
 - 断网时继续本地筛查；按配置记录 JSONL 和紧急事件短片段；
 - 后续可连接实体求助按钮、蜂鸣器、麦克风或可穿戴设备。
 
-当前被动层只实现低频人体姿态与“快速转变后持续躺倒”的跌倒序列检测。它的输出只能
-打开主动筛查并提醒照护者，**不能作为脑卒中阳性或阴性结果**。普通躺下不会触发；
-面部、眼动、手臂无力和言语检查仍必须在主动流程中完成。
+当前被动层实现了两类只用于触发后续确认的信号：
+
+- 低频人体姿态与“快速转变后持续躺倒”的跌倒序列；
+- 本地麦克风自然语音窗口与个人声学基线的持续变化。
+
+被动语音默认连续采集 8 秒窗口、间隔 1 秒，先用 6 个有效窗口建立个人基线。v2 根据
+卒中构音障碍声学研究把特征分为时序、发声、构音/共振三域；同一窗口至少两个域明显
+偏离个人基线才投异常票，最近 5 个有效窗口至少 3 票时，页面才建议执行固定句 S 确认。
+它不运行全天 Whisper，不保存日常原始录音，也尚未验证说话人身份。被动输出
+**不能作为构音障碍或脑卒中阳性/阴性结果**。论文到代码的逐项映射、工程假设及验证要求
+见 [`docs/speech-evidence.md`](docs/speech-evidence.md)。
 
 实际推理调度如下：
 
 | 运行状态 | 摄像头预览 | MoveNet | MediaPipe Face | 医学含义 |
 |---|---:|---:|---:|---|
-| 待机 | 默认 15 FPS | 默认约 2 FPS | 暂停 | 只寻找筛查触发信号 |
+| 待机 | 默认 15 FPS | 默认约 2 FPS | 暂停 | 姿态 + 自然语音变化触发信号 |
 | 等待 E/F 动作 | 继续 | 暂停 | 低频约 5 FPS | 判断脸部/眼睛是否进入正确位置 |
 | 等待 A/B 动作 | 继续 | 低频约 5 FPS | 暂停 | 判断肢体是否完整入镜及姿势是否安全 |
 | E/F 阶段 | 继续 | 暂停 | 默认 5 FPS | 眼动或面部标准化测量 |
@@ -86,9 +94,11 @@ A 需要双臂平举，B 需要在安全条件下站立。标准化动作让不�
 | 项目选择 / B 输入 / 单项报告 | 继续 | 暂停 | 暂停 | 选择项目、填写 B、查看历史报告 |
 | S 录音 / 分析 | 继续 | 暂停 | 暂停 | 短时 ALSA 采集与本地 whisper.cpp 推理 |
 
-待机时 JSONL 只在实际执行低频推理时写入，不按每个摄像头帧写盘。可以通过
+待机时 JSONL 只在实际执行低频推理时写入，不按每个摄像头帧写盘。自然语音基线保存在
+`data/speech/passive-baseline.json`，每个临时 WAV 在分析后立即删除。可以通过
 `--standby-pose-fps` 调整负载，通过 `--disable-passive-monitor` 完全关闭被动推理，
-通过 `--scheduled-screen-interval-hours` 启用周期提醒。
+通过 `--disable-passive-speech` 单独关闭长期语音监测，通过
+`--scheduled-screen-interval-hours` 启用周期提醒。
 
 > BE-FAST 识别的是已经突然出现的警示体征，不预测“即将中风”。如果已经出现任何
 > 突发症状，应立即拨打 120，不要为了完成主动筛查而等待。
@@ -293,7 +303,22 @@ Raspberry Pi
 
 ### S — Speech / 言语
 
-S 不再依赖人工勾选。用户点击“开始录音”后，服务端通过 `arecord` 从树莓派连接的
+Speech 现在分成两层。第一层是在待机页持续运行的自然语音变化监测：它不依赖固定文本，
+也不执行 ASR，而是与本机保存的个人声学基线比较。只有多个窗口持续变化时才提示进入
+第二层固定句确认。
+
+长期层的 v2 特征按论文中的言语子系统分组：
+
+1. 时序：停顿比例、平均停顿时长和基于能量峰的音节核速率代理；
+2. 发声：强度范围、F0 中位数与变化、局部 jitter、局部 shimmer 和 HNR；
+3. 构音/共振：自由语音 LPC 帧中的 F1/F2 分布四分位距。
+
+这些是适合树莓派本地运行的轻量近似量，不等同于论文里的强制对齐构音速率、标准元音
+VSA/VAI/FCR、Praat、YAGA 或 openSMILE/eGeMAPS。单一域变化不会产生异常票；
+多域、多窗口规则用于降低误触发，但仍是未经临床验证的工程规则。详见
+[`长期语音监测证据说明`](docs/speech-evidence.md)。
+
+固定句 S 不依赖人工勾选。用户点击“开始录音”后，服务端通过 `arecord` 从树莓派连接的
 ALSA 麦克风采集约 7 秒、16 kHz、16-bit、单声道 WAV，并用本地 `whisper.cpp`
 转写固定提示句“今天天气很好，我们一起去公园散步”。
 
@@ -390,8 +415,9 @@ brew install ffmpeg whisper-cpp
 ffmpeg -f avfoundation -list_devices true -i ""
 ```
 
-默认 `--speech-device default` 使用系统默认麦克风；也可以传入 AVFoundation 列出的
-音频设备名称或索引。
+macOS 上默认 `--speech-device default` 使用 AVFoundation 音频设备索引 `0`
+（通常是内置麦克风）；也可以传入 AVFoundation 列出的音频设备名称或索引。Linux/
+树莓派上的 `default` 仍表示 ALSA 默认设备。
 
 模型文件：
 
@@ -448,15 +474,31 @@ python -m app.main \
   --source camera \
   --camera-backend picamera2 \
   --standby-pose-fps 2 \
+  --passive-speech-window-seconds 8 \
+  --passive-speech-baseline-windows 6 \
   --scheduled-screen-interval-hours 0
 ```
 
 - `--standby-pose-fps 2`：待机 MoveNet 频率，越低越省 CPU，但快速事件采样更稀疏；
 - `--disable-passive-monitor`：只保留手动或照护者触发；
+- `--passive-speech-window-seconds 8`：每个自然语音分析窗口的长度；
+- `--passive-speech-interval-seconds 1`：窗口之间的间隔；
+- `--passive-speech-baseline-windows 6`：个人基线需要的有效窗口数；
+- `--disable-passive-speech`：关闭长期自然语音监测，但保留固定句 S；
 - `--scheduled-screen-interval-hours 12`：每 12 小时打开一次主动筛查提醒；默认 `0` 关闭。
 - `--speech-device plughw:CARD,DEV`：覆盖 ALSA 录音设备；用 `arecord -L` 查询；
 - `--speech-capture-seconds 7`：S 的单次固定录音时长；
 - `--disable-speech`：硬件尚未接入时关闭 S 后端；页面调用会返回不可用。
+
+只测试本地长期语音监测、不启动摄像头和姿态模型：
+
+```bash
+.venv/bin/python -m scripts.run_passive_speech_local --reset-baseline
+```
+
+启动后由同一人在较安静环境中自然说话，直到 `assessment` 变为 `stable`。之后可改变
+说话节律或播放另一种频谱的语音观察多窗口投票；按 `Ctrl-C` 停止。这个脚本不会保留
+日常 WAV。macOS 首次运行时需要允许终端/FFmpeg 使用麦克风。
 
 然后在同一局域网的手机或电脑访问：
 
@@ -495,6 +537,7 @@ GET  /api/history/<记录ID>
 GET  /api/history/<记录ID>/frame
 GET  /api/history/<记录ID>/audio
 GET  /api/speech/status
+GET  /api/speech/passive/status
 POST /api/camera/source      {"source":"host" | "client"}
 POST /api/camera/frame       Content-Type: image/jpeg
 POST /api/monitoring/trigger {"source":"user","reason":"felt_unwell"}
@@ -509,11 +552,15 @@ POST /api/befast/reset
 POST /api/speech/start    {"language":"zh","new_or_sudden":false}
 POST /api/speech/complete
 POST /api/speech/cancel
+POST /api/speech/passive/pause
+POST /api/speech/passive/resume
+POST /api/speech/passive/reset-baseline
 ```
 
 `/api/status` 中的 `befast.mode` 为 `standby` 或 `screening`；`monitoring` 字段显示
 当前推理调度、待机 FPS、最近被动状态和
-`medical_role=trigger_only_not_stroke_diagnosis`。
+`medical_role=trigger_only_not_stroke_diagnosis`。`passive_speech` 字段显示基线进度、
+最近窗口、多窗口异常票数以及是否建议执行固定句确认。
 
 历史接口只保存状态为 `positive` 的单项报告。元数据持久化在
 `data/history/history.sqlite3`，对应 JPEG 帧保存在 `data/history/frames/`；S 的
@@ -573,6 +620,7 @@ app/
     result.py             # 统一检测结果模型
   face_landmarker.py      # MediaPipe 478 点/52 blendshape 适配器
   monitoring.py           # 低频被动触发层与树莓派待机节流
+  passive_speech.py       # 长期自然语音基线与多窗口变化触发
   movenet.py              # TFLite MoveNet 推理
   camera.py               # OpenCV / Picamera2 视频输入
   pose_classifier.py      # standing / sitting / lying 质量门槛
@@ -584,6 +632,7 @@ app/
   event_recorder.py       # 可选紧急事件片段
 scripts/
   benchmark_face.py       # 不保存画面的 Face Landmarker 基准
+  run_passive_speech_local.py # 不启动摄像头的本地长期语音测试
 tests/
 models/
 data/
@@ -652,17 +701,29 @@ a desktop computer. It:
 - captures fixed-duration S audio from an attached ALSA microphone and runs local
   offline transcription; a physical help button, buzzer, or wearable can be added later.
 
-The current passive layer implements low-rate pose observation and a fall sequence
-requiring a rapid transition followed by sustained lying. Its output may open the
-guided workflow and alert a caregiver, but **it is never a positive or negative
-stroke result**. Ordinary lying does not trigger it. Face, gaze, arm weakness, and
-speech still require the active workflow.
+The passive layer now has two trigger-only signals:
+
+- low-rate pose observation with a fall sequence requiring a rapid transition
+  followed by sustained lying; and
+- long-running local natural-speech windows compared with a personal acoustic
+  baseline.
+
+Passive speech captures 8-second windows with a 1-second gap by default and
+builds a baseline from 6 valid windows. v2 groups paper-informed features into
+timing, phonation, and articulation/resonance domains. A window votes as changed
+only when at least two domains deviate from the personal baseline; the guided S
+check is recommended after at least 3 changed votes among the latest 5 valid
+windows. It does not run Whisper continuously, retain routine raw audio, or
+currently verify the speaker. Passive output is **never a positive or negative
+dysarthria or stroke result**. See
+[`docs/speech-evidence.md`](docs/speech-evidence.md) for the paper-to-code map,
+engineering assumptions, and required clinical validation.
 
 Actual inference scheduling:
 
 | State | Camera preview | MoveNet | MediaPipe Face | Medical role |
 |---|---:|---:|---:|---|
-| Standby | 15 FPS default | about 2 FPS default | paused | trigger signals only |
+| Standby | 15 FPS default | about 2 FPS default | paused | pose + natural-speech change triggers |
 | Waiting for E/F setup | continues | paused | about 5 FPS | verify face/eye framing |
 | Waiting for A/B setup | continues | about 5 FPS | paused | verify body framing and safe posture |
 | E/F | continues | paused | 5 FPS default | standardized gaze/face measurement |
@@ -671,8 +732,11 @@ Actual inference scheduling:
 | S recording / analysis | continues | paused | paused | short ALSA capture and local whisper.cpp inference |
 
 In standby, JSONL is written only when low-rate inference actually runs, not for
-every camera frame. Tune load with `--standby-pose-fps`, disable passive inference
-with `--disable-passive-monitor`, and enable periodic prompts with
+every camera frame. The natural-speech baseline is stored in
+`data/speech/passive-baseline.json`; each temporary WAV is deleted immediately
+after analysis. Tune load with `--standby-pose-fps`, disable pose triggers with
+`--disable-passive-monitor`, disable long-running speech with
+`--disable-passive-speech`, and enable periodic prompts with
 `--scheduled-screen-interval-hours`.
 
 > BE-FAST recognizes warning signs that have already appeared suddenly; it does
@@ -884,7 +948,26 @@ loose clothing, and perspective distortion can affect the result.
 
 ### S — Speech
 
-S no longer uses a manual abnormality checkbox. After **Start recording**, the
+Speech now has two layers. The standby page continuously compares natural speech
+with a local personal acoustic baseline without fixed text or ASR. Only a
+sustained multi-window change recommends the second-layer guided phrase check.
+
+The v2 long-running layer groups its features by speech subsystem:
+
+1. timing: pause fraction, mean pause duration, and an energy-peak syllable-nuclei
+   rate proxy;
+2. phonation: intensity range, F0 median/variation, local jitter, local shimmer,
+   and HNR;
+3. articulation/resonance: F1/F2 distribution IQR from connected-speech LPC frames.
+
+These lightweight Raspberry Pi estimators are not interchangeable with
+forced-aligned articulation rate, standardized-vowel VSA/VAI/FCR, Praat, YAGA,
+or openSMILE/eGeMAPS. A single changed domain does not cast an anomaly vote. The
+multi-domain and multi-window rules reduce nuisance triggers but remain
+unvalidated engineering rules. See the
+[`speech evidence note`](docs/speech-evidence.md).
+
+The guided S check does not use a manual abnormality checkbox. After **Start recording**, the
 server captures about 7 seconds of 16 kHz, 16-bit mono WAV through `arecord` and
 the Pi-attached ALSA microphone, then transcribes a fixed prompt locally with
 `whisper.cpp`.
@@ -979,8 +1062,9 @@ brew install ffmpeg whisper-cpp
 ffmpeg -f avfoundation -list_devices true -i ""
 ```
 
-The default `--speech-device default` selects the system microphone. An
-AVFoundation audio device name or index can be passed instead.
+On macOS, `--speech-device default` selects AVFoundation audio device index `0`
+(normally the built-in microphone); an AVFoundation audio device name or index
+can be passed instead. On Linux/Raspberry Pi, `default` retains its ALSA meaning.
 
 Required models:
 
@@ -1040,15 +1124,34 @@ python -m app.main \
   --source camera \
   --camera-backend picamera2 \
   --standby-pose-fps 2 \
+  --passive-speech-window-seconds 8 \
+  --passive-speech-baseline-windows 6 \
   --scheduled-screen-interval-hours 0
 ```
 
 - `--standby-pose-fps 2`: lower values save CPU but sample rapid events less often;
 - `--disable-passive-monitor`: retain only user/caregiver-triggered screening;
+- `--passive-speech-window-seconds 8`: duration of each natural-speech window;
+- `--passive-speech-interval-seconds 1`: gap between windows;
+- `--passive-speech-baseline-windows 6`: valid windows needed for the baseline;
+- `--disable-passive-speech`: disable long-running speech while retaining guided S;
 - `--scheduled-screen-interval-hours 12`: open a screen every 12 hours; `0` disables it.
 - `--speech-device plughw:CARD,DEV`: override the ALSA capture device listed by `arecord -L`;
 - `--speech-capture-seconds 7`: fixed S recording duration;
 - `--disable-speech`: disable the S backend until microphone hardware is installed.
+
+Test only long-running local speech, without starting camera or pose models:
+
+```bash
+.venv/bin/python -m scripts.run_passive_speech_local --reset-baseline
+```
+
+Have the same speaker talk naturally in a quiet setting until `assessment` becomes
+`stable`. The status output exposes per-feature and per-domain scores for local
+engineering tests. Do not treat a failure to trigger as a medical negative or try
+to imitate stroke symptoms. Press `Ctrl-C` to stop. Routine WAV files are not
+retained. On first use, macOS must allow the terminal/FFmpeg to access the
+microphone.
 
 Open `http://<raspberry-pi-ip>:8080` from a phone or computer on the same network,
 or use an SSH tunnel. This HTTP URL supports the host camera, but mobile browsers
@@ -1086,6 +1189,7 @@ GET  /api/history/<record-id>
 GET  /api/history/<record-id>/frame
 GET  /api/history/<record-id>/audio
 GET  /api/speech/status
+GET  /api/speech/passive/status
 POST /api/camera/source      {"source":"host" | "client"}
 POST /api/camera/frame       Content-Type: image/jpeg
 POST /api/monitoring/trigger {"source":"user","reason":"felt_unwell"}
@@ -1100,11 +1204,16 @@ POST /api/befast/reset
 POST /api/speech/start    {"language":"en","new_or_sudden":false}
 POST /api/speech/complete
 POST /api/speech/cancel
+POST /api/speech/passive/pause
+POST /api/speech/passive/resume
+POST /api/speech/passive/reset-baseline
 ```
 
 In `/api/status`, `befast.mode` is `standby` or `screening`. The `monitoring`
 object reports inference scheduling, standby FPS, the last passive state, and
-`medical_role=trigger_only_not_stroke_diagnosis`.
+`medical_role=trigger_only_not_stroke_diagnosis`. `passive_speech` reports
+baseline progress, the latest window, recent anomaly votes, and whether the
+guided phrase check is recommended.
 
 The history API persists positive single-check reports only. Metadata is stored
 in `data/history/history.sqlite3`, with JPEG frames in `data/history/frames/`
@@ -1161,6 +1270,7 @@ app/
     result.py             # shared result model
   face_landmarker.py      # MediaPipe 478-landmark/52-blendshape adapter
   monitoring.py           # throttled passive trigger layer for Pi standby
+  passive_speech.py       # natural-speech baseline and multi-window change trigger
   movenet.py              # TFLite MoveNet inference
   camera.py               # OpenCV / Picamera2 input
   pose_classifier.py      # standing / sitting / lying quality gate
@@ -1171,6 +1281,7 @@ app/
   keypoint_logger.py      # JSONL research logs
   event_recorder.py       # optional emergency event clips
 scripts/
+  run_passive_speech_local.py # local long-running speech test without camera models
   benchmark_face.py       # no-save Face Landmarker benchmark
 tests/
 models/
@@ -1179,6 +1290,12 @@ data/
 
 ## References / 参考资料
 
+- [长期语音监测：证据、实现与限制](docs/speech-evidence.md)
+- [Speech-study BibTeX metadata](docs/references.bib)
+- [De Cock et al. 2021 — acute ischemic stroke dysarthria](https://doi.org/10.1111/1460-6984.12607)
+- [Mou et al. 2018 — Mandarin post-stroke vowel acoustics](https://doi.org/10.1038/s41598-018-32429-8)
+- [Sanguedolce et al. 2025 — acoustic and glottal stroke-speech features](https://doi.org/10.21437/Interspeech.2025-2313)
+- [Jyothi et al. 2026 — F0 and duration features in stroke speech](https://doi.org/10.1038/s41598-026-40155-9)
 - [American Stroke Association — Stroke symptoms and BE-FAST](https://www.stroke.org/en/about-stroke/stroke-symptoms)
 - [MediaPipe Face Landmarker for Python](https://developers.google.com/edge/mediapipe/solutions/vision/face_landmarker/python)
 - [MediaPipe Raspberry Pi Face Landmarker example](https://github.com/google-ai-edge/mediapipe-samples/tree/main/examples/face_landmarker/raspberry_pi)
