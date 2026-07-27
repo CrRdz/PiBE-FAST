@@ -81,6 +81,18 @@
     .start h1 { margin: 0 0 8px; font-size: clamp(1.65rem, 4vw, 2.5rem); }
     .start p { margin: 0 auto 18px; max-width: 430px; color: var(--muted); line-height: 1.55; }
     .start .button { padding: 12px 22px; font-size: 1rem; }
+    .passive-speech-monitor { margin: 0 0 16px; padding: 12px; border: 1px solid #304252; border-radius: 11px; background: #0d171f; text-align: left; }
+    .passive-speech-monitor.stable { border-color: #2d7650; }
+    .passive-speech-monitor.calibrating, .passive-speech-monitor.waiting { border-color: #80672f; }
+    .passive-speech-monitor.suspected, .passive-speech-monitor.error { border-color: #a84851; background: #251317; }
+    .passive-monitor-head { display: flex; align-items: center; gap: 8px; }
+    .passive-monitor-dot { width: 9px; height: 9px; flex: 0 0 auto; border-radius: 50%; background: #7e8c98; }
+    .stable .passive-monitor-dot { background: var(--green); box-shadow: 0 0 0 4px #31d07f22; }
+    .calibrating .passive-monitor-dot, .waiting .passive-monitor-dot { background: var(--yellow); }
+    .suspected .passive-monitor-dot, .error .passive-monitor-dot { background: var(--red); box-shadow: 0 0 0 4px #ff586422; }
+    .passive-speech-monitor small { display: block; margin-top: 6px; color: #9eafbd; line-height: 1.4; }
+    .passive-monitor-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .passive-monitor-actions .button { padding: 6px 9px; font-size: .75rem; }
     .sheet { position: absolute; left: 50%; bottom: 22px; width: min(820px, calc(100% - 28px)); max-height: calc(100% - 44px); overflow: auto; transform: translateX(-50%); padding: 18px; border: 1px solid var(--line); border-radius: 16px; background: rgba(7, 13, 19, .94); box-shadow: 0 24px 80px #000c; backdrop-filter: blur(18px); }
     .sheet h2 { margin: 0 0 6px; }
     .sheet > p { margin: 0 0 14px; color: var(--muted); }
@@ -208,6 +220,15 @@
         <div class="start-inner">
           <h1 id="startTitle">Pi BE-FAST 筛查 Demo</h1>
           <p id="startText">进入后可单独选择 B、E、F、A 或 S；每项完成后立即生成报告，并可不限次数重复。</p>
+          <div id="passiveSpeechPanel" class="passive-speech-monitor">
+            <div class="passive-monitor-head"><span class="passive-monitor-dot"></span><strong id="passiveSpeechTitle">长期语音监测</strong></div>
+            <small id="passiveSpeechDetail">正在读取本地麦克风状态……</small>
+            <div class="passive-monitor-actions">
+              <button id="passiveMonitorButton" class="button ghost" onclick="togglePassiveSpeech()">暂停监听</button>
+              <button id="passiveBaselineButton" class="button ghost" onclick="resetPassiveSpeechBaseline()">重建个人基线</button>
+              <button id="passiveConfirmButton" class="button primary" onclick="startSpeechConfirmationFromMonitor()" hidden>进行固定句确认</button>
+            </div>
+          </div>
           <button id="startButton" class="button primary" onclick="startScreening()">选择检测项目</button>
         </div>
       </section>
@@ -300,6 +321,7 @@
       zh: {
         title: 'Pi BE-FAST 筛查 Demo', sub: '摄像头引导式筛查研究原型', emergency: '⚠ 突然出现任何 BE-FAST 症状，请立即拨打 120，不要等待本 Demo 完成。', cameraAlt: '当前选择的摄像头实时画面', languageLabel: '语言', progressLabel: '筛查进度', eyeTargetLabel: '眼动目标', cameraLabel:'摄像头', cameraSourceLabel:'摄像头来源', hostOption:'主机摄像头', autoHostOption:'自动切换（E/F 电脑 · A/B 手机）', faceHostCamera:'电脑前置摄像头 · E/F', poseHostCamera:'手机摄像头 · A/B', fallbackHostCamera:'目标摄像头不可用 · 当前摄像头回退', clientOption:'手机 / 当前设备',
         startText: '先选择摄像头，再进入单项检测。B、E、F、A、S 可任意选择、独立完成并不限次数重复；自动项目仍会用红绿提示引导，每次完成都会立即生成报告。', start: '选择检测项目', exit: '退出筛查',
+        passiveMonitorTitle:'长期语音监测', passiveDisabled:'长期语音监测未启用', passiveDisabledDetail:'启动服务时不要使用 --disable-passive-speech，即可在本地建立自然语音基线。', passiveUnavailable:'本地麦克风不可用', passivePaused:'长期监听已暂停', passivePausedDetail:'恢复后才会继续采集短窗口；固定句检测期间会自动暂停。', passiveCalibrating:'正在建立个人语音基线', passiveCalibrationDetail:'已采集 {count}/{target} 个有效自然语音窗口。请在安静环境中由同一人自然说话。', passiveWaiting:'正在等待自然语音', passiveWaitingDetail:'没有检测到足够的有效说话声音，原始录音不会保留。', passiveStable:'长期语音监测运行中', passiveStableDetail:'最近窗口与个人基线一致；这里只做变化触发，不用于诊断构音障碍或脑卒中。', passiveObserving:'检测到一次语音特征变化', passiveObservingDetail:'系统会继续观察多个窗口，单次变化不会触发告警。', passiveSuspected:'检测到持续语音特征变化', passiveSuspectedDetail:'建议立即进行固定句本地确认；该结果本身不是医学诊断。', passiveError:'长期语音监测发生错误', passivePause:'暂停监听', passiveResume:'继续监听', passiveReset:'重建个人基线', passiveResetConfirm:'确定清除当前个人语音基线并重新校准吗？', passiveConfirm:'进行固定句确认', passiveChangedDomains:'变化域', passiveDomainNames:{timing:'时序',phonation:'发声',articulation_resonance:'构音/共振'}, passiveEvidenceNote:'论文启发的工程触发器，尚未临床验证。',
         componentTitle:'选择单项检测', componentText:'各项目彼此独立。完成一项即可查看该次报告，也可以随时重复。', componentNames:{B:'平衡',E:'眼动',F:'面部',A:'手臂',S:'言语'}, componentDescriptions:{B:'人工失衡观察 + 安全站立检测',E:'跟随左右目标，检查眼动范围',F:'自然表情与微笑对称性',A:'双臂平举与单侧下落',S:'树莓派麦克风录音 + 本地离线言语分析'}, historyTitle:'本轮单项报告', historyEmpty:'尚无报告，选择任一项目开始。', menuFinish:'完成并退出',
         historyEntry:'异常历史', persistentHistoryTitle:'异常历史记录', persistentHistoryText:'查看已保存的异常报告、画面和言语录音。', historyComponentLabel:'BE-FAST 项目', historySideLabel:'侧别', historySuddenLabel:'突发情况', historyAll:'全部', historyLeft:'左侧', historyRight:'右侧', historySuddenYes:'新发 / 突然', historySuddenNo:'非突发', historyRefresh:'刷新', historyClose:'关闭', historyLoading:'正在加载异常历史…', historyLoadError:'无法加载异常历史。', historyEmptyPersistent:'暂无符合当前筛选条件的异常记录。', historyCount:'共 {count} 条异常记录', historyFrameUnavailable:'没有保存画面', historyFrameLoadError:'画面文件无法加载，请刷新后重试。', historyDetectedAt:'检测时间', historyAttemptLabel:'第 {attempt} 次', historySuddenUnknown:'未确认是否突发',
         standbyGuide: ['准备开始', '请先确认摄像头画面清晰。'],
@@ -330,6 +352,7 @@
       en: {
         title: 'Pi BE-FAST Screening Demo', sub: 'Camera-guided screening research prototype', emergency: '⚠ If any BE-FAST sign appears suddenly, call emergency services now. Do not wait for this demo.', cameraAlt: 'Live view from the selected camera', languageLabel: 'Language', progressLabel: 'Screening progress', eyeTargetLabel:'Eye-movement target', cameraLabel:'Camera', cameraSourceLabel:'Camera source', hostOption:'Host camera', autoHostOption:'Auto (E/F Mac · A/B phone)', faceHostCamera:'Mac front camera · E/F', poseHostCamera:'Phone camera · A/B', fallbackHostCamera:'Target unavailable · current camera fallback', clientOption:'Phone / this device',
         startText: 'Choose a camera, then select any B, E, F, A, or S check. Each check runs independently, can be repeated without limit, and produces a report immediately.', start: 'Choose a check', exit: 'Exit screening',
+        passiveMonitorTitle:'Long-running speech monitoring', passiveDisabled:'Long-running speech monitoring is disabled', passiveDisabledDetail:'Start without --disable-passive-speech to build a local natural-speech baseline.', passiveUnavailable:'Local microphone unavailable', passivePaused:'Long-running monitoring is paused', passivePausedDetail:'Resume to continue local windows. Guided phrase checks pause it automatically.', passiveCalibrating:'Building a personal speech baseline', passiveCalibrationDetail:'Collected {count}/{target} valid natural-speech windows. Use the same speaker in a quiet setting.', passiveWaiting:'Waiting for natural speech', passiveWaitingDetail:'No sufficiently voiced window was detected. Raw recordings are not retained.', passiveStable:'Long-running speech monitoring is active', passiveStableDetail:'Recent windows match the personal baseline. This only triggers follow-up and does not diagnose dysarthria or stroke.', passiveObserving:'One speech-feature change detected', passiveObservingDetail:'The system will observe multiple windows; one changed window does not trigger an alert.', passiveSuspected:'Sustained speech-feature change detected', passiveSuspectedDetail:'Run the local fixed-phrase confirmation now. This signal is not a medical diagnosis.', passiveError:'Long-running speech monitoring error', passivePause:'Pause monitoring', passiveResume:'Resume monitoring', passiveReset:'Rebuild personal baseline', passiveResetConfirm:'Clear the current personal speech baseline and calibrate again?', passiveConfirm:'Run fixed-phrase confirmation', passiveChangedDomains:'Changed domains', passiveDomainNames:{timing:'timing',phonation:'phonation',articulation_resonance:'articulation/resonance'}, passiveEvidenceNote:'Paper-informed engineering trigger; not clinically validated.',
         componentTitle:'Choose one check', componentText:'Each check is independent. Finish any one to view its report, or repeat it at any time.', componentNames:{B:'Balance',E:'Eyes',F:'Face',A:'Arms',S:'Speech'}, componentDescriptions:{B:'Manual balance observation + safe standing check',E:'Follow left/right targets to assess eye movement',F:'Neutral face and smile symmetry',A:'Bilateral arm hold and one-sided drift',S:'Pi microphone recording + local offline speech analysis'}, historyTitle:'Reports from this session', historyEmpty:'No reports yet. Choose any check to begin.', menuFinish:'Finish and exit',
         historyEntry:'Abnormal history', persistentHistoryTitle:'Abnormal history', persistentHistoryText:'View saved abnormal reports, captured frames, and speech recordings.', historyComponentLabel:'BE-FAST check', historySideLabel:'Side', historySuddenLabel:'Onset', historyAll:'All', historyLeft:'Left', historyRight:'Right', historySuddenYes:'New / sudden', historySuddenNo:'Not sudden', historyRefresh:'Refresh', historyClose:'Close', historyLoading:'Loading abnormal history…', historyLoadError:'Unable to load abnormal history.', historyEmptyPersistent:'No abnormal records match the current filters.', historyCount:'{count} abnormal records', historyFrameUnavailable:'No captured frame', historyFrameLoadError:'The captured frame could not be loaded. Refresh and retry.', historyDetectedAt:'Detected', historyAttemptLabel:'Attempt {attempt}', historySuddenUnknown:'Sudden onset unconfirmed',
         standbyGuide: ['Ready to begin', 'Confirm that the live camera view is clear.'],
@@ -528,6 +551,8 @@
         brandTitle:t.title, brandSub:t.sub, emergencyText:t.emergency,
         cameraLabel:t.cameraLabel, hostCameraOption:t.hostOption, clientCameraOption:t.clientOption,
         persistentHistoryButton:t.historyEntry, startTitle:t.title, startText:t.startText, startButton:t.start,
+        passiveSpeechTitle:t.passiveMonitorTitle, passiveBaselineButton:t.passiveReset,
+        passiveConfirmButton:t.passiveConfirm,
         componentTitle:t.componentTitle, componentText:t.componentText,
         componentBTitle:t.componentNames.B, componentETitle:t.componentNames.E,
         componentFTitle:t.componentNames.F, componentATitle:t.componentNames.A,
@@ -558,6 +583,132 @@
       document.getElementById('cameraSourceSelect').setAttribute('aria-label', t.cameraSourceLabel);
       document.getElementById('steps').setAttribute('aria-label', t.progressLabel);
       document.getElementById('eyeTarget').setAttribute('aria-label', t.eyeTargetLabel);
+    }
+
+    async function togglePassiveSpeech() {
+      if (transitionBusy) return;
+      transitionBusy = true;
+      const passive = latest.passive_speech || {};
+      const endpoint = passive.paused
+        ? '/api/speech/passive/resume'
+        : '/api/speech/passive/pause';
+      try {
+        const payload = await postJson(endpoint);
+        latest = {...latest, passive_speech:payload.passive_speech};
+        render(latest);
+      } catch (error) {
+        showCameraError(error.message || String(error));
+      } finally {
+        transitionBusy = false;
+      }
+    }
+
+    async function resetPassiveSpeechBaseline() {
+      const t = text[language];
+      if (transitionBusy || !window.confirm(t.passiveResetConfirm)) return;
+      transitionBusy = true;
+      try {
+        const payload = await postJson('/api/speech/passive/reset-baseline');
+        latest = {...latest, passive_speech:payload.passive_speech};
+        render(latest);
+      } catch (error) {
+        showCameraError(error.message || String(error));
+      } finally {
+        transitionBusy = false;
+      }
+    }
+
+    async function startSpeechConfirmationFromMonitor() {
+      if (transitionBusy) return;
+      transitionBusy = true;
+      try {
+        const befast = latest.befast || {};
+        if (befast.mode !== 'screening') {
+          await postJson('/api/monitoring/trigger', {
+            source:'passive',
+            reason:'passive_speech_change_detected'
+          });
+        }
+        await postJson('/api/befast/component', {component:'S'});
+        await refresh();
+      } catch (error) {
+        showError(error);
+      } finally {
+        transitionBusy = false;
+      }
+    }
+
+    function renderPassiveSpeech(passive) {
+      const t = text[language];
+      const panel = document.getElementById('passiveSpeechPanel');
+      const title = document.getElementById('passiveSpeechTitle');
+      const detail = document.getElementById('passiveSpeechDetail');
+      const toggle = document.getElementById('passiveMonitorButton');
+      const reset = document.getElementById('passiveBaselineButton');
+      const confirm = document.getElementById('passiveConfirmButton');
+      const enabled = passive.enabled === true;
+      let tone = 'waiting';
+      let heading = t.passiveWaiting;
+      let copy = t.passiveWaitingDetail;
+
+      if (!enabled) {
+        tone = 'error';
+        heading = t.passiveDisabled;
+        copy = t.passiveDisabledDetail;
+      } else if (passive.capture_ready === false || passive.state === 'error') {
+        tone = 'error';
+        heading = t.passiveUnavailable;
+        copy = passive.last_error || passive.capture_reason || t.passiveError;
+      } else if (passive.paused || passive.state === 'paused') {
+        tone = 'waiting';
+        heading = t.passivePaused;
+        copy = t.passivePausedDetail;
+      } else if (passive.assessment === 'calibrating') {
+        tone = 'calibrating';
+        heading = t.passiveCalibrating;
+        copy = t.passiveCalibrationDetail
+          .replace('{count}', Number(passive.baseline_windows || 0))
+          .replace('{target}', Number(passive.baseline_target || 0));
+      } else if (passive.assessment === 'suspected_change') {
+        tone = 'suspected';
+        heading = t.passiveSuspected;
+        copy = t.passiveSuspectedDetail;
+      } else if (passive.assessment === 'observing_change') {
+        tone = 'calibrating';
+        heading = t.passiveObserving;
+        copy = t.passiveObservingDetail;
+      } else if (passive.assessment === 'stable') {
+        tone = 'stable';
+        heading = t.passiveStable;
+        copy = t.passiveStableDetail;
+      }
+
+      const changedDomains = (
+        passive.latest_window && Array.isArray(passive.latest_window.changed_domains)
+      ) ? passive.latest_window.changed_domains : [];
+      if (
+        changedDomains.length
+        && ['observing_change', 'suspected_change'].includes(passive.assessment)
+      ) {
+        const names = changedDomains.map(
+          value => t.passiveDomainNames[value] || value
+        );
+        copy += ` ${t.passiveChangedDomains}: ${names.join(language === 'zh' ? '、' : ', ')}.`;
+      }
+      if (enabled && passive.clinical_validation === false) {
+        copy += ` ${t.passiveEvidenceNote}`;
+      }
+
+      panel.className = `passive-speech-monitor ${tone}`;
+      title.textContent = heading;
+      detail.textContent = copy;
+      toggle.textContent = passive.paused ? t.passiveResume : t.passivePause;
+      toggle.hidden = !enabled;
+      toggle.disabled = transitionBusy;
+      reset.hidden = !enabled;
+      reset.disabled = transitionBusy;
+      confirm.hidden = !Boolean(passive.recommend_guided_check);
+      confirm.disabled = transitionBusy;
     }
 
     async function startScreening() {
@@ -1048,6 +1199,7 @@
       document.getElementById('manualTitle').textContent = t.balanceManualTitle;
       document.getElementById('manualText').textContent = t.balanceManualText;
       renderSpeechState(status.speech || {});
+      renderPassiveSpeech(status.passive_speech || {});
 
       const runtimeEl = document.getElementById('runtime');
       runtimeEl.className = cameraErrorMessage ? 'status camera_error' : `status ${runtime.phase || 'starting'}`;

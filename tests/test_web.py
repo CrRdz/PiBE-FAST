@@ -45,6 +45,40 @@ class _TestSpeechRecognizer:
         return Transcript(text=self.text, engine=self.name)
 
 
+class _TestPassiveSpeechMonitor:
+    def __init__(self):
+        self.paused = False
+        self.pause_reason = None
+        self.baseline_windows = 2
+
+    def snapshot(self):
+        return {
+            "enabled": True,
+            "state": "paused" if self.paused else "listening",
+            "assessment": "calibrating",
+            "paused": self.paused,
+            "pause_reason": self.pause_reason,
+            "capture_ready": True,
+            "baseline_windows": self.baseline_windows,
+            "baseline_target": 6,
+            "recommend_guided_check": False,
+        }
+
+    def pause(self, reason="manual_pause", timeout=4.0):
+        self.paused = True
+        self.pause_reason = reason
+        return True
+
+    def resume(self):
+        self.paused = False
+        self.pause_reason = None
+        return self.snapshot()
+
+    def reset_baseline(self):
+        self.baseline_windows = 0
+        return self.snapshot()
+
+
 class BefastWebApiTest(unittest.TestCase):
     def setUp(self):
         self.history_directory = tempfile.TemporaryDirectory()
@@ -58,11 +92,13 @@ class BefastWebApiTest(unittest.TestCase):
             recognizer=self.speech_recognizer,
             config=SpeechAudioConfig(capture_seconds=3.0),
         )
+        self.passive_speech_monitor = _TestPassiveSpeechMonitor()
         self.app = create_app(
             self.state,
             befast_session=self.session,
             history_store=self.history_store,
             speech_service=self.speech_service,
+            passive_speech_monitor=self.passive_speech_monitor,
         )
         self.client = self.app.test_client()
 
@@ -88,6 +124,10 @@ class BefastWebApiTest(unittest.TestCase):
         self.assertIn(b"/api/befast/manual-item", response.data)
         self.assertIn(b"/api/speech/start", response.data)
         self.assertIn(b"/api/speech/complete", response.data)
+        self.assertIn(b"/api/speech/passive/pause", response.data)
+        self.assertIn(b"/api/speech/passive/resume", response.data)
+        self.assertIn(b"/api/speech/passive/reset-baseline", response.data)
+        self.assertIn(b'id="passiveSpeechPanel"', response.data)
         self.assertIn(b'id="speechSheet"', response.data)
         self.assertNotIn(b'id="speech_problem"', response.data)
         self.assertIn("跳过本项".encode(), response.data)
@@ -177,6 +217,18 @@ class BefastWebApiTest(unittest.TestCase):
         self.assertEqual(runtime["capture_origin"], "server_host")
         self.assertFalse(runtime["client_camera_used"])
 
+    def test_can_pause_resume_and_reset_passive_speech_monitoring(self):
+        paused = self.client.post("/api/speech/passive/pause")
+        reset = self.client.post("/api/speech/passive/reset-baseline")
+        resumed = self.client.post("/api/speech/passive/resume")
+        status = self.client.get("/api/status").get_json()["passive_speech"]
+
+        self.assertEqual(paused.status_code, 200)
+        self.assertTrue(paused.get_json()["passive_speech"]["paused"])
+        self.assertEqual(reset.get_json()["passive_speech"]["baseline_windows"], 0)
+        self.assertEqual(resumed.status_code, 200)
+        self.assertFalse(status["paused"])
+
     def test_video_stream_immediately_returns_placeholder(self):
         stream = _mjpeg_stream(PreviewState(), stop_event=None)
         try:
@@ -204,6 +256,11 @@ class BefastWebApiTest(unittest.TestCase):
                 "new_or_sudden": False,
             },
         )
+        self.assertTrue(self.passive_speech_monitor.paused)
+        self.assertEqual(
+            self.passive_speech_monitor.pause_reason,
+            "guided_speech_check",
+        )
         self.assertTrue(self.speech_service.wait(timeout=2.0))
         submitted = self.client.post("/api/speech/complete")
 
@@ -217,6 +274,28 @@ class BefastWebApiTest(unittest.TestCase):
         self.assertEqual(
             report["item"]["details"]["transcript"],
             "今天天气很好，我们一起去公园散步",
+        )
+        self.assertFalse(self.passive_speech_monitor.paused)
+
+    def test_guided_speech_preserves_a_manual_passive_pause(self):
+        self.client.post("/api/speech/passive/pause")
+        self.client.post("/api/befast/component", json={"component": "S"})
+        started = self.client.post(
+            "/api/speech/start",
+            json={
+                "language": "zh",
+                "new_or_sudden": False,
+            },
+        )
+        self.assertTrue(self.speech_service.wait(timeout=2.0))
+        completed = self.client.post("/api/speech/complete")
+
+        self.assertEqual(started.status_code, 200)
+        self.assertEqual(completed.status_code, 200)
+        self.assertTrue(self.passive_speech_monitor.paused)
+        self.assertEqual(
+            self.passive_speech_monitor.pause_reason,
+            "manual_pause",
         )
 
     def test_can_skip_current_check_and_report_it(self):

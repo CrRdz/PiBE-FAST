@@ -12,6 +12,7 @@ from flask import Flask, Response, jsonify, render_template, request, send_file
 
 from app.befast import BefastSession
 from app.history import AbnormalHistoryStore, BEFAST_COMPONENTS
+from app.passive_speech import EVIDENCE_VERSION, PassiveSpeechMonitor
 from app.speech_audio import SpeechCaptureService
 
 
@@ -248,8 +249,24 @@ def create_app(
     befast_session: BefastSession | None = None,
     history_store: AbnormalHistoryStore | None = None,
     speech_service: SpeechCaptureService | None = None,
+    passive_speech_monitor: PassiveSpeechMonitor | None = None,
 ) -> Flask:
     app = Flask(__name__)
+    speech_coordination_lock = threading.Lock()
+    resume_passive_after_guided = False
+
+    def remember_guided_passive_pause(should_resume: bool) -> None:
+        nonlocal resume_passive_after_guided
+        with speech_coordination_lock:
+            resume_passive_after_guided = bool(should_resume)
+
+    def restore_passive_after_guided() -> None:
+        nonlocal resume_passive_after_guided
+        with speech_coordination_lock:
+            should_resume = resume_passive_after_guided
+            resume_passive_after_guided = False
+        if should_resume and passive_speech_monitor is not None:
+            passive_speech_monitor.resume()
 
     def persist_current_positive(
         screen: Mapping[str, Any],
@@ -304,6 +321,18 @@ def create_app(
             status["befast"] = screen
         if speech_service is not None:
             status["speech"] = speech_service.snapshot()
+        status["passive_speech"] = (
+            passive_speech_monitor.snapshot()
+            if passive_speech_monitor is not None
+            else {
+                "enabled": False,
+                "state": "unavailable",
+                "assessment": "unavailable",
+                "medical_role": "change_detection_trigger_only",
+                "clinical_validation": False,
+                "evidence_version": EVIDENCE_VERSION,
+            }
+        )
         return jsonify(status)
 
     @app.get("/api/history")
@@ -459,6 +488,7 @@ def create_app(
             return jsonify({"error": "BE-FAST session is unavailable"}), 503
         if speech_service is not None:
             speech_service.cancel()
+        restore_passive_after_guided()
         befast_session.reset()
         return jsonify({"befast": befast_session.snapshot()})
 
@@ -541,6 +571,34 @@ def create_app(
             return jsonify({"error": "speech capture service is unavailable"}), 503
         return jsonify({"speech": speech_service.snapshot()})
 
+    @app.get("/api/speech/passive/status")
+    def api_passive_speech_status() -> Response:
+        if passive_speech_monitor is None:
+            return jsonify({"error": "passive speech monitoring is unavailable"}), 503
+        return jsonify({"passive_speech": passive_speech_monitor.snapshot()})
+
+    @app.post("/api/speech/passive/pause")
+    def api_passive_speech_pause() -> Response:
+        if passive_speech_monitor is None:
+            return jsonify({"error": "passive speech monitoring is unavailable"}), 503
+        released = passive_speech_monitor.pause("manual_pause")
+        if not released:
+            passive_speech_monitor.resume()
+            return jsonify({"error": "microphone capture did not stop in time"}), 409
+        return jsonify({"passive_speech": passive_speech_monitor.snapshot()})
+
+    @app.post("/api/speech/passive/resume")
+    def api_passive_speech_resume() -> Response:
+        if passive_speech_monitor is None:
+            return jsonify({"error": "passive speech monitoring is unavailable"}), 503
+        return jsonify({"passive_speech": passive_speech_monitor.resume()})
+
+    @app.post("/api/speech/passive/reset-baseline")
+    def api_passive_speech_reset_baseline() -> Response:
+        if passive_speech_monitor is None:
+            return jsonify({"error": "passive speech monitoring is unavailable"}), 503
+        return jsonify({"passive_speech": passive_speech_monitor.reset_baseline()})
+
     @app.post("/api/speech/start")
     def api_speech_start() -> Response:
         if befast_session is None or speech_service is None:
@@ -552,16 +610,43 @@ def create_app(
         language = str(payload.get("language", "zh")).strip().lower()
         if language not in {"zh", "en"}:
             return jsonify({"error": "language must be 'zh' or 'en'"}), 400
+        passive_paused = False
+        should_resume_passive = False
         try:
+            if passive_speech_monitor is not None:
+                passive_before = passive_speech_monitor.snapshot()
+                passive_paused = bool(passive_before.get("paused"))
+                if not passive_paused:
+                    passive_paused = passive_speech_monitor.pause(
+                        "guided_speech_check"
+                    )
+                    should_resume_passive = passive_paused
+                    if not passive_paused:
+                        passive_speech_monitor.resume()
+                        return jsonify(
+                            {
+                                "error": (
+                                    "passive microphone capture did not stop in time"
+                                )
+                            }
+                        ), 409
             speech_service.start(
                 language=language,
                 new_or_sudden=sudden,
                 onset_time=payload.get("onset_time"),
             )
             befast_session.start_speech_recording()
+            remember_guided_passive_pause(should_resume_passive)
         except ValueError as exc:
             speech_service.cancel()
+            if should_resume_passive and passive_speech_monitor is not None:
+                passive_speech_monitor.resume()
             return jsonify({"error": str(exc)}), 409
+        except Exception:
+            speech_service.cancel()
+            if should_resume_passive and passive_speech_monitor is not None:
+                passive_speech_monitor.resume()
+            raise
         return jsonify(
             {
                 "speech": speech_service.snapshot(),
@@ -574,8 +659,10 @@ def create_app(
         if befast_session is None or speech_service is None:
             return jsonify({"error": "speech screening is unavailable"}), 503
         audio_path = None
+        consumed = False
         try:
             result, audio_path, sudden, onset_time = speech_service.consume_result()
+            consumed = True
             befast_session.submit_speech_result(
                 result,
                 new_or_sudden=sudden,
@@ -596,12 +683,15 @@ def create_app(
             return jsonify({"error": str(exc)}), 409
         finally:
             SpeechCaptureService.discard_consumed_audio(audio_path)
+            if consumed:
+                restore_passive_after_guided()
 
     @app.post("/api/speech/cancel")
     def api_speech_cancel() -> Response:
         if befast_session is None or speech_service is None:
             return jsonify({"error": "speech screening is unavailable"}), 503
         speech_service.cancel()
+        restore_passive_after_guided()
         screen = befast_session.snapshot()
         if (
             screen.get("active_component") == "S"

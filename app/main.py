@@ -22,6 +22,7 @@ from app.history import AbnormalHistoryStore
 from app.keypoint_logger import JsonlKeypointLogger
 from app.monitoring import PassiveMonitor, PassiveMonitoringConfig
 from app.movenet import MoveNet
+from app.passive_speech import PassiveSpeechConfig, PassiveSpeechMonitor
 from app.pose_classifier import PoseClassification, PoseClassifier
 from app.speech_audio import (
     SpeechAudioConfig,
@@ -169,6 +170,29 @@ def parse_args() -> argparse.Namespace:
         "--disable-speech",
         action="store_true",
         help="Disable Pi microphone capture and offline speech recognition",
+    )
+    parser.add_argument(
+        "--disable-passive-speech",
+        action="store_true",
+        help="Disable long-running local natural-speech change monitoring",
+    )
+    parser.add_argument(
+        "--passive-speech-window-seconds",
+        type=float,
+        default=PassiveSpeechConfig.window_seconds,
+        help="Duration of each local passive speech-analysis window (minimum 3)",
+    )
+    parser.add_argument(
+        "--passive-speech-interval-seconds",
+        type=float,
+        default=PassiveSpeechConfig.interval_seconds,
+        help="Gap between passive speech-analysis windows",
+    )
+    parser.add_argument(
+        "--passive-speech-baseline-windows",
+        type=int,
+        default=PassiveSpeechConfig.baseline_windows,
+        help="Valid natural-speech windows required for the personal baseline",
     )
     # 默认不持续保存视频；只有显式开启后，才保存紧急筛查事件的短片段。
     parser.add_argument(
@@ -888,10 +912,12 @@ def main() -> None:
     Path(args.clips_dir).mkdir(parents=True, exist_ok=True)
     history_store = AbnormalHistoryStore(args.history_dir)
     speech_service = None
+    passive_speech_monitor = None
     if not args.disable_speech:
+        microphone_capture = default_microphone_capture(device=args.speech_device)
         speech_service = SpeechCaptureService(
             args.speech_work_dir,
-            capture_backend=default_microphone_capture(device=args.speech_device),
+            capture_backend=microphone_capture,
             recognizer=WhisperCppRecognizer(
                 model_path=args.speech_model,
                 executable=args.whisper_cli,
@@ -911,16 +937,44 @@ def main() -> None:
                 "Speech recognizer unavailable: %s",
                 speech_status["recognizer_reason"],
             )
+        if not args.disable_passive_speech:
+            passive_speech_monitor = PassiveSpeechMonitor(
+                args.speech_work_dir,
+                capture_backend=microphone_capture,
+                config=PassiveSpeechConfig(
+                    window_seconds=max(
+                        3.0, float(args.passive_speech_window_seconds)
+                    ),
+                    interval_seconds=max(
+                        0.0, float(args.passive_speech_interval_seconds)
+                    ),
+                    baseline_windows=max(
+                        1, int(args.passive_speech_baseline_windows)
+                    ),
+                ),
+            )
+            passive_status = passive_speech_monitor.start()
+            if not passive_status["capture_ready"]:
+                LOGGER.warning(
+                    "Passive speech microphone backend unavailable: %s",
+                    passive_status["capture_reason"],
+                )
 
     if args.no_web:
         LOGGER.warning(
             "--no-web disables guided controls; use the Web UI for a complete BE-FAST screen"
         )
-        run_detection(
-            args,
-            befast_session=BefastSession(),
-            history_store=history_store,
-        )
+        try:
+            run_detection(
+                args,
+                befast_session=BefastSession(),
+                history_store=history_store,
+            )
+        finally:
+            if passive_speech_monitor is not None:
+                passive_speech_monitor.stop()
+            if speech_service is not None:
+                speech_service.cancel()
         return
 
     # Web 模式下，检测循环在后台线程运行，Flask 主线程负责提供页面和 MJPEG 视频流。
@@ -950,6 +1004,7 @@ def main() -> None:
         befast_session,
         history_store,
         speech_service,
+        passive_speech_monitor,
     )
     try:
         ssl_context = (args.web_cert, args.web_key) if args.web_cert else None
@@ -961,6 +1016,8 @@ def main() -> None:
         )
     finally:
         stop_event.set()
+        if passive_speech_monitor is not None:
+            passive_speech_monitor.stop()
         if speech_service is not None:
             speech_service.cancel()
         if worker is not None:
