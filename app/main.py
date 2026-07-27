@@ -12,7 +12,7 @@ from typing import Mapping
 
 import cv2
 
-from app.befast import BefastConfig, BefastSession
+from app.befast import BefastConfig, BefastSession, PersonalBalanceBaseline
 from app.camera import Frame, FrameSource
 from app.config import PoseClassifierConfig, RuntimeConfig
 from app.drawing import draw_befast_overlay
@@ -102,7 +102,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--disable-passive-monitor",
         action="store_true",
-        help="Disable low-rate fall monitoring while leaving manual screening available",
+        help=(
+            "Disable low-rate fall and personal-baseline balance monitoring while "
+            "leaving manual screening available"
+        ),
+    )
+    parser.add_argument(
+        "--balance-baseline-path",
+        default="data/balance-baseline.json",
+        help=(
+            "Persistent personal quiet-standing baseline used by continuous "
+            "balance change monitoring"
+        ),
     )
     parser.add_argument(
         "--scheduled-screen-interval-hours",
@@ -279,7 +290,9 @@ def run_detection(
                     getattr(args, "standby_pose_fps", RuntimeConfig.standby_pose_fps)
                 ),
             ),
-        )
+        ),
+        balance_config=befast.config,
+        balance_baseline=befast.balance_screen.baseline,
     )
     scheduled_interval_seconds = max(
         0.0,
@@ -618,10 +631,13 @@ def run_detection(
                             keypoints = pose_model.infer(rgb)
                             inference_performed = True
                             pose = classifier.classify(keypoints)
-                            if passive_monitor.update(frame.ts, pose):
+                            if passive_monitor.update(frame.ts, pose, keypoints):
                                 befast.start_screening(
                                     source="passive",
-                                    reason="suspected_fall_trigger",
+                                    reason=(
+                                        passive_monitor.last_trigger_reason
+                                        or "passive_pose_change_trigger"
+                                    ),
                                     now=frame.ts,
                                 )
                                 assessment = befast.snapshot(frame.ts)
@@ -911,6 +927,11 @@ def main() -> None:
     Path(args.log_dir).mkdir(parents=True, exist_ok=True)
     Path(args.clips_dir).mkdir(parents=True, exist_ok=True)
     history_store = AbnormalHistoryStore(args.history_dir)
+    balance_config = BefastConfig()
+    balance_baseline = PersonalBalanceBaseline(
+        balance_config,
+        args.balance_baseline_path,
+    )
     speech_service = None
     passive_speech_monitor = None
     if not args.disable_speech:
@@ -967,7 +988,10 @@ def main() -> None:
         try:
             run_detection(
                 args,
-                befast_session=BefastSession(),
+                befast_session=BefastSession(
+                    balance_config,
+                    balance_baseline,
+                ),
                 history_store=history_store,
             )
         finally:
@@ -980,7 +1004,10 @@ def main() -> None:
     # Web 模式下，检测循环在后台线程运行，Flask 主线程负责提供页面和 MJPEG 视频流。
     stop_event = threading.Event()
     preview_state = PreviewState(jpeg_quality=RuntimeConfig.jpeg_quality)
-    befast_session = BefastSession()
+    befast_session = BefastSession(
+        balance_config,
+        balance_baseline,
+    )
     worker = None
     if _preflight_macos_camera(args, preview_state):
         worker = threading.Thread(

@@ -61,7 +61,27 @@ class _TestPassiveSpeechMonitor:
             "capture_ready": True,
             "baseline_windows": self.baseline_windows,
             "baseline_target": 6,
+            "recent_anomaly_votes": 1,
+            "recent_window_count": 2,
+            "recent_anomaly_history": [False, True],
+            "anomaly_votes_required": 3,
+            "anomaly_z_threshold": 3.5,
             "recommend_guided_check": False,
+            "clinical_validation": False,
+            "latest_window": {
+                "valid": True,
+                "reason": "passive_speech_window_ready",
+                "metrics": {
+                    "rms_dbfs": -31.5,
+                    "voiced_seconds": 3.2,
+                },
+                "domain_scores": {
+                    "timing": 1.2,
+                    "phonation": 3.8,
+                    "articulation_resonance": 0.7,
+                },
+                "changed_domains": ["phonation"],
+            },
         }
 
     def pause(self, reason="manual_pause", timeout=4.0):
@@ -127,7 +147,16 @@ class BefastWebApiTest(unittest.TestCase):
         self.assertIn(b"/api/speech/passive/pause", response.data)
         self.assertIn(b"/api/speech/passive/resume", response.data)
         self.assertIn(b"/api/speech/passive/reset-baseline", response.data)
+        self.assertIn(b'id="speechModeSheet"', response.data)
+        self.assertIn(b'id="passiveSpeechSheet"', response.data)
         self.assertIn(b'id="passiveSpeechPanel"', response.data)
+        self.assertIn(b'id="passiveBaselineProgress"', response.data)
+        self.assertIn(b'id="passiveDomainTiming"', response.data)
+        self.assertIn(b'id="passiveRecentVotes"', response.data)
+        self.assertIn("S · 选择语音检测方式".encode(), response.data)
+        self.assertIn("长期自然语音监测或固定句朗读确认".encode(), response.data)
+        self.assertIn("朗读固定句确认".encode(), response.data)
+        self.assertNotIn(b'passiveConfirmButton" class="button primary"', response.data)
         self.assertIn(b'id="speechSheet"', response.data)
         self.assertNotIn(b'id="speech_problem"', response.data)
         self.assertIn("跳过本项".encode(), response.data)

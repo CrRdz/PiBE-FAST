@@ -47,11 +47,17 @@ class BefastConfig:
     face_corner_delta_threshold: float = 0.075
     face_smile_score_difference_threshold: float = 0.24
 
-    # B：与抬臂检查相同，准备期不计入正式平衡样本。
+    # B：卒中静态平衡研究常采用 30 秒安静站立试次，并通过重复试次提高
+    # 可靠性（Aryan et al. 2023; Ruhe et al. 2010）。这里不再使用固定的
+    # “肩宽百分比阳性阈值”，而是建立同一人的多窗口稳健基线。
     balance_warmup_seconds: float = 1.5
-    balance_capture_seconds: float = 6.0
-    balance_min_valid_samples: int = 20
-    balance_min_valid_fraction: float = 0.55
-    # 身体中心偏移和摆动范围均除以肩宽，保证阈值与画面尺度无关。
-    balance_offset_threshold: float = 0.40
-    balance_sway_range_threshold: float = 0.50
+    balance_capture_seconds: float = 30.0
+    # 下列两项仅是 MoveNet 可解释性质量门槛，不参与异常 cutoff；目前没有论文
+    # 能为本项目的相机、帧率和遮挡条件给出可直接移植的数值。
+    balance_min_valid_samples: int = 30
+    balance_min_valid_fraction: float = 0.75
+    # 五个重复窗口取自静态姿势测量通常需要 3～5 次重复的可靠性建议。
+    balance_baseline_windows: int = 5
+    # 3.5 是 median/MAD 稳健异常分数的常用统计界值；它只表示相对个人
+    # 基线的显著变化，不是卒中诊断阈值。
+    balance_robust_z_threshold: float = 3.5

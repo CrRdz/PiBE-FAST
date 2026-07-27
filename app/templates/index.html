@@ -77,22 +77,64 @@
     .button.ghost { background: #111a22cc; }
     .button:disabled { cursor: not-allowed; opacity: .45; }
     .start { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; }
-    .start-inner { width: min(540px, 100%); padding: 25px; border: 1px solid var(--line); border-radius: 18px; background: rgba(7, 13, 19, .88); box-shadow: 0 24px 80px #000b; backdrop-filter: blur(18px); text-align: center; }
-    .start h1 { margin: 0 0 8px; font-size: clamp(1.65rem, 4vw, 2.5rem); }
-    .start p { margin: 0 auto 18px; max-width: 430px; color: var(--muted); line-height: 1.55; }
+    .start-inner { width: min(540px, 100%); padding: 25px; border: 1px solid var(--line); border-radius: 18px; background: rgba(7, 13, 19, .92); box-shadow: 0 24px 80px #000b; backdrop-filter: blur(18px); text-align: center; }
+    .start h1 { margin: 0 0 6px; font-size: clamp(1.65rem, 3.5vw, 2.3rem); }
+    .start p { margin: 0 auto 12px; max-width: 500px; color: var(--muted); line-height: 1.48; }
     .start .button { padding: 12px 22px; font-size: 1rem; }
-    .passive-speech-monitor { margin: 0 0 16px; padding: 12px; border: 1px solid #304252; border-radius: 11px; background: #0d171f; text-align: left; }
+    .passive-speech-monitor { margin: 0 0 10px; padding: 12px; border: 1px solid #304252; border-radius: 14px; background: #0a141c; text-align: left; }
     .passive-speech-monitor.stable { border-color: #2d7650; }
     .passive-speech-monitor.calibrating, .passive-speech-monitor.waiting { border-color: #80672f; }
     .passive-speech-monitor.suspected, .passive-speech-monitor.error { border-color: #a84851; background: #251317; }
-    .passive-monitor-head { display: flex; align-items: center; gap: 8px; }
+    .passive-monitor-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .passive-monitor-heading { display: flex; align-items: center; gap: 8px; min-width: 0; }
     .passive-monitor-dot { width: 9px; height: 9px; flex: 0 0 auto; border-radius: 50%; background: #7e8c98; }
     .stable .passive-monitor-dot { background: var(--green); box-shadow: 0 0 0 4px #31d07f22; }
     .calibrating .passive-monitor-dot, .waiting .passive-monitor-dot { background: var(--yellow); }
     .suspected .passive-monitor-dot, .error .passive-monitor-dot { background: var(--red); box-shadow: 0 0 0 4px #ff586422; }
+    .passive-live-state { flex: 0 0 auto; padding: 4px 8px; border: 1px solid #314757; border-radius: 999px; color: #a7c7d9; background: #101e28; font-size: .69rem; font-weight: 760; }
+    .passive-live-state.capturing { color: #07150e; border-color: #53d993; background: #51d792; }
+    .passive-live-state.paused, .passive-live-state.unavailable { color: #ffd77a; border-color: #80672f; background: #2d2517; }
     .passive-speech-monitor small { display: block; margin-top: 6px; color: #9eafbd; line-height: 1.4; }
+    .passive-overview { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin-top: 12px; }
+    .passive-stat { min-width: 0; padding: 9px 10px; border: 1px solid #263846; border-radius: 9px; background: #0d1a23; }
+    .passive-stat-label { display: block; overflow: hidden; color: #8398a8; font-size: .67rem; font-weight: 720; letter-spacing: .01em; text-overflow: ellipsis; white-space: nowrap; }
+    .passive-stat-value { display: block; margin-top: 5px; color: #eaf6fd; font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+    .passive-mini-progress { height: 3px; margin-top: 7px; overflow: hidden; border-radius: 999px; background: #ffffff19; }
+    .passive-mini-progress span { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--blue); transition: width .25s ease; }
+    .passive-domains { display: grid; gap: 7px; margin-top: 11px; padding: 10px; border: 1px solid #263846; border-radius: 10px; background: #0b171f; }
+    .passive-domain { display: grid; grid-template-columns: minmax(100px, .8fr) minmax(150px, 2fr) 46px; align-items: center; gap: 9px; }
+    .passive-domain-label { color: #c4d3dd; font-size: .75rem; font-weight: 720; }
+    .passive-domain-track { position: relative; height: 7px; overflow: hidden; border-radius: 999px; background: #ffffff1c; }
+    .passive-domain-track::after { content: ""; position: absolute; top: 0; bottom: 0; left: 71.43%; width: 1px; background: #ffffff8f; }
+    .passive-domain-fill { display: block; width: 0; height: 100%; border-radius: inherit; background: #4db5ef; transition: width .3s ease, background .2s ease; }
+    .passive-domain.changed .passive-domain-fill { background: var(--red); }
+    .passive-domain.changed .passive-domain-label, .passive-domain.changed .passive-domain-score { color: #ff9da4; }
+    .passive-domain-score { color: #8ea2b0; font-size: .74rem; font-variant-numeric: tabular-nums; text-align: right; }
+    .passive-window-strip { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; padding: 8px 10px; border: 1px solid #263846; border-radius: 9px; background: #0d1a23; }
+    .passive-window-copy { min-width: 0; color: #8fa3b2; font-size: .7rem; line-height: 1.35; }
+    .passive-votes { display: flex; flex: 0 0 auto; gap: 5px; }
+    .passive-vote { width: 12px; height: 12px; border: 1px solid #435563; border-radius: 50%; background: #17242d; }
+    .passive-vote.normal { border-color: #3e8c61; background: var(--green); }
+    .passive-vote.changed { border-color: #ce6069; background: var(--red); }
+    .passive-vote.empty { opacity: .52; }
+    .passive-privacy { margin-top: 8px; color: #6f8594; font-size: .67rem; }
     .passive-monitor-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
     .passive-monitor-actions .button { padding: 6px 9px; font-size: .75rem; }
+    .speech-mode-sheet { width: min(760px, calc(100% - 28px)); }
+    .speech-mode-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
+    .speech-mode-card { min-height: 185px; display: flex; flex-direction: column; align-items: flex-start; padding: 18px; border: 1px solid #30495b; border-radius: 13px; color: #eaf5fb; background: #0d1922; text-align: left; }
+    .speech-mode-card:hover, .speech-mode-card:focus-visible { border-color: #69c5fb; background: #132738; outline: none; }
+    .speech-mode-card.primary { border-color: #3b7659; background: #0c2118; }
+    .speech-mode-card.primary:hover, .speech-mode-card.primary:focus-visible { border-color: #52d58e; background: #103023; }
+    .speech-mode-mark { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 11px; color: #061821; background: #7dcefb; font-size: 1.15rem; font-weight: 850; }
+    .speech-mode-card.primary .speech-mode-mark { color: #06180f; background: #5dd99a; }
+    .speech-mode-card strong { display: block; margin-top: 13px; font-size: 1.05rem; }
+    .speech-mode-card small { display: block; margin-top: 7px; color: #9eafbd; line-height: 1.48; }
+    .speech-mode-state { margin-top: auto; padding-top: 14px; color: #7fcaf4; font-size: .72rem; font-weight: 750; }
+    .speech-mode-card.primary .speech-mode-state { color: #70dda6; }
+    .passive-speech-sheet { width: min(820px, calc(100% - 28px)); }
+    .passive-speech-sheet > p { margin-bottom: 12px; }
+    .passive-speech-sheet .passive-speech-monitor { margin-bottom: 0; }
     .sheet { position: absolute; left: 50%; bottom: 22px; width: min(820px, calc(100% - 28px)); max-height: calc(100% - 44px); overflow: auto; transform: translateX(-50%); padding: 18px; border: 1px solid var(--line); border-radius: 16px; background: rgba(7, 13, 19, .94); box-shadow: 0 24px 80px #000c; backdrop-filter: blur(18px); }
     .sheet h2 { margin: 0 0 6px; }
     .sheet > p { margin: 0 0 14px; color: var(--muted); }
@@ -170,6 +212,12 @@
       .guide { bottom: 14px; }
       .signal { grid-template-columns: 38px 1fr; padding: 12px; }
       .signal-icon { width: 34px; height: 34px; }
+      .start { align-items: start; overflow: auto; padding: 16px 12px; }
+      .start-inner { padding: 20px 16px; }
+      .passive-overview { grid-template-columns: 1fr 1fr; }
+      .passive-domain { grid-template-columns: 92px minmax(90px, 1fr) 40px; gap: 6px; }
+      .speech-mode-grid { grid-template-columns: 1fr; }
+      .speech-mode-card { min-height: 150px; }
       .manual-grid { grid-template-columns: 1fr; }
       .component-grid { grid-template-columns: 1fr 1fr; }
       .history-filters { grid-template-columns: 1fr 1fr; }
@@ -220,15 +268,6 @@
         <div class="start-inner">
           <h1 id="startTitle">Pi BE-FAST 筛查 Demo</h1>
           <p id="startText">进入后可单独选择 B、E、F、A 或 S；每项完成后立即生成报告，并可不限次数重复。</p>
-          <div id="passiveSpeechPanel" class="passive-speech-monitor">
-            <div class="passive-monitor-head"><span class="passive-monitor-dot"></span><strong id="passiveSpeechTitle">长期语音监测</strong></div>
-            <small id="passiveSpeechDetail">正在读取本地麦克风状态……</small>
-            <div class="passive-monitor-actions">
-              <button id="passiveMonitorButton" class="button ghost" onclick="togglePassiveSpeech()">暂停监听</button>
-              <button id="passiveBaselineButton" class="button ghost" onclick="resetPassiveSpeechBaseline()">重建个人基线</button>
-              <button id="passiveConfirmButton" class="button primary" onclick="startSpeechConfirmationFromMonitor()" hidden>进行固定句确认</button>
-            </div>
-          </div>
           <button id="startButton" class="button primary" onclick="startScreening()">选择检测项目</button>
         </div>
       </section>
@@ -241,11 +280,90 @@
           <button class="component-card" onclick="startComponent('E')"><strong>E</strong><span id="componentETitle">眼动</span><small id="componentEText">跟随左右目标，检查眼动范围</small></button>
           <button class="component-card" onclick="startComponent('F')"><strong>F</strong><span id="componentFTitle">面部</span><small id="componentFText">自然表情与微笑对称性</small></button>
           <button class="component-card" onclick="startComponent('A')"><strong>A</strong><span id="componentATitle">手臂</span><small id="componentAText">双臂平举与单侧下落</small></button>
-          <button class="component-card" onclick="startComponent('S')"><strong>S</strong><span id="componentSTitle">言语</span><small id="componentSText">复述句子并人工确认言语情况</small></button>
+          <button class="component-card" onclick="startComponent('S')"><strong>S</strong><span id="componentSTitle">言语</span><small id="componentSText">长期自然语音监测或固定句朗读确认</small></button>
         </div>
         <h3 id="historyTitle" class="history-title">本轮单项报告</h3>
         <div id="reportHistory" class="history"></div>
         <div class="sheet-actions"><button class="button ghost" onclick="returnToStandby()" id="menuFinishButton">完成并退出</button></div>
+      </section>
+
+      <section id="speechModeSheet" class="sheet speech-mode-sheet" hidden>
+        <h2 id="speechModeTitle">S · 选择语音检测方式</h2>
+        <p id="speechModeText">长期监测用于观察自然说话相对个人基线的变化；固定句朗读用于一次本地确认。</p>
+        <div class="speech-mode-grid">
+          <button class="speech-mode-card primary" onclick="openPassiveSpeechMonitor()">
+            <span class="speech-mode-mark">∞</span>
+            <strong id="speechModePassiveTitle">长期语音监测</strong>
+            <small id="speechModePassiveText">持续采集本地短窗口，显示个人基线、声学域偏离和最近异常投票。</small>
+            <span id="speechModePassiveState" class="speech-mode-state">正在读取监听状态</span>
+          </button>
+          <button class="speech-mode-card" onclick="startSpeechConfirmationFromMonitor()">
+            <span class="speech-mode-mark">Aa</span>
+            <strong id="speechModeGuidedTitle">朗读固定句</strong>
+            <small id="speechModeGuidedText">录制约 7 秒提示句，在本地检查复述内容、语速和停顿。</small>
+            <span id="speechModeGuidedState" class="speech-mode-state">进入一次 S 检查</span>
+          </button>
+        </div>
+        <div class="sheet-actions"><button id="speechModeBackButton" class="button ghost" onclick="closeSpeechModeMenu()">返回</button></div>
+      </section>
+
+      <section id="passiveSpeechSheet" class="sheet passive-speech-sheet" hidden>
+        <h2 id="passiveMonitorSheetTitle">S · 长期语音监测</h2>
+        <p id="passiveMonitorSheetText">自然说话会与本机保存的个人声学基线比较；这里只提示持续变化，不直接诊断中风。</p>
+        <div id="passiveSpeechPanel" class="passive-speech-monitor">
+          <div class="passive-monitor-head">
+            <div class="passive-monitor-heading"><span class="passive-monitor-dot"></span><strong id="passiveSpeechTitle">长期语音监测</strong></div>
+            <span id="passiveLiveState" class="passive-live-state">正在连接</span>
+          </div>
+          <small id="passiveSpeechDetail">正在读取本地麦克风状态……</small>
+          <div class="passive-overview">
+            <div class="passive-stat">
+              <span id="passiveBaselineLabel" class="passive-stat-label">个人基线</span>
+              <strong id="passiveBaselineValue" class="passive-stat-value">0 / 6</strong>
+              <div class="passive-mini-progress" role="progressbar" id="passiveBaselineProgress" aria-valuemin="0" aria-valuemax="6" aria-valuenow="0"><span id="passiveBaselineBar"></span></div>
+            </div>
+            <div class="passive-stat">
+              <span id="passiveLevelLabel" class="passive-stat-label">当前响度</span>
+              <strong id="passiveLevelValue" class="passive-stat-value">—</strong>
+            </div>
+            <div class="passive-stat">
+              <span id="passiveVoicedLabel" class="passive-stat-label">有效语音</span>
+              <strong id="passiveVoicedValue" class="passive-stat-value">—</strong>
+            </div>
+            <div class="passive-stat">
+              <span id="passiveVoteLabel" class="passive-stat-label">异常投票</span>
+              <strong id="passiveVoteValue" class="passive-stat-value">0 / 3</strong>
+            </div>
+          </div>
+          <div id="passiveDomains" class="passive-domains" aria-label="声学域偏离分数">
+            <div id="passiveDomainTiming" class="passive-domain">
+              <span id="passiveDomainTimingLabel" class="passive-domain-label">时序</span>
+              <div class="passive-domain-track" role="progressbar" aria-valuemin="0" aria-valuemax="3.5" aria-valuenow="0"><span class="passive-domain-fill"></span></div>
+              <span class="passive-domain-score">—</span>
+            </div>
+            <div id="passiveDomainPhonation" class="passive-domain">
+              <span id="passiveDomainPhonationLabel" class="passive-domain-label">发声</span>
+              <div class="passive-domain-track" role="progressbar" aria-valuemin="0" aria-valuemax="3.5" aria-valuenow="0"><span class="passive-domain-fill"></span></div>
+              <span class="passive-domain-score">—</span>
+            </div>
+            <div id="passiveDomainArticulation" class="passive-domain">
+              <span id="passiveDomainArticulationLabel" class="passive-domain-label">构音/共振</span>
+              <div class="passive-domain-track" role="progressbar" aria-valuemin="0" aria-valuemax="3.5" aria-valuenow="0"><span class="passive-domain-fill"></span></div>
+              <span class="passive-domain-score">—</span>
+            </div>
+          </div>
+          <div class="passive-window-strip">
+            <span id="passiveWindowCopy" class="passive-window-copy">等待第一个有效语音窗口</span>
+            <div id="passiveRecentVotes" class="passive-votes" aria-label="最近五个有效窗口"></div>
+          </div>
+          <div id="passivePrivacy" class="passive-privacy">仅在本机分析 · 日常原始录音分析后立即删除</div>
+          <div class="passive-monitor-actions">
+            <button id="passiveMonitorButton" class="button ghost" onclick="togglePassiveSpeech()">暂停监听</button>
+            <button id="passiveBaselineButton" class="button ghost" onclick="resetPassiveSpeechBaseline()">重建个人基线</button>
+            <button id="passiveConfirmButton" class="button ghost" onclick="startSpeechConfirmationFromMonitor()">朗读固定句确认</button>
+          </div>
+        </div>
+        <div class="sheet-actions"><button id="passiveBackButton" class="button ghost" onclick="openSpeechModeMenu()">返回语音方式</button></div>
       </section>
 
       <section id="persistentHistorySheet" class="sheet history-sheet" hidden>
@@ -321,8 +439,9 @@
       zh: {
         title: 'Pi BE-FAST 筛查 Demo', sub: '摄像头引导式筛查研究原型', emergency: '⚠ 突然出现任何 BE-FAST 症状，请立即拨打 120，不要等待本 Demo 完成。', cameraAlt: '当前选择的摄像头实时画面', languageLabel: '语言', progressLabel: '筛查进度', eyeTargetLabel: '眼动目标', cameraLabel:'摄像头', cameraSourceLabel:'摄像头来源', hostOption:'主机摄像头', autoHostOption:'自动切换（E/F 电脑 · A/B 手机）', faceHostCamera:'电脑前置摄像头 · E/F', poseHostCamera:'手机摄像头 · A/B', fallbackHostCamera:'目标摄像头不可用 · 当前摄像头回退', clientOption:'手机 / 当前设备',
         startText: '先选择摄像头，再进入单项检测。B、E、F、A、S 可任意选择、独立完成并不限次数重复；自动项目仍会用红绿提示引导，每次完成都会立即生成报告。', start: '选择检测项目', exit: '退出筛查',
-        passiveMonitorTitle:'长期语音监测', passiveDisabled:'长期语音监测未启用', passiveDisabledDetail:'启动服务时不要使用 --disable-passive-speech，即可在本地建立自然语音基线。', passiveUnavailable:'本地麦克风不可用', passivePaused:'长期监听已暂停', passivePausedDetail:'恢复后才会继续采集短窗口；固定句检测期间会自动暂停。', passiveCalibrating:'正在建立个人语音基线', passiveCalibrationDetail:'已采集 {count}/{target} 个有效自然语音窗口。请在安静环境中由同一人自然说话。', passiveWaiting:'正在等待自然语音', passiveWaitingDetail:'没有检测到足够的有效说话声音，原始录音不会保留。', passiveStable:'长期语音监测运行中', passiveStableDetail:'最近窗口与个人基线一致；这里只做变化触发，不用于诊断构音障碍或脑卒中。', passiveObserving:'检测到一次语音特征变化', passiveObservingDetail:'系统会继续观察多个窗口，单次变化不会触发告警。', passiveSuspected:'检测到持续语音特征变化', passiveSuspectedDetail:'建议立即进行固定句本地确认；该结果本身不是医学诊断。', passiveError:'长期语音监测发生错误', passivePause:'暂停监听', passiveResume:'继续监听', passiveReset:'重建个人基线', passiveResetConfirm:'确定清除当前个人语音基线并重新校准吗？', passiveConfirm:'进行固定句确认', passiveChangedDomains:'变化域', passiveDomainNames:{timing:'时序',phonation:'发声',articulation_resonance:'构音/共振'}, passiveEvidenceNote:'论文启发的工程触发器，尚未临床验证。',
-        componentTitle:'选择单项检测', componentText:'各项目彼此独立。完成一项即可查看该次报告，也可以随时重复。', componentNames:{B:'平衡',E:'眼动',F:'面部',A:'手臂',S:'言语'}, componentDescriptions:{B:'人工失衡观察 + 安全站立检测',E:'跟随左右目标，检查眼动范围',F:'自然表情与微笑对称性',A:'双臂平举与单侧下落',S:'树莓派麦克风录音 + 本地离线言语分析'}, historyTitle:'本轮单项报告', historyEmpty:'尚无报告，选择任一项目开始。', menuFinish:'完成并退出',
+        passiveMonitorTitle:'长期语音监测', passiveDisabled:'长期语音监测未启用', passiveDisabledDetail:'启动服务时不要使用 --disable-passive-speech，即可在本地建立自然语音基线。', passiveUnavailable:'本地麦克风不可用', passivePaused:'长期监听已暂停', passivePausedDetail:'恢复后才会继续采集短窗口；固定句检测期间会自动暂停。', passiveCalibrating:'正在建立个人语音基线', passiveCalibrationDetail:'已采集 {count}/{target} 个有效自然语音窗口。请在安静环境中由同一人自然说话。', passiveWaiting:'正在等待自然语音', passiveWaitingDetail:'没有检测到足够的有效说话声音，原始录音不会保留。', passiveStable:'长期语音监测运行中', passiveStableDetail:'最近窗口与个人基线一致；这里只做变化触发，不用于诊断构音障碍或脑卒中。', passiveObserving:'检测到一次语音特征变化', passiveObservingDetail:'系统会继续观察多个窗口，单次变化不会触发告警。', passiveSuspected:'检测到持续语音特征变化', passiveSuspectedDetail:'建议立即进行固定句本地确认；该结果本身不是医学诊断。', passiveError:'长期语音监测发生错误', passivePause:'暂停监听', passiveResume:'继续监听', passiveReset:'重建个人基线', passiveResetConfirm:'确定清除当前个人语音基线并重新校准吗？', passiveConfirm:'朗读固定句确认', passiveConfirmReady:'建议立即朗读固定句', passiveChangedDomains:'变化域', passiveDomainNames:{timing:'时序',phonation:'发声',articulation_resonance:'构音/共振'}, passiveEvidenceNote:'论文启发的工程触发器，尚未临床验证。', passiveBaseline:'个人基线', passiveLevel:'当前响度', passiveVoiced:'有效语音', passiveVotes:'异常投票', passivePrivacy:'仅在本机分析 · 日常原始录音分析后立即删除', passiveRecentWindows:'最近 {count} 个有效窗口', passiveNoWindow:'等待第一个有效语音窗口', passiveWindowValid:'最近窗口有效', passiveWindowInvalid:'最近窗口未计入：{reason}', passiveThreshold:'变化阈值 {threshold}', passiveVoteEmpty:'尚无窗口', passiveVoteNormal:'该窗口未变化', passiveVoteChanged:'该窗口发生变化', passiveState:{capturing:'采集中',listening:'等待下一窗',paused:'已暂停',error:'错误',unavailable:'未启用',stopped:'已停止'}, passiveReasons:{passive_speech_audio_too_quiet:'声音太小',passive_speech_audio_clipped:'声音削波',passive_speech_not_detected:'有效语音不足',passive_speech_window_too_short:'录音过短'}, passiveMonitorSheetTitle:'S · 长期语音监测', passiveMonitorSheetText:'自然说话会与本机保存的个人声学基线比较；这里只提示持续变化，不直接诊断中风。', passiveBack:'返回语音方式',
+        speechModeTitle:'S · 选择语音检测方式', speechModeText:'长期监测用于观察自然说话相对个人基线的变化；固定句朗读用于一次本地确认。', speechModePassiveTitle:'长期语音监测', speechModePassiveText:'持续采集本地短窗口，显示个人基线、声学域偏离和最近异常投票。', speechModeGuidedTitle:'朗读固定句', speechModeGuidedText:'录制约 7 秒提示句，在本地检查复述内容、语速和停顿。', speechModeGuidedState:'进入一次 S 检查', speechModeBack:'返回',
+        componentTitle:'选择单项检测', componentText:'各项目彼此独立。完成一项即可查看该次报告，也可以随时重复。', componentNames:{B:'平衡',E:'眼动',F:'面部',A:'手臂',S:'言语'}, componentDescriptions:{B:'人工失衡观察 + 安全站立检测',E:'跟随左右目标，检查眼动范围',F:'自然表情与微笑对称性',A:'双臂平举与单侧下落',S:'长期自然语音监测或固定句朗读确认'}, historyTitle:'本轮单项报告', historyEmpty:'尚无报告，选择任一项目开始。', menuFinish:'完成并退出',
         historyEntry:'异常历史', persistentHistoryTitle:'异常历史记录', persistentHistoryText:'查看已保存的异常报告、画面和言语录音。', historyComponentLabel:'BE-FAST 项目', historySideLabel:'侧别', historySuddenLabel:'突发情况', historyAll:'全部', historyLeft:'左侧', historyRight:'右侧', historySuddenYes:'新发 / 突然', historySuddenNo:'非突发', historyRefresh:'刷新', historyClose:'关闭', historyLoading:'正在加载异常历史…', historyLoadError:'无法加载异常历史。', historyEmptyPersistent:'暂无符合当前筛选条件的异常记录。', historyCount:'共 {count} 条异常记录', historyFrameUnavailable:'没有保存画面', historyFrameLoadError:'画面文件无法加载，请刷新后重试。', historyDetectedAt:'检测时间', historyAttemptLabel:'第 {attempt} 次', historySuddenUnknown:'未确认是否突发',
         standbyGuide: ['准备开始', '请先确认摄像头画面清晰。'],
         idle: ['E · 眼动准备', '正对当前选择的摄像头，让面部和双眼清晰入镜。'],
@@ -336,7 +455,7 @@
         ready_arms: ['A · 双臂准备', '退后或调整镜头，坐稳并将双臂向前平举。'],
         arms: ['A · 保持双臂平举', '保持动作，不要转动身体。'],
         ready_balance: ['B · 安全准备', '必须有人在旁看护。确认安全后，让全身和脚踝进入画面并站立。'],
-        balance: ['B · 保持自然站立', '看护者请在旁保护；感觉不稳立即停止。'],
+        balance: ['B · 保持自然站立约 30 秒', '看护者请在旁保护；有效窗口将与个人基线比较，感觉不稳立即停止。'],
         review: ['S/T · 完成人工观察', '检查言语是否清晰，并记录异常首次出现时间。'],
         correct: '动作正确', adjust: '请调整动作', waiting: '等待动作识别', remainingSeconds:'约剩 {seconds} 秒', continueStage: '开始检测', retryStage: '重新检测本项', skipStage:'跳过本项', skipConfirm:'确定跳过当前检测吗？报告会标记为“已跳过”，不会视为正常结果。',
         safety: '已有人看护，可以安全站立', manualTitle: 'B · 平衡观察', manualText: '如果已经突然失去平衡或协调困难，请直接勾选，无需冒险站立；未发现时再继续安全站立检测。', balanceManualTitle:'B · 平衡观察', balanceManualText:'如果已经突然失去平衡或协调困难，请直接勾选，无需冒险站立；未发现时再继续安全站立检测。',
@@ -346,14 +465,15 @@
         decisions: {standby:'等待开始', emergency:'发现新发异常：立即拨打 120', warning:'本项发现异常：请确认是否突然出现', clear:'本项未见明显异常', incomplete:'本项数据质量不足或已跳过'},
         runtimeWaiting: '正在连接摄像头', live: '画面已连接', previewOnly: '画面已连接，部分模型未就绪', runtimeError: '摄像头或模型不可用', hostCamera: '主机', hostVideo: '本地视频', clientCamera:'当前设备', cameraSecureRequired:'当前地址不能调用手机摄像头。请通过 HTTPS 打开页面，或在运行服务的电脑上使用 localhost。', cameraPermissionDenied:'无法打开当前设备摄像头，请检查浏览器摄像头权限。', cameraSwitchIdle:'请在待机页或项目选择页切换摄像头。', statuses: {positive:'发现异常', negative:'未见明显异常', insufficient:'数据质量不足', skipped:'已跳过', checking:'检测中', pending:'待检测'},
         itemNames: {B:'平衡', E:'眼动', F:'面部', A:'手臂', S:'言语'}, sides: {left:'左', right:'右', unknown:'侧别未确定'}, detailUnavailable: '尚无可解释的检测详情。',
-        resultReasons: {reported_balance_problem:'本人或照护者报告突然失去平衡或协调困难。', persistent_lateral_body_offset:'身体中心持续向{side}偏离双脚支撑中心。', large_standing_sway:'站立期间左右摆动范围超过当前工程阈值。', no_clear_pose_based_balance_asymmetry:'本次站立未发现明显持续侧偏或过大摆动。', stable_standing_pose_not_visible_long_enough:'全身、髋部或脚踝没有持续清晰入镜，无法完成站立平衡判断。', reduced_visual_target_response:'左右眼对屏幕左右目标的水平跟随幅度均不足。', asymmetric_eye_excursion:'{side}眼的水平移动范围明显小于另一只眼。', asymmetric_conjugate_gaze:'双眼跟随同一目标时运动不同步，存在共轭眼动不协调。', no_visible_eye_movement_abnormality:'本次未发现明显的水平眼动范围不足、左右不对称或双眼不同步。', face_or_irises_not_visible_long_enough:'面部或虹膜没有持续清晰可见，无法完成眼动判断。', head_moved_during_eye_test:'测试时头部移动过多，无法区分眼动和转头动作。', asymmetric_mouth_corner_movement:'微笑时{side}嘴角移动明显弱于另一侧。', asymmetric_smile_activation:'MediaPipe 表情特征显示{side}微笑激活明显较弱。', no_clear_smile_asymmetry:'本次中性表情与微笑对比未发现明显左右不对称。', face_not_visible_during_neutral_and_smile:'中性表情或微笑阶段面部未持续清晰入镜。', smile_expression_not_detected:'没有识别到足够明确的微笑动作，无法判断面部对称性。', persistent_arm_height_asymmetry:'保持平举时{side}手臂持续低于另一侧。', asymmetric_arm_drift:'保持过程中{side}手臂下落幅度明显更大。', no_clear_arm_asymmetry:'本次双臂平举未发现明显高度差或单侧下落。', arms_not_visible_long_enough:'双肩或双手腕没有持续清晰入镜，无法完成手臂判断。', both_arms_were_not_held_up:'未持续识别到双臂向前平举动作。', reported_speech_problem:'人工观察发现说话含混、复述错误或理解困难。', not_reported:'人工观察未报告明显言语异常。', not_checked:'尚未完成人工观察。', not_fully_checked:'该项目尚未完成自动检测和人工确认。', user_skipped:'使用者跳过了此项，本项没有产生检测结论。', checking:'正在采集并分析当前动作。', not_run:'该项目尚未检测。'},
+        resultReasons: {reported_balance_problem:'本人或照护者报告突然失去平衡或协调困难。', personal_balance_baseline_calibrating:'正在积累个人安静站立基线；校准完成前不会给出自动正常结论。', personal_balance_baseline_variability_not_estimable:'个人基线离散度为零，无法计算有依据的变化分数；本次不作自动判断。', sustained_trunk_orientation_change:'躯干持续侧倾方向相对个人基线发生明显变化。', increased_mediolateral_sway_velocity:'横向摆动平均速度相对个人基线明显增加。', no_sustained_change_from_personal_balance_baseline:'本次躯干方向和横向摆动与个人基线一致。', persistent_lateral_body_offset:'身体中心持续向{side}偏离双脚支撑中心。', large_standing_sway:'站立期间左右摆动范围超过旧版工程阈值。', no_clear_pose_based_balance_asymmetry:'旧版检测未发现明显持续侧偏或过大摆动。', stable_standing_pose_not_visible_long_enough:'全身、髋部或脚踝没有持续清晰入镜，无法完成站立平衡判断。', reduced_visual_target_response:'左右眼对屏幕左右目标的水平跟随幅度均不足。', asymmetric_eye_excursion:'{side}眼的水平移动范围明显小于另一只眼。', asymmetric_conjugate_gaze:'双眼跟随同一目标时运动不同步，存在共轭眼动不协调。', no_visible_eye_movement_abnormality:'本次未发现明显的水平眼动范围不足、左右不对称或双眼不同步。', face_or_irises_not_visible_long_enough:'面部或虹膜没有持续清晰可见，无法完成眼动判断。', head_moved_during_eye_test:'测试时头部移动过多，无法区分眼动和转头动作。', asymmetric_mouth_corner_movement:'微笑时{side}嘴角移动明显弱于另一侧。', asymmetric_smile_activation:'MediaPipe 表情特征显示{side}微笑激活明显较弱。', no_clear_smile_asymmetry:'本次中性表情与微笑对比未发现明显左右不对称。', face_not_visible_during_neutral_and_smile:'中性表情或微笑阶段面部未持续清晰入镜。', smile_expression_not_detected:'没有识别到足够明确的微笑动作，无法判断面部对称性。', persistent_arm_height_asymmetry:'保持平举时{side}手臂持续低于另一侧。', asymmetric_arm_drift:'保持过程中{side}手臂下落幅度明显更大。', no_clear_arm_asymmetry:'本次双臂平举未发现明显高度差或单侧下落。', arms_not_visible_long_enough:'双肩或双手腕没有持续清晰入镜，无法完成手臂判断。', both_arms_were_not_held_up:'未持续识别到双臂向前平举动作。', reported_speech_problem:'人工观察发现说话含混、复述错误或理解困难。', not_reported:'人工观察未报告明显言语异常。', not_checked:'尚未完成人工观察。', not_fully_checked:'该项目尚未完成自动检测和人工确认。', user_skipped:'使用者跳过了此项，本项没有产生检测结论。', checking:'正在采集并分析当前动作。', not_run:'该项目尚未检测。'},
         reasons: {show_face_and_eyes:'请靠近一些，让双眼清晰可见', face_and_eyes_ready:'面部和双眼已识别', show_full_face:'请让完整面部进入画面', neutral_face_ready:'中性表情已识别', relax_face_first:'请先放松面部，不要微笑', smile_now:'请自然微笑', smile_detected:'微笑动作已识别', show_shoulders_and_wrists:'请让双肩和双手腕进入画面', raise_both_arms:'请将双臂向前抬起', arms_detected_hold_still:'双臂动作已识别，请保持', show_full_body_and_stand_safely:'请让全身和脚踝入镜，并在看护下站立', standing_pose_ready:'站立动作已识别，请保持', collecting_action:'正在开始采集', face_or_irises_not_visible_long_enough:'双眼未持续清晰可见，请重新调整', head_moved_during_eye_test:'头部移动过多，请保持头不动', face_not_visible_during_neutral_and_smile:'面部未持续清晰可见，请重新调整', smile_expression_not_detected:'没有识别到微笑，请重新尝试', arms_not_visible_long_enough:'双肩或手腕未持续入镜，请重新调整', both_arms_were_not_held_up:'没有识别到抬臂动作，请重新尝试', stable_standing_pose_not_visible_long_enough:'全身或脚踝未持续入镜，请重新调整'}
       },
       en: {
         title: 'Pi BE-FAST Screening Demo', sub: 'Camera-guided screening research prototype', emergency: '⚠ If any BE-FAST sign appears suddenly, call emergency services now. Do not wait for this demo.', cameraAlt: 'Live view from the selected camera', languageLabel: 'Language', progressLabel: 'Screening progress', eyeTargetLabel:'Eye-movement target', cameraLabel:'Camera', cameraSourceLabel:'Camera source', hostOption:'Host camera', autoHostOption:'Auto (E/F Mac · A/B phone)', faceHostCamera:'Mac front camera · E/F', poseHostCamera:'Phone camera · A/B', fallbackHostCamera:'Target unavailable · current camera fallback', clientOption:'Phone / this device',
         startText: 'Choose a camera, then select any B, E, F, A, or S check. Each check runs independently, can be repeated without limit, and produces a report immediately.', start: 'Choose a check', exit: 'Exit screening',
-        passiveMonitorTitle:'Long-running speech monitoring', passiveDisabled:'Long-running speech monitoring is disabled', passiveDisabledDetail:'Start without --disable-passive-speech to build a local natural-speech baseline.', passiveUnavailable:'Local microphone unavailable', passivePaused:'Long-running monitoring is paused', passivePausedDetail:'Resume to continue local windows. Guided phrase checks pause it automatically.', passiveCalibrating:'Building a personal speech baseline', passiveCalibrationDetail:'Collected {count}/{target} valid natural-speech windows. Use the same speaker in a quiet setting.', passiveWaiting:'Waiting for natural speech', passiveWaitingDetail:'No sufficiently voiced window was detected. Raw recordings are not retained.', passiveStable:'Long-running speech monitoring is active', passiveStableDetail:'Recent windows match the personal baseline. This only triggers follow-up and does not diagnose dysarthria or stroke.', passiveObserving:'One speech-feature change detected', passiveObservingDetail:'The system will observe multiple windows; one changed window does not trigger an alert.', passiveSuspected:'Sustained speech-feature change detected', passiveSuspectedDetail:'Run the local fixed-phrase confirmation now. This signal is not a medical diagnosis.', passiveError:'Long-running speech monitoring error', passivePause:'Pause monitoring', passiveResume:'Resume monitoring', passiveReset:'Rebuild personal baseline', passiveResetConfirm:'Clear the current personal speech baseline and calibrate again?', passiveConfirm:'Run fixed-phrase confirmation', passiveChangedDomains:'Changed domains', passiveDomainNames:{timing:'timing',phonation:'phonation',articulation_resonance:'articulation/resonance'}, passiveEvidenceNote:'Paper-informed engineering trigger; not clinically validated.',
-        componentTitle:'Choose one check', componentText:'Each check is independent. Finish any one to view its report, or repeat it at any time.', componentNames:{B:'Balance',E:'Eyes',F:'Face',A:'Arms',S:'Speech'}, componentDescriptions:{B:'Manual balance observation + safe standing check',E:'Follow left/right targets to assess eye movement',F:'Neutral face and smile symmetry',A:'Bilateral arm hold and one-sided drift',S:'Pi microphone recording + local offline speech analysis'}, historyTitle:'Reports from this session', historyEmpty:'No reports yet. Choose any check to begin.', menuFinish:'Finish and exit',
+        passiveMonitorTitle:'Long-running speech monitoring', passiveDisabled:'Long-running speech monitoring is disabled', passiveDisabledDetail:'Start without --disable-passive-speech to build a local natural-speech baseline.', passiveUnavailable:'Local microphone unavailable', passivePaused:'Long-running monitoring is paused', passivePausedDetail:'Resume to continue local windows. Guided phrase checks pause it automatically.', passiveCalibrating:'Building a personal speech baseline', passiveCalibrationDetail:'Collected {count}/{target} valid natural-speech windows. Use the same speaker in a quiet setting.', passiveWaiting:'Waiting for natural speech', passiveWaitingDetail:'No sufficiently voiced window was detected. Raw recordings are not retained.', passiveStable:'Long-running speech monitoring is active', passiveStableDetail:'Recent windows match the personal baseline. This only triggers follow-up and does not diagnose dysarthria or stroke.', passiveObserving:'One speech-feature change detected', passiveObservingDetail:'The system will observe multiple windows; one changed window does not trigger an alert.', passiveSuspected:'Sustained speech-feature change detected', passiveSuspectedDetail:'Run the local fixed-phrase confirmation now. This signal is not a medical diagnosis.', passiveError:'Long-running speech monitoring error', passivePause:'Pause monitoring', passiveResume:'Resume monitoring', passiveReset:'Rebuild personal baseline', passiveResetConfirm:'Clear the current personal speech baseline and calibrate again?', passiveConfirm:'Read the fixed phrase', passiveConfirmReady:'Read the fixed phrase now', passiveChangedDomains:'Changed domains', passiveDomainNames:{timing:'timing',phonation:'phonation',articulation_resonance:'articulation/resonance'}, passiveEvidenceNote:'Paper-informed engineering trigger; not clinically validated.', passiveBaseline:'Personal baseline', passiveLevel:'Input level', passiveVoiced:'Voiced speech', passiveVotes:'Anomaly votes', passivePrivacy:'Processed on this device · routine raw audio is deleted after analysis', passiveRecentWindows:'Latest {count} valid windows', passiveNoWindow:'Waiting for the first valid speech window', passiveWindowValid:'Latest window is valid', passiveWindowInvalid:'Latest window excluded: {reason}', passiveThreshold:'change threshold {threshold}', passiveVoteEmpty:'no window yet', passiveVoteNormal:'unchanged window', passiveVoteChanged:'changed window', passiveState:{capturing:'capturing',listening:'between windows',paused:'paused',error:'error',unavailable:'disabled',stopped:'stopped'}, passiveReasons:{passive_speech_audio_too_quiet:'input too quiet',passive_speech_audio_clipped:'audio clipping',passive_speech_not_detected:'not enough voiced speech',passive_speech_window_too_short:'recording too short'}, passiveMonitorSheetTitle:'S · Long-running speech monitoring', passiveMonitorSheetText:'Natural speech is compared with the personal acoustic baseline stored on this device. It flags sustained change and does not diagnose stroke.', passiveBack:'Back to speech options',
+        speechModeTitle:'S · Choose a speech mode', speechModeText:'Long-running monitoring tracks natural speech against a personal baseline; fixed-phrase reading runs one local confirmation check.', speechModePassiveTitle:'Long-running monitoring', speechModePassiveText:'Continuously analyze local short windows and show baseline progress, domain deviations, and recent votes.', speechModeGuidedTitle:'Read a fixed phrase', speechModeGuidedText:'Record the seven-second prompt and check repeated content, speaking rate, and pauses locally.', speechModeGuidedState:'Start one S check', speechModeBack:'Back',
+        componentTitle:'Choose one check', componentText:'Each check is independent. Finish any one to view its report, or repeat it at any time.', componentNames:{B:'Balance',E:'Eyes',F:'Face',A:'Arms',S:'Speech'}, componentDescriptions:{B:'Manual balance observation + safe standing check',E:'Follow left/right targets to assess eye movement',F:'Neutral face and smile symmetry',A:'Bilateral arm hold and one-sided drift',S:'Long-running natural speech or fixed-phrase confirmation'}, historyTitle:'Reports from this session', historyEmpty:'No reports yet. Choose any check to begin.', menuFinish:'Finish and exit',
         historyEntry:'Abnormal history', persistentHistoryTitle:'Abnormal history', persistentHistoryText:'View saved abnormal reports, captured frames, and speech recordings.', historyComponentLabel:'BE-FAST check', historySideLabel:'Side', historySuddenLabel:'Onset', historyAll:'All', historyLeft:'Left', historyRight:'Right', historySuddenYes:'New / sudden', historySuddenNo:'Not sudden', historyRefresh:'Refresh', historyClose:'Close', historyLoading:'Loading abnormal history…', historyLoadError:'Unable to load abnormal history.', historyEmptyPersistent:'No abnormal records match the current filters.', historyCount:'{count} abnormal records', historyFrameUnavailable:'No captured frame', historyFrameLoadError:'The captured frame could not be loaded. Refresh and retry.', historyDetectedAt:'Detected', historyAttemptLabel:'Attempt {attempt}', historySuddenUnknown:'Sudden onset unconfirmed',
         standbyGuide: ['Ready to begin', 'Confirm that the live camera view is clear.'],
         idle: ['E · Eye setup', 'Face the selected camera and keep both eyes clearly visible.'],
@@ -367,7 +487,7 @@
         ready_arms: ['A · Arm setup', 'Step back if needed, sit safely, and raise both arms forward.'],
         arms: ['A · Hold both arms up', 'Keep the pose and do not rotate your body.'],
         ready_balance: ['B · Safety setup', 'A caregiver must be present. When safe, show your full body and ankles and stand up.'],
-        balance: ['B · Stand naturally', 'Keep a caregiver nearby and stop immediately if unsteady.'],
+        balance: ['B · Stand naturally for about 30 seconds', 'Keep a caregiver nearby; valid windows are compared with the personal baseline. Stop immediately if unsteady.'],
         review: ['S/T · Manual observation', 'Check speech and record when the change was first noticed.'],
         correct: 'Action recognized', adjust: 'Adjust your position or action', waiting: 'Waiting for the action', remainingSeconds:'about {seconds}s left', continueStage: 'Start this check', retryStage: 'Restart this check', skipStage:'Skip this check', skipConfirm:'Skip the current check? The report will mark it as skipped, not as a normal result.',
         safety: 'Caregiver present — safe to stand', manualTitle: 'B · Balance observation', manualText: 'If sudden loss of balance or coordination is already present, check the box and do not risk standing. Otherwise continue to the supported standing check.', balanceManualTitle:'B · Balance observation', balanceManualText:'If sudden loss of balance or coordination is already present, check the box and do not risk standing. Otherwise continue to the supported standing check.',
@@ -377,7 +497,7 @@
         decisions: {standby:'Waiting to start', emergency:'New sudden sign detected — call emergency services', warning:'This check found a sign — confirm whether it was sudden', clear:'No obvious sign in this check', incomplete:'This check had insufficient data or was skipped'},
         runtimeWaiting: 'Connecting camera', live: 'Video connected', previewOnly: 'Video connected; some models are unavailable', runtimeError: 'Camera or model unavailable', hostCamera: 'host', hostVideo: 'local video', clientCamera:'this device', cameraSecureRequired:'This address cannot open a phone camera. Use HTTPS, or use localhost on the machine running this service.', cameraPermissionDenied:'Unable to open this device camera. Check browser camera permission.', cameraSwitchIdle:'Switch cameras from standby or the check-selection screen.', statuses: {positive:'specific sign detected', negative:'no obvious sign', insufficient:'insufficient data quality', skipped:'skipped', checking:'checking', pending:'pending'},
         itemNames: {B:'Balance', E:'Eyes', F:'Face', A:'Arms', S:'Speech'}, sides: {left:'left', right:'right', unknown:'undetermined side'}, detailUnavailable: 'No interpretable detection detail is available yet.',
-        resultReasons: {reported_balance_problem:'The person or caregiver reported sudden loss of balance or coordination.', persistent_lateral_body_offset:'The body center remained displaced toward the {side} side relative to the foot-support center.', large_standing_sway:'Side-to-side standing sway exceeded the current engineering threshold.', no_clear_pose_based_balance_asymmetry:'No clear persistent lateral lean or excessive standing sway was observed.', stable_standing_pose_not_visible_long_enough:'The full body, hips, or ankles were not continuously visible, so standing balance could not be assessed.', reduced_visual_target_response:'Both eyes showed insufficient horizontal movement while following the left/right screen targets.', asymmetric_eye_excursion:'The {side} eye had a clearly smaller horizontal movement range than the other eye.', asymmetric_conjugate_gaze:'The two eyes did not move together consistently while following the same target.', no_visible_eye_movement_abnormality:'No obvious reduction, left/right asymmetry, or binocular coordination problem was observed in horizontal eye movement.', face_or_irises_not_visible_long_enough:'The face or irises were not continuously visible, so eye movement could not be assessed.', head_moved_during_eye_test:'Head movement was too large to separate eye movement from head turning.', asymmetric_mouth_corner_movement:'The {side} mouth corner moved less than the other side during the smile.', asymmetric_smile_activation:'MediaPipe expression features showed weaker smile activation on the {side} side.', no_clear_smile_asymmetry:'The neutral-to-smile comparison showed no obvious left/right asymmetry.', face_not_visible_during_neutral_and_smile:'The face was not continuously visible during both neutral and smile phases.', smile_expression_not_detected:'No sufficiently clear smile was detected, so facial symmetry could not be assessed.', persistent_arm_height_asymmetry:'The {side} arm remained lower than the other arm during the hold.', asymmetric_arm_drift:'The {side} arm dropped more during the hold.', no_clear_arm_asymmetry:'No obvious persistent height difference or one-sided arm drift was observed.', arms_not_visible_long_enough:'Both shoulders or wrists were not continuously visible, so arm symmetry could not be assessed.', both_arms_were_not_held_up:'A sustained bilateral forward arm raise was not detected.', reported_speech_problem:'Manual observation found slurred speech, repetition errors, or difficulty understanding speech.', not_reported:'Manual observation did not report an obvious speech problem.', not_checked:'Manual observation has not been completed.', not_fully_checked:'Automated capture and manual confirmation are not both complete.', user_skipped:'The user skipped this check, so it produced no screening conclusion.', checking:'The current action is being captured and analyzed.', not_run:'This item has not been checked.'},
+        resultReasons: {reported_balance_problem:'The person or caregiver reported sudden loss of balance or coordination.', personal_balance_baseline_calibrating:'The personal quiet-standing baseline is still being collected; no automatic normal result is issued before calibration.', personal_balance_baseline_variability_not_estimable:'Personal-baseline dispersion was zero, so an evidence-based change score could not be calculated; no automatic decision was made.', sustained_trunk_orientation_change:'Sustained trunk orientation changed substantially from the personal baseline.', increased_mediolateral_sway_velocity:'Mean side-to-side sway velocity increased substantially from the personal baseline.', no_sustained_change_from_personal_balance_baseline:'Trunk orientation and side-to-side sway matched the personal baseline in this window.', persistent_lateral_body_offset:'The body center remained displaced toward the {side} side relative to the foot-support center.', large_standing_sway:'Side-to-side standing sway exceeded the legacy engineering threshold.', no_clear_pose_based_balance_asymmetry:'The legacy check found no clear persistent lateral lean or excessive standing sway.', stable_standing_pose_not_visible_long_enough:'The full body, hips, or ankles were not continuously visible, so standing balance could not be assessed.', reduced_visual_target_response:'Both eyes showed insufficient horizontal movement while following the left/right screen targets.', asymmetric_eye_excursion:'The {side} eye had a clearly smaller horizontal movement range than the other eye.', asymmetric_conjugate_gaze:'The two eyes did not move together consistently while following the same target.', no_visible_eye_movement_abnormality:'No obvious reduction, left/right asymmetry, or binocular coordination problem was observed in horizontal eye movement.', face_or_irises_not_visible_long_enough:'The face or irises were not continuously visible, so eye movement could not be assessed.', head_moved_during_eye_test:'Head movement was too large to separate eye movement from head turning.', asymmetric_mouth_corner_movement:'The {side} mouth corner moved less than the other side during the smile.', asymmetric_smile_activation:'MediaPipe expression features showed weaker smile activation on the {side} side.', no_clear_smile_asymmetry:'The neutral-to-smile comparison showed no obvious left/right asymmetry.', face_not_visible_during_neutral_and_smile:'The face was not continuously visible during both neutral and smile phases.', smile_expression_not_detected:'No sufficiently clear smile was detected, so facial symmetry could not be assessed.', persistent_arm_height_asymmetry:'The {side} arm remained lower than the other arm during the hold.', asymmetric_arm_drift:'The {side} arm dropped more during the hold.', no_clear_arm_asymmetry:'No obvious persistent height difference or one-sided arm drift was observed.', arms_not_visible_long_enough:'Both shoulders or wrists were not continuously visible, so arm symmetry could not be assessed.', both_arms_were_not_held_up:'A sustained bilateral forward arm raise was not detected.', reported_speech_problem:'Manual observation found slurred speech, repetition errors, or difficulty understanding speech.', not_reported:'Manual observation did not report an obvious speech problem.', not_checked:'Manual observation has not been completed.', not_fully_checked:'Automated capture and manual confirmation are not both complete.', user_skipped:'The user skipped this check, so it produced no screening conclusion.', checking:'The current action is being captured and analyzed.', not_run:'This item has not been checked.'},
         reasons: {show_face_and_eyes:'Move closer and keep both eyes visible', face_and_eyes_ready:'Face and eyes recognized', show_full_face:'Keep your full face inside the frame', neutral_face_ready:'Neutral expression recognized', relax_face_first:'Relax your face and do not smile yet', smile_now:'Smile naturally now', smile_detected:'Smile recognized', show_shoulders_and_wrists:'Keep both shoulders and wrists visible', raise_both_arms:'Raise both arms forward', arms_detected_hold_still:'Arm action recognized — keep holding', show_full_body_and_stand_safely:'Show your full body and ankles, then stand only with supervision', standing_pose_ready:'Standing pose recognized — hold still', collecting_action:'Starting capture', face_or_irises_not_visible_long_enough:'Eyes were not continuously visible — adjust and retry', head_moved_during_eye_test:'Too much head movement — keep your head still', face_not_visible_during_neutral_and_smile:'Face was not continuously visible — adjust and retry', smile_expression_not_detected:'No smile was detected — try again', arms_not_visible_long_enough:'Shoulders or wrists were not continuously visible — retry', both_arms_were_not_held_up:'The arm-raise action was not detected — retry', stable_standing_pose_not_visible_long_enough:'Full body or ankles were not continuously visible — retry'}
       }
     };
@@ -425,6 +545,8 @@
     let cameraErrorMessage = '';
     let selectedReport = null;
     let persistentHistoryOpen = false;
+    let speechModeMenuOpen = false;
+    let passiveSpeechOpen = false;
     let persistentHistoryRecords = [];
     let persistentHistoryTotal = 0;
     let persistentHistoryLoading = false;
@@ -552,7 +674,22 @@
         cameraLabel:t.cameraLabel, hostCameraOption:t.hostOption, clientCameraOption:t.clientOption,
         persistentHistoryButton:t.historyEntry, startTitle:t.title, startText:t.startText, startButton:t.start,
         passiveSpeechTitle:t.passiveMonitorTitle, passiveBaselineButton:t.passiveReset,
-        passiveConfirmButton:t.passiveConfirm,
+        passiveConfirmButton:t.passiveConfirm, passiveBaselineLabel:t.passiveBaseline,
+        passiveLevelLabel:t.passiveLevel, passiveVoicedLabel:t.passiveVoiced,
+        passiveVoteLabel:t.passiveVotes, passivePrivacy:t.passivePrivacy,
+        passiveDomainTimingLabel:t.passiveDomainNames.timing,
+        passiveDomainPhonationLabel:t.passiveDomainNames.phonation,
+        passiveDomainArticulationLabel:t.passiveDomainNames.articulation_resonance,
+        passiveMonitorSheetTitle:t.passiveMonitorSheetTitle,
+        passiveMonitorSheetText:t.passiveMonitorSheetText,
+        passiveBackButton:t.passiveBack,
+        speechModeTitle:t.speechModeTitle, speechModeText:t.speechModeText,
+        speechModePassiveTitle:t.speechModePassiveTitle,
+        speechModePassiveText:t.speechModePassiveText,
+        speechModeGuidedTitle:t.speechModeGuidedTitle,
+        speechModeGuidedText:t.speechModeGuidedText,
+        speechModeGuidedState:t.speechModeGuidedState,
+        speechModeBackButton:t.speechModeBack,
         componentTitle:t.componentTitle, componentText:t.componentText,
         componentBTitle:t.componentNames.B, componentETitle:t.componentNames.E,
         componentFTitle:t.componentNames.F, componentATitle:t.componentNames.A,
@@ -623,13 +760,20 @@
       transitionBusy = true;
       try {
         const befast = latest.befast || {};
+        const recommended = Boolean(
+          (latest.passive_speech || {}).recommend_guided_check
+        );
         if (befast.mode !== 'screening') {
           await postJson('/api/monitoring/trigger', {
-            source:'passive',
-            reason:'passive_speech_change_detected'
+            source:recommended ? 'passive' : 'user',
+            reason:recommended
+              ? 'passive_speech_change_detected'
+              : 'guided_speech_requested'
           });
         }
         await postJson('/api/befast/component', {component:'S'});
+        speechModeMenuOpen = false;
+        passiveSpeechOpen = false;
         await refresh();
       } catch (error) {
         showError(error);
@@ -638,15 +782,97 @@
       }
     }
 
+    function openSpeechModeMenu() {
+      if (transitionBusy) return;
+      selectedReport = null;
+      persistentHistoryOpen = false;
+      speechModeMenuOpen = true;
+      passiveSpeechOpen = false;
+      render(latest);
+    }
+
+    function closeSpeechModeMenu() {
+      speechModeMenuOpen = false;
+      passiveSpeechOpen = false;
+      render(latest);
+    }
+
+    function openPassiveSpeechMonitor() {
+      if (transitionBusy) return;
+      speechModeMenuOpen = false;
+      passiveSpeechOpen = true;
+      render(latest);
+    }
+
+    function passiveMetric(value) {
+      if (value === null || value === undefined || value === '') return null;
+      const number = Number(value);
+      return Number.isFinite(number) ? number : null;
+    }
+
+    function renderPassiveDomain(id, name, scores, threshold, t) {
+      const row = document.getElementById(id);
+      const track = row.querySelector('.passive-domain-track');
+      const fill = row.querySelector('.passive-domain-fill');
+      const score = row.querySelector('.passive-domain-score');
+      const value = passiveMetric(scores[name]);
+      const changed = value !== null && value >= threshold;
+      const width = value === null
+        ? 0
+        : Math.min(100, Math.max(0, value / Math.max(threshold * 1.4, .01) * 100));
+      row.classList.toggle('changed', changed);
+      fill.style.width = `${width}%`;
+      score.textContent = value === null ? '—' : value.toFixed(2);
+      track.setAttribute('aria-valuemax', String(threshold));
+      track.setAttribute('aria-valuenow', String(value === null ? 0 : Math.min(value, threshold)));
+      track.setAttribute(
+        'aria-valuetext',
+        value === null ? '—' : `${value.toFixed(2)} · ${t.passiveThreshold.replace('{threshold}', threshold.toFixed(1))}`
+      );
+    }
+
+    function renderPassiveVotes(passive, t) {
+      const target = document.getElementById('passiveRecentVotes');
+      const history = Array.isArray(passive.recent_anomaly_history)
+        ? passive.recent_anomaly_history.slice(-5)
+        : [];
+      const padded = Array(Math.max(0, 5 - history.length)).fill(null).concat(history);
+      target.replaceChildren();
+      for (const vote of padded) {
+        const dot = document.createElement('span');
+        dot.className = `passive-vote ${vote === null ? 'empty' : (vote ? 'changed' : 'normal')}`;
+        dot.title = vote === null
+          ? t.passiveVoteEmpty
+          : (vote ? t.passiveVoteChanged : t.passiveVoteNormal);
+        target.appendChild(dot);
+      }
+      target.setAttribute(
+        'aria-label',
+        t.passiveRecentWindows.replace(
+          '{count}',
+          String(Number(passive.recent_window_count || history.length))
+        )
+      );
+    }
+
     function renderPassiveSpeech(passive) {
       const t = text[language];
       const panel = document.getElementById('passiveSpeechPanel');
       const title = document.getElementById('passiveSpeechTitle');
       const detail = document.getElementById('passiveSpeechDetail');
+      const liveState = document.getElementById('passiveLiveState');
       const toggle = document.getElementById('passiveMonitorButton');
       const reset = document.getElementById('passiveBaselineButton');
       const confirm = document.getElementById('passiveConfirmButton');
       const enabled = passive.enabled === true;
+      const latestWindow = passive.latest_window || null;
+      const metrics = (latestWindow && latestWindow.metrics) || {};
+      const domainScores = (latestWindow && latestWindow.domain_scores) || {};
+      const baselineCount = Number(passive.baseline_windows || 0);
+      const baselineTarget = Math.max(1, Number(passive.baseline_target || 6));
+      const votes = Number(passive.recent_anomaly_votes || 0);
+      const votesRequired = Math.max(1, Number(passive.anomaly_votes_required || 3));
+      const threshold = Math.max(.01, Number(passive.anomaly_z_threshold || 3.5));
       let tone = 'waiting';
       let heading = t.passiveWaiting;
       let copy = t.passiveWaitingDetail;
@@ -699,15 +925,65 @@
         copy += ` ${t.passiveEvidenceNote}`;
       }
 
+      const state = !enabled
+        ? 'unavailable'
+        : (passive.paused ? 'paused' : (passive.state || 'listening'));
+      liveState.className = `passive-live-state ${state}`;
+      liveState.textContent = t.passiveState[state] || state;
+
       panel.className = `passive-speech-monitor ${tone}`;
       title.textContent = heading;
       detail.textContent = copy;
+      document.getElementById('speechModePassiveState').textContent = heading;
+      document.getElementById('passiveBaselineValue').textContent = `${baselineCount} / ${baselineTarget}`;
+      document.getElementById('passiveBaselineBar').style.width = `${Math.min(100, baselineCount / baselineTarget * 100)}%`;
+      const baselineProgress = document.getElementById('passiveBaselineProgress');
+      baselineProgress.setAttribute('aria-valuemax', String(baselineTarget));
+      baselineProgress.setAttribute('aria-valuenow', String(Math.min(baselineCount, baselineTarget)));
+
+      const level = passiveMetric(metrics.rms_dbfs);
+      const voiced = passiveMetric(metrics.voiced_seconds);
+      document.getElementById('passiveLevelValue').textContent = level === null
+        ? '—'
+        : `${level.toFixed(1)} dBFS`;
+      document.getElementById('passiveVoicedValue').textContent = voiced === null
+        ? '—'
+        : `${voiced.toFixed(1)} s`;
+      document.getElementById('passiveVoteValue').textContent = `${votes} / ${votesRequired}`;
+
+      renderPassiveDomain('passiveDomainTiming', 'timing', domainScores, threshold, t);
+      renderPassiveDomain('passiveDomainPhonation', 'phonation', domainScores, threshold, t);
+      renderPassiveDomain(
+        'passiveDomainArticulation',
+        'articulation_resonance',
+        domainScores,
+        threshold,
+        t
+      );
+      renderPassiveVotes(passive, t);
+
+      const windowCopy = document.getElementById('passiveWindowCopy');
+      if (!latestWindow) {
+        windowCopy.textContent = t.passiveNoWindow;
+      } else if (latestWindow.valid) {
+        windowCopy.textContent = `${t.passiveWindowValid} · ${t.passiveThreshold.replace('{threshold}', threshold.toFixed(1))}`;
+      } else {
+        const reason = t.passiveReasons[latestWindow.reason] || latestWindow.reason || t.passiveNoWindow;
+        windowCopy.textContent = t.passiveWindowInvalid.replace('{reason}', reason);
+      }
+
       toggle.textContent = passive.paused ? t.passiveResume : t.passivePause;
       toggle.hidden = !enabled;
       toggle.disabled = transitionBusy;
       reset.hidden = !enabled;
       reset.disabled = transitionBusy;
-      confirm.hidden = !Boolean(passive.recommend_guided_check);
+      confirm.hidden = false;
+      confirm.className = passive.recommend_guided_check
+        ? 'button primary'
+        : 'button ghost';
+      confirm.textContent = passive.recommend_guided_check
+        ? t.passiveConfirmReady
+        : t.passiveConfirm;
       confirm.disabled = transitionBusy;
     }
 
@@ -716,6 +992,8 @@
       readyTicks = 0;
       selectedReport = null;
       persistentHistoryOpen = false;
+      speechModeMenuOpen = false;
+      passiveSpeechOpen = false;
       speechCompletionError = '';
       await postJson('/api/monitoring/trigger', {source:'user', reason:'demo_started'});
       await refresh();
@@ -723,11 +1001,17 @@
 
     async function startComponent(code) {
       if (transitionBusy) return;
+      if (code === 'S') {
+        openSpeechModeMenu();
+        return;
+      }
       transitionBusy = true;
       readyTicks = 0;
       balanceSafetyConfirmed = false;
       selectedReport = null;
       persistentHistoryOpen = false;
+      speechModeMenuOpen = false;
+      passiveSpeechOpen = false;
       speechCompletionError = '';
       try {
         if ((latest.speech || {}).state && (latest.speech || {}).state !== 'idle') {
@@ -750,6 +1034,8 @@
     async function openComponentMenu() {
       selectedReport = null;
       persistentHistoryOpen = false;
+      speechModeMenuOpen = false;
+      passiveSpeechOpen = false;
       balanceSafetyConfirmed = false;
       readyTicks = 0;
       speechCompletionError = '';
@@ -779,6 +1065,8 @@
       readyTicks = 0;
       selectedReport = null;
       persistentHistoryOpen = false;
+      speechModeMenuOpen = false;
+      passiveSpeechOpen = false;
       speechCompletionError = '';
       await refresh();
     }
@@ -1188,13 +1476,26 @@
       const speech = ['speech_ready','speech_recording'].includes(befast.stage);
       const report = selectedReport || befast.current_report;
       const menu = !standby && befast.stage === 'idle' && !report;
-      document.getElementById('startOverlay').hidden = !standby || persistentHistoryOpen;
-      document.getElementById('componentSheet').hidden = !menu || persistentHistoryOpen;
+      const speechChooser = speechModeMenuOpen;
+      const passiveMonitorView = passiveSpeechOpen;
+      document.getElementById('startOverlay').hidden = !standby
+        || persistentHistoryOpen || speechChooser || passiveMonitorView;
+      document.getElementById('componentSheet').hidden = !menu
+        || persistentHistoryOpen || speechChooser || passiveMonitorView;
+      document.getElementById('speechModeSheet').hidden = !speechChooser
+        || persistentHistoryOpen;
+      document.getElementById('passiveSpeechSheet').hidden = !passiveMonitorView
+        || persistentHistoryOpen;
       document.getElementById('persistentHistorySheet').hidden = !persistentHistoryOpen;
-      document.getElementById('guideOverlay').hidden = standby || menu || manual || speech || Boolean(report) || persistentHistoryOpen;
-      document.getElementById('manualSheet').hidden = !manual || Boolean(report) || persistentHistoryOpen;
-      document.getElementById('speechSheet').hidden = !speech || Boolean(report) || persistentHistoryOpen;
-      document.getElementById('resultSheet').hidden = !report || persistentHistoryOpen;
+      document.getElementById('guideOverlay').hidden = standby || menu || manual
+        || speech || Boolean(report) || persistentHistoryOpen
+        || speechChooser || passiveMonitorView;
+      document.getElementById('manualSheet').hidden = !manual || Boolean(report)
+        || persistentHistoryOpen || speechChooser || passiveMonitorView;
+      document.getElementById('speechSheet').hidden = !speech || Boolean(report)
+        || persistentHistoryOpen || speechChooser || passiveMonitorView;
+      document.getElementById('resultSheet').hidden = !report
+        || persistentHistoryOpen || speechChooser || passiveMonitorView;
       renderHistory(befast, t);
       document.getElementById('manualTitle').textContent = t.balanceManualTitle;
       document.getElementById('manualText').textContent = t.balanceManualText;
@@ -1273,7 +1574,18 @@
       ) {
         finalizeSpeechCapture();
       }
-      if (!persistentHistoryOpen && !standby && !menu && !manual && !speech && !report) maybeAdvance(befast, runtime);
+      if (
+        !persistentHistoryOpen
+        && !speechChooser
+        && !passiveMonitorView
+        && !standby
+        && !menu
+        && !manual
+        && !speech
+        && !report
+      ) {
+        maybeAdvance(befast, runtime);
+      }
     }
 
     function showError(error) {
