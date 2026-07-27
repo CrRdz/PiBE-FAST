@@ -166,8 +166,9 @@ class BefastWebApiTest(unittest.TestCase):
         self.assertIn("手机 / 当前设备".encode(), response.data)
         self.assertIn("自动切换（E/F 电脑 · A/B 手机）".encode(), response.data)
         self.assertIn("电脑前置摄像头 · E/F".encode(), response.data)
-        self.assertIn("asymmetric_eye_excursion".encode(), response.data)
-        self.assertIn("水平移动范围明显小于另一只眼".encode(), response.data)
+        self.assertIn("conjugate_rest_gaze_deviation".encode(), response.data)
+        self.assertIn("自然直视时双眼共同持续偏向一侧".encode(), response.data)
+        self.assertIn("E · 自然直视".encode(), response.data)
         self.assertIn("E · 看左侧".encode(), response.data)
         self.assertIn(b"eye_target_remaining", response.data)
         self.assertIn(b"getUserMedia", response.data)
@@ -273,6 +274,49 @@ class BefastWebApiTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["befast"]["stage"], "eyes")
+
+    def test_eye_component_checks_visual_symptoms_before_camera_capture(self):
+        selected = self.client.post(
+            "/api/befast/component", json={"component": "E"}
+        )
+        continued = self.client.post(
+            "/api/befast/manual-item",
+            json={
+                "component": "E",
+                "problem": False,
+                "new_or_sudden": False,
+                "viewing_distance_cm": 55,
+                "screen_width_cm": 30,
+                "achieved_target_visual_angle_degrees": 12.5,
+            },
+        )
+
+        self.assertEqual(selected.status_code, 200)
+        self.assertEqual(selected.get_json()["befast"]["stage"], "manual_eyes")
+        self.assertEqual(continued.status_code, 200)
+        payload = continued.get_json()["befast"]
+        self.assertEqual(payload["stage"], "retry_eyes")
+        self.assertEqual(payload["eye_setup"]["viewing_distance_cm"], 55.0)
+        self.assertEqual(
+            payload["eye_setup"]["achieved_target_visual_angle_degrees"],
+            12.5,
+        )
+
+    def test_reported_sudden_visual_problem_is_an_emergency_without_camera(self):
+        self.client.post("/api/befast/component", json={"component": "E"})
+        response = self.client.post(
+            "/api/befast/manual-item",
+            json={
+                "component": "E",
+                "problem": True,
+                "new_or_sudden": True,
+            },
+        )
+
+        payload = response.get_json()["befast"]
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload["current_report"]["item"]["source"], "user_or_caregiver")
+        self.assertEqual(payload["decision"], "emergency")
 
     def test_can_select_an_independent_speech_component_and_get_report(self):
         selected = self.client.post(

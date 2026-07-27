@@ -74,10 +74,11 @@ class BefastSession:
         self.balance_result = MotionResult()
         self.speech_result = MotionResult()
         self.manual_complete = False
-        self.manual_completed = {"B": False, "S": False}
+        self.manual_completed = {"B": False, "E": False, "S": False}
         self.manual: dict[str, bool | None] = {
             key: None for key in self.MANUAL_KEYS
         }
+        self.manual["eye_problem"] = None
         self.new_or_sudden: bool | None = None
         self.onset_time: str | None = None
         self.guidance: dict[str, Any] = {
@@ -144,6 +145,15 @@ class BefastSession:
                 self.manual_complete = False
                 self.stage = "manual_balance"
                 self._set_guidance(False, "manual_observation_required", ts)
+                return
+            if normalized == "E":
+                self.eye_result = MotionResult()
+                self.eye_screen.reset()
+                self.eye_screen.configure_setup()
+                self.manual["eye_problem"] = None
+                self.manual_completed["E"] = False
+                self.stage = "manual_eyes"
+                self._set_guidance(False, "manual_visual_observation_required", ts)
                 return
 
             stage = self.COMPONENT_STAGES[normalized]
@@ -224,13 +234,16 @@ class BefastSession:
         problem: bool,
         new_or_sudden: bool,
         onset_time: str | None = None,
+        viewing_distance_cm: float | None = None,
+        screen_width_cm: float | None = None,
+        achieved_target_visual_angle_degrees: float | None = None,
         now: float | None = None,
     ) -> None:
-        """独立提交 B 人工观察；S 必须由麦克风分析接口提交。"""
+        """提交 B/E 人工观察；E 无主观症状时再进入摄像头辅助检查。"""
 
         normalized = str(code).strip().upper()
-        if normalized != "B":
-            raise ValueError("manual component must be 'B'")
+        if normalized not in {"B", "E"}:
+            raise ValueError("manual component must be 'B' or 'E'")
         if not isinstance(problem, bool) or not isinstance(new_or_sudden, bool):
             raise ValueError("problem and new_or_sudden must be booleans")
         ts = time.time() if now is None else float(now)
@@ -239,7 +252,10 @@ class BefastSession:
                 ts, "manual_form", "manual_component_submitted"
             )
             self.active_component = normalized
-            self.manual["balance_problem"] = problem
+            manual_key = (
+                "balance_problem" if normalized == "B" else "eye_problem"
+            )
+            self.manual[manual_key] = problem
             self.manual_completed[normalized] = True
             self.manual_complete = self.manual_completed["B"]
             self.new_or_sudden = new_or_sudden
@@ -254,6 +270,19 @@ class BefastSession:
                 self.stage_started_at = None
                 self.current_report = None
                 self._set_guidance(False, "prepare_balance", ts)
+                return
+            if normalized == "E" and not problem:
+                self.eye_screen.configure_setup(
+                    viewing_distance_cm=viewing_distance_cm,
+                    screen_width_cm=screen_width_cm,
+                    achieved_target_visual_angle_degrees=(
+                        achieved_target_visual_angle_degrees
+                    ),
+                )
+                self.stage = "retry_eyes"
+                self.stage_started_at = None
+                self.current_report = None
+                self._set_guidance(False, "prepare_eyes", ts)
                 return
 
             self.stage = "report"
@@ -433,6 +462,9 @@ class BefastSession:
                 snapshot["eye_target_remaining"] = round(
                     max(0.0, self.config.eye_target_seconds - target_elapsed), 1
                 )
+                snapshot["eye_trial"] = self.eye_screen.trial_index(ts) + 1
+                snapshot["eye_trial_total"] = len(self.eye_screen.TRIALS)
+                snapshot["eye_settling"] = self.eye_screen.is_settling(ts)
             if self.stage == "face":
                 # F 阶段额外告诉前端当前应保持中性还是微笑。
                 snapshot["face_phase"] = self.face_screen.phase(ts)
@@ -476,6 +508,7 @@ class BefastSession:
                 "metrics": dict(self.guidance.get("metrics", {})),
             },
             "retry_counts": dict(self.retry_counts),
+            "eye_setup": dict(self.eye_screen.setup),
             "disclaimer": (
                 "Screening prototype only; it cannot diagnose or exclude stroke. "
                 "Any sudden BE-FAST sign requires emergency medical help."

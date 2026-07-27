@@ -5,8 +5,24 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from .balance import balance_report_item
-from .result import MotionResult, motion_report_item
+from .result import MotionResult, motion_report_item, report_item
 from .speech import speech_report_item
+
+
+def eye_report_item(
+    reported_problem: bool | None,
+    manual_completed: bool,
+    motion_result: MotionResult,
+) -> dict[str, Any]:
+    """E 以突发视觉症状优先，摄像头终点检查只作辅助。"""
+
+    if manual_completed and reported_problem is True:
+        return report_item(
+            "positive",
+            "user_or_caregiver",
+            "reported_visual_problem",
+        )
+    return motion_report_item(motion_result, "mediapipe_eye_endpoint")
 
 
 def build_report_items(
@@ -31,7 +47,11 @@ def build_report_items(
             manual["balance_problem"] if completed.get("B", False) else None,
             balance_result,
         ),
-        "E": motion_report_item(eye_result, "mediapipe_face"),
+        "E": eye_report_item(
+            manual.get("eye_problem"),
+            completed.get("E", False),
+            eye_result,
+        ),
         "F": motion_report_item(face_result, "mediapipe_face"),
         "A": motion_report_item(arm_result, "pose"),
         "S": speech_report_item(speech_result or MotionResult()),

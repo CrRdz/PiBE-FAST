@@ -1,5 +1,6 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from math import cos, radians, sin
 import unittest
 
 from app.befast import (
@@ -45,10 +46,14 @@ def standing_points(left_wrist_y=0.30, right_wrist_y=0.30, body_shift=0.0):
 
 def face_observation(
     gaze_ratio=0.5,
+    left_gaze_ratio=None,
+    right_gaze_ratio=None,
     mouth_corner_difference=0.0,
     left_smile=0.0,
     right_smile=0.0,
     interocular_width=0.30,
+    head_yaw_degrees=0.0,
+    include_head_pose=True,
 ):
     landmarks = [(0.5, 0.5, 0.0) for _ in range(478)]
     half_eye_distance = interocular_width / 2.0
@@ -57,14 +62,23 @@ def face_observation(
     eye_width = interocular_width / 3.0
     landmarks[133] = (landmarks[33][0] + eye_width, 0.40, 0.0)
     landmarks[362] = (landmarks[263][0] - eye_width, 0.40, 0.0)
-    landmarks[468] = (landmarks[33][0] + eye_width * gaze_ratio, 0.40, 0.0)
-    landmarks[473] = (landmarks[362][0] + eye_width * gaze_ratio, 0.40, 0.0)
+    right_ratio = gaze_ratio if right_gaze_ratio is None else right_gaze_ratio
+    left_ratio = gaze_ratio if left_gaze_ratio is None else left_gaze_ratio
+    landmarks[468] = (landmarks[33][0] + eye_width * right_ratio, 0.40, 0.0)
+    landmarks[473] = (landmarks[362][0] + eye_width * left_ratio, 0.40, 0.0)
     landmarks[1] = (0.5, 0.52, 0.0)
     landmarks[61] = (0.43, 0.66, 0.0)
     landmarks[291] = (
         0.57,
         0.66 + mouth_corner_difference * interocular_width,
         0.0,
+    )
+    yaw = radians(head_yaw_degrees)
+    transform = (
+        (cos(yaw), 0.0, sin(yaw), 0.0),
+        (0.0, 1.0, 0.0, 0.0),
+        (-sin(yaw), 0.0, cos(yaw), 0.0),
+        (0.0, 0.0, 0.0, 1.0),
     )
     return FaceObservation(
         ts=0.0,
@@ -74,14 +88,18 @@ def face_observation(
             "mouthSmileRight": right_smile,
         },
         inference_ms=12.0,
+        frame_width=640,
+        frame_height=480,
+        facial_transform=transform if include_head_pose else None,
     )
 
 
 class BefastSessionTest(unittest.TestCase):
     def setUp(self):
         self.config = BefastConfig(
-            eye_target_seconds=0.3,
-            eye_min_samples_per_target=3,
+            eye_target_seconds=0.15,
+            eye_settle_seconds=0.05,
+            eye_min_samples_per_trial=3,
             face_neutral_seconds=0.3,
             face_smile_seconds=0.3,
             face_min_samples_per_phase=3,
@@ -106,10 +124,10 @@ class BefastSessionTest(unittest.TestCase):
 
     def run_eye_screen(self, gaze_factory):
         self.session.start_stage("eyes", now=0.0)
-        for index in range(20):
-            ts = index * 0.05
+        for index in range(80):
+            ts = index * 0.025
             self.session.update_face(ts, gaze_factory(ts))
-        return self.session.snapshot(now=1.0)
+        return self.session.snapshot(now=2.0)
 
     def run_face_screen(self, face_factory):
         self.session.start_stage("face", now=1.0)
@@ -156,20 +174,34 @@ class BefastSessionTest(unittest.TestCase):
         self.session.reset()
         self.assertEqual(self.session.snapshot()["mode"], "standby")
 
-    def test_default_eye_targets_remain_visible_for_three_seconds_each(self):
+    def test_default_eye_targets_repeat_both_directions_with_center_baselines(self):
         session = BefastSession()
         session.start_stage("eyes", now=100.0)
 
-        center = session.snapshot(now=102.9)
-        left = session.snapshot(now=103.1)
-        right = session.snapshot(now=106.1)
+        observed = [
+            session.snapshot(now=100.0 + index * 2.0 + 0.1)["eye_target"]
+            for index in range(13)
+        ]
 
-        self.assertEqual(center["eye_target"], "center")
-        self.assertEqual(center["eye_target_remaining"], 0.1)
-        self.assertEqual(left["eye_target"], "left")
-        self.assertEqual(left["eye_target_remaining"], 2.9)
-        self.assertEqual(right["eye_target"], "right")
-        self.assertEqual(right["eye_target_remaining"], 2.9)
+        self.assertEqual(
+            observed,
+            [
+                "rest",
+                "center",
+                "left",
+                "center",
+                "right",
+                "center",
+                "right",
+                "center",
+                "left",
+                "center",
+                "left",
+                "center",
+                "right",
+            ],
+        )
+        self.assertEqual(session.eye_screen.duration_seconds, 26.0)
 
     def test_live_guidance_marks_visible_face_as_ready(self):
         self.session.start_screening(now=10.0)
@@ -325,7 +357,12 @@ class BefastSessionTest(unittest.TestCase):
     def test_complete_negative_screen_is_clear(self):
         self.run_eye_screen(
             lambda ts: face_observation(
-                gaze_ratio=0.5 if ts < 0.3 else (0.25 if ts < 0.6 else 0.75)
+                gaze_ratio={
+                    "rest": 0.5,
+                    "center": 0.5,
+                    "left": 0.25,
+                    "right": 0.75,
+                }[self.session.eye_screen.target(ts)]
             )
         )
         self.run_face_screen(
@@ -366,12 +403,251 @@ class BefastSessionTest(unittest.TestCase):
         self.assertEqual(result["decision"], "incomplete")
         self.assertEqual(result["stage"], "retry_arms")
 
-    def test_reduced_eye_target_response_is_positive(self):
+    def test_absent_target_following_is_insufficient(self):
         result = self.run_eye_screen(lambda _: face_observation(gaze_ratio=0.5))
+
+        self.assertEqual(result["items"]["E"]["status"], "insufficient")
+        self.assertEqual(
+            result["items"]["E"]["reason"],
+            "visual_target_following_not_demonstrated",
+        )
+
+    def test_eye_response_accepts_mirrored_camera_coordinates(self):
+        result = self.run_eye_screen(
+            lambda ts: face_observation(
+                gaze_ratio={
+                    "rest": 0.5,
+                    "center": 0.5,
+                    "left": 0.75,
+                    "right": 0.25,
+                }[self.session.eye_screen.target(ts)]
+            )
+        )
+
+        self.assertEqual(result["items"]["E"]["status"], "negative")
+        self.assertEqual(
+            result["items"]["E"]["metrics"]["coordinate_orientation"],
+            -1.0,
+        )
+
+    def test_eye_response_allows_low_rate_endpoint_amplitude_variation(self):
+        def observation(ts):
+            trial = self.session.eye_screen.trial_index(ts)
+            if self.session.eye_screen.target(ts) == "left":
+                # 三次中允许一轮幅度缩小 2.5 倍，其余两轮一致。
+                gaze = 0.40 if trial == 8 else 0.25
+            elif self.session.eye_screen.target(ts) == "right":
+                gaze = 0.75
+            else:
+                gaze = 0.50
+            return face_observation(gaze_ratio=gaze)
+
+        result = self.run_eye_screen(observation)
+
+        self.assertEqual(result["items"]["E"]["status"], "negative")
+        self.assertGreater(
+            result["items"]["E"]["metrics"][
+                "left_left_repeat_relative_spread"
+            ],
+            0.50,
+        )
+
+    def test_eye_test_requires_head_pose_to_exclude_turning(self):
+        result = self.run_eye_screen(
+            lambda ts: face_observation(
+                gaze_ratio={
+                    "rest": 0.5,
+                    "center": 0.5,
+                    "left": 0.25,
+                    "right": 0.75,
+                }[self.session.eye_screen.target(ts)],
+                include_head_pose=False,
+            )
+        )
+
+        self.assertEqual(result["items"]["E"]["status"], "insufficient")
+        self.assertEqual(
+            result["items"]["E"]["reason"],
+            "head_pose_not_available_during_eye_test",
+        )
+
+    def test_eye_test_rejects_head_rotation_compensation(self):
+        result = self.run_eye_screen(
+            lambda ts: face_observation(
+                gaze_ratio={
+                    "rest": 0.5,
+                    "center": 0.5,
+                    "left": 0.25,
+                    "right": 0.75,
+                }[self.session.eye_screen.target(ts)],
+                head_yaw_degrees=(
+                    -10.0
+                    if self.session.eye_screen.target(ts) == "left"
+                    else (
+                        10.0
+                        if self.session.eye_screen.target(ts) == "right"
+                        else 0.0
+                    )
+                ),
+            )
+        )
+
+        self.assertEqual(result["items"]["E"]["status"], "insufficient")
+        self.assertEqual(result["items"]["E"]["reason"], "head_moved_during_eye_test")
+
+    def test_conjugate_rest_gaze_deviation_is_positive(self):
+        result = self.run_eye_screen(
+            lambda ts: face_observation(
+                gaze_ratio={
+                    "rest": 0.75,
+                    "center": 0.5,
+                    "left": 0.25,
+                    "right": 0.75,
+                }[self.session.eye_screen.target(ts)]
+            )
+        )
 
         self.assertEqual(result["items"]["E"]["status"], "positive")
         self.assertEqual(
-            result["items"]["E"]["reason"], "reduced_visual_target_response"
+            result["items"]["E"]["reason"],
+            "conjugate_rest_gaze_deviation",
+        )
+        self.assertGreaterEqual(
+            result["items"]["E"]["metrics"][
+                "conjugate_rest_gaze_deviation_degrees"
+            ],
+            12.0,
+        )
+
+    def test_bilateral_directional_gaze_restriction_is_positive(self):
+        result = self.run_eye_screen(
+            lambda ts: face_observation(
+                gaze_ratio={
+                    "rest": 0.5,
+                    "center": 0.5,
+                    "left": 0.5,
+                    "right": 0.75,
+                }[self.session.eye_screen.target(ts)]
+            )
+        )
+
+        self.assertEqual(result["items"]["E"]["status"], "positive")
+        self.assertEqual(
+            result["items"]["E"]["reason"],
+            "bilateral_directional_gaze_restriction",
+        )
+
+    def test_binocular_directional_hypometria_is_positive(self):
+        result = self.run_eye_screen(
+            lambda ts: face_observation(
+                gaze_ratio={
+                    "rest": 0.5,
+                    "center": 0.5,
+                    # 极弱但方向正确；不得因左右终点中点偏移而误标为静息偏向。
+                    "left": 0.49,
+                    "right": 0.75,
+                }[self.session.eye_screen.target(ts)]
+            )
+        )
+
+        self.assertEqual(result["items"]["E"]["status"], "positive")
+        self.assertEqual(
+            result["items"]["E"]["reason"],
+            "binocular_directional_gaze_hypometria",
+        )
+
+    def test_one_eye_directional_restriction_is_positive(self):
+        def observation(ts):
+            target = self.session.eye_screen.target(ts)
+            left_eye = {
+                "rest": 0.5,
+                "center": 0.5,
+                "left": 0.5,
+                "right": 0.75,
+            }[target]
+            right_eye = {
+                "rest": 0.5,
+                "center": 0.5,
+                "left": 0.25,
+                "right": 0.75,
+            }[target]
+            return face_observation(
+                left_gaze_ratio=left_eye,
+                right_gaze_ratio=right_eye,
+            )
+
+        result = self.run_eye_screen(observation)
+
+        self.assertEqual(result["items"]["E"]["status"], "positive")
+        self.assertEqual(
+            result["items"]["E"]["reason"],
+            "possible_disconjugate_gaze_restriction",
+        )
+
+    def test_small_inter_eye_range_difference_alone_is_not_positive(self):
+        def observation(ts):
+            target = self.session.eye_screen.target(ts)
+            left_eye = {
+                "rest": 0.5,
+                "center": 0.5,
+                "left": 0.3,
+                "right": 0.7,
+            }[target]
+            right_eye = {
+                "rest": 0.5,
+                "center": 0.5,
+                "left": 0.35,
+                "right": 0.65,
+            }[target]
+            return face_observation(
+                left_gaze_ratio=left_eye,
+                right_gaze_ratio=right_eye,
+            )
+
+        result = self.run_eye_screen(observation)
+
+        self.assertEqual(result["items"]["E"]["status"], "negative")
+        self.assertGreater(
+            result["items"]["E"]["metrics"]["inter_eye_range_asymmetry"],
+            0.20,
+        )
+
+    def test_reported_visual_problem_bypasses_camera_measurement(self):
+        self.session.prepare_component("E", now=1.0)
+        self.assertEqual(self.session.snapshot(now=1.1)["stage"], "manual_eyes")
+
+        self.session.submit_component_observation(
+            "E",
+            problem=True,
+            new_or_sudden=True,
+            onset_time="2026-07-27T10:00",
+            now=1.2,
+        )
+        result = self.session.snapshot(now=1.3)
+
+        self.assertEqual(result["items"]["E"]["status"], "positive")
+        self.assertEqual(result["items"]["E"]["reason"], "reported_visual_problem")
+        self.assertEqual(result["items"]["E"]["source"], "user_or_caregiver")
+        self.assertEqual(result["decision"], "emergency")
+
+    def test_no_reported_visual_problem_continues_to_camera_setup(self):
+        self.session.prepare_component("E", now=1.0)
+        self.session.submit_component_observation(
+            "E",
+            problem=False,
+            new_or_sudden=False,
+            viewing_distance_cm=55.0,
+            screen_width_cm=30.0,
+            achieved_target_visual_angle_degrees=13.0,
+            now=1.2,
+        )
+        result = self.session.snapshot(now=1.3)
+
+        self.assertEqual(result["stage"], "retry_eyes")
+        self.assertEqual(result["eye_setup"]["viewing_distance_cm"], 55.0)
+        self.assertEqual(
+            result["eye_setup"]["achieved_target_visual_angle_degrees"],
+            13.0,
         )
 
     def test_symmetric_smile_is_negative(self):

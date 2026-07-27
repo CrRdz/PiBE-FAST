@@ -558,6 +558,11 @@ def create_app(
                 problem=payload["problem"],
                 new_or_sudden=payload["new_or_sudden"],
                 onset_time=payload.get("onset_time"),
+                viewing_distance_cm=payload.get("viewing_distance_cm"),
+                screen_width_cm=payload.get("screen_width_cm"),
+                achieved_target_visual_angle_degrees=payload.get(
+                    "achieved_target_visual_angle_degrees"
+                ),
             )
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400

@@ -220,41 +220,56 @@ Raspberry Pi
 **摄像头来源：**可使用服务主机的本地摄像头，也可使用当前浏览器设备的
 前置摄像头。两者都会进入相同的 E/F 特征识别流程。
 
-**目标：**检测对移动视觉目标的可见眼动响应、左右眼活动范围差和双眼共轭运动异常。
+**目标：**先记录突发视觉症状，再辅助检查静息共轭偏向、双眼共同的方向性终点
+减弱和明显不共轭响应。它不是视力、视野或高速扫视检查。
 
 **输入：**MediaPipe Face Landmarker 的 478 点面部网格，其中包括：
 
 - 右虹膜中心 `468`，左虹膜中心 `473`；
 - 右眼角 `33/133`，左眼角 `362/263`；
-- 鼻尖 `1`；
-- 双眼外眼角 `33/263` 作为尺度和头部滚转参考。
+- 双眼外眼角 `33/263` 作为尺度和画面内滚转参考；
+- canonical-face transformation matrix，用于 pitch/yaw/roll 头姿质量门控。
 
 **引导与计算：**
 
-1. 页面目标点依次停留在中间、左侧、右侧，每处约 3 秒，界面同步显示方向和倒计时。
-2. 使用双眼外眼角连线校正画面内头部滚转。
-3. 用外眼角距离归一化脸部尺度；小于画面宽度约 7.5% 时认为脸太小。
-4. 每只眼的虹膜位置转换为眼裂内相对位置：
+1. 先询问突然视力下降、黑蒙、视野缺损、复视或持续凝视偏向；报告新发异常时直接
+   形成 E 警示，摄像头结果不能覆盖。
+2. 未报告症状时，填写屏幕物理宽度和观看距离，页面把左右目标近似放在中心
+   `±15°`，并将视口限幅后的实际角度回传到报告。
+3. 先采集一次无目标的自然直视，再按“中—左—中—右—中—右—中—左—中—
+   左—中—右”呈现目标，左右各重复三次；每阶段 2 秒，切换后的前 0.5 秒不进入
+   终点统计。
+4. 使用双眼外眼角连线校正画面内滚转，并检查每只眼实际像素宽度。
+5. 每只眼的虹膜位置转换为眼裂内相对位置：
 
    ```text
    gaze_x = (iris_x - eye_corner_min_x) / eye_width
    ```
 
-5. 分别计算左右眼从左目标到右目标的活动范围。
-6. 比较两眼活动范围差、相对中心目标的共轭误差，以及鼻尖相对双眼中心的头部代偿。
+6. 每个侧方终点只与紧邻在前的中心终点比较，位移需同时满足正确方向和相对
+   MAD 噪声的 SNR 门槛。
+7. 三轮取中位数并允许一个离群试次；至少 2/3 方向和 SNR 合格后，再检查静息
+   共轭偏向、双眼共同方向减弱和归一化终点不共轭。
 
-**当前工程规则：**
+**可靠性门控：**
 
-- 每个目标至少 4 个有效样本，总有效帧比例不低于 50%；
-- 两眼活动范围都低于 `0.12`：可见目标跟随减弱；
-- 左右眼活动范围差达到 `0.10`：眼球活动不对称；
-- 最大共轭误差达到 `0.14`：双眼共轭运动异常；
-- 头部代偿范围达到 `0.35 × 双眼外眼角距离`：数据不足并提示重试；
-- 虹膜、面部持续不可见：`insufficient`。
+- 每个重复试次至少 5 个有效终点样本，试次有效率至少 60%；
+- 眼裂宽度至少 24 像素，稳定注视阶段虹膜位置 MAD 不高于 `0.08`；
+- 同方向三次响应取中位数，最接近中位数的另一轮相对差不高于 `1.00`；
+- 至少 80% 有效帧带有三维头姿，任一头姿角一轮内变化不超过 `8°`；
+- 任一质量项失败均为 `insufficient`，不会被当作正常；
+- 原来的 `0.12 / 0.10 / 0.14 / 0.35 / 7.5%` 规则已移除。
 
-**关键医学边界：**E 只检测摄像头可见的眼动，不能测量视力，也不能排除视物模糊、
-复视、黑蒙或视野缺损。本人报告突然视力异常时，必须直接按急症处理，不能被模型
-阴性结果覆盖。
+**研究阈值：**可见响应使用同轮 `MAD` 形成 SNR。静息共轭偏向的 `12°` 候选值
+借鉴影像测角研究的高特异度区间，但尚未验证可迁移到本摄像头；方向减弱 `45%` 和
+归一化不共轭 `35%` 仍是待临床标定参数。单纯左右眼总范围差不再触发阳性。约
+5 FPS 只分析稳定终点，不输出眼震、扫视潜伏期、速度或平滑追踪增益。
+
+参数、论文映射和验证要求见
+[E 眼动辅助检查：证据、实现与限制](docs/eyes-evidence.md)。
+
+**关键医学边界：**E 不能测量视力、视野、眼底，也不能排除视物模糊、复视、黑蒙
+或视野缺损。本人报告突然视觉异常时，必须直接按急症处理。
 
 ### F — Face / 面部
 
@@ -551,7 +566,7 @@ ssh -L 8080:localhost:8080 pi@raspberrypi.local
 
 ```text
 GET  /api/status
-GET  /api/history?component=E,F&reason=asymmetric_eye_excursion
+GET  /api/history?component=E,F&reason=conjugate_rest_gaze_deviation
 GET  /api/history/<记录ID>
 GET  /api/history/<记录ID>/frame
 GET  /api/history/<记录ID>/audio
@@ -899,41 +914,64 @@ affect the result. Agreement with the personal baseline cannot rule out stroke.
 front camera of the current browser device. Both enter the same E/F feature
 extraction path.
 
-**Purpose:** detect visible gaze response to moving targets, inter-eye excursion
-asymmetry, and abnormal conjugate eye movement.
+**Purpose:** record sudden visual symptoms first, then assist with resting
+conjugate deviation, binocular directional endpoint reduction, and marked
+dysconjugate responses. This is not a visual-acuity, visual-field, or high-speed
+saccade test.
 
 **Inputs:** MediaPipe's 478-point mesh, including right/left iris centers `468/473`,
-right eye corners `33/133`, left eye corners `362/263`, nose tip `1`, and outer
-eye corners `33/263` for scale and roll correction.
+right eye corners `33/133`, left eye corners `362/263`, outer eye corners `33/263`
+for scale and roll correction, and the canonical-face transformation matrix for
+pitch/yaw/roll quality gating.
 
 **Method:**
 
-1. A target remains at center, left, and right for about 3 seconds each; the UI
-   shows the current direction and a countdown.
-2. The outer-eye line corrects in-plane head roll.
-3. Interocular distance normalizes scale; a distance below about 7.5% of image
-   width is treated as a face that is too small.
-4. Iris position is represented within each eye opening:
+1. Ask about sudden visual loss, dimming, a field defect, diplopia, or sustained
+   gaze deviation. A reported new sign produces an E warning without requiring
+   camera confirmation.
+2. If none is reported, use physical screen width and viewing distance to place
+   lateral targets at approximately `±15°`, and report the angle actually achieved
+   after viewport clipping.
+3. Capture an untargeted natural-forward-gaze stage, then present
+   center–left–center–right–center–right–center–left–center–left–center–right,
+   repeating both directions three times with alternating order. Each stage lasts
+   2 seconds; its first 0.5 seconds is excluded from endpoint analysis.
+4. Correct in-plane roll using the outer-eye line and check actual eye-region
+   pixel width.
+5. Represent each iris within its eye opening:
 
    ```text
    gaze_x = (iris_x - eye_corner_min_x) / eye_width
    ```
 
-5. Compute left-to-right excursion for both eyes.
-6. Compare excursion asymmetry, conjugacy error relative to center, and head
-   compensation derived from the nose position.
+6. Compare every lateral endpoint only with its immediately preceding center.
+   A response must have the expected direction and exceed same-trial MAD noise.
+7. Take the median of three repetitions, allow one outlier trial, and require at
+   least two of three direction/SNR checks before evaluating resting conjugate
+   deviation, binocular directional reduction, and normalized dysconjugacy.
 
-**Current engineering rules:** at least 4 valid samples per target and 50% valid
-frames. Both excursions below `0.12` indicate reduced visible target response;
-excursion difference of `0.10` indicates asymmetry; conjugacy error of `0.14`
-indicates abnormal conjugate motion; head compensation of `0.35 × interocular
-distance` makes the result insufficient. Missing irises/face also produces
-`insufficient`.
+**Reliability gates:** each repeated trial needs at least 5 valid endpoint samples
+and 60% validity. Eye-opening width must be at least 24 pixels and fixation MAD no
+greater than `0.08`. Three responses use their median, allow one outlier, and
+require the nearest companion's relative error to be no greater than `1.00`.
+At least 80% of valid frames must include 3D head pose. More than `8°` of
+within-run pitch, yaw, or roll change makes the result insufficient. The former
+`0.12 / 0.10 / 0.14 / 0.35 / 7.5%` rules have been removed.
 
-**Critical medical boundary:** E only evaluates camera-visible eye motion. It does
-not measure visual acuity and cannot rule out blurred vision, diplopia, transient
-vision loss, or visual-field defects. A sudden subjective visual symptom must
-override a negative model result and be treated as an emergency symptom.
+Visible response uses same-run MAD to form an SNR. The `12°` resting-deviation
+candidate borrows a high-specificity range from imaging studies but is not
+validated for this webcam. The `45%` directional-reduction and `35%` normalized
+dysconjugacy thresholds remain research parameters. Inter-eye total-range
+difference alone no longer triggers a positive result. At about 5 FPS, the
+implementation analyzes stable endpoints only and does not report nystagmus,
+saccade latency/velocity, or pursuit gain.
+
+See [E eye endpoint check: evidence, implementation, and
+limitations](docs/eyes-evidence.md).
+
+**Critical medical boundary:** E does not measure visual acuity, visual fields, or
+the fundus and cannot rule out blurred vision, diplopia, transient visual loss,
+or field defects. A sudden subjective visual symptom overrides the camera result.
 
 ### F — Face
 
@@ -1229,7 +1267,7 @@ ssh -L 8080:localhost:8080 pi@raspberrypi.local
 
 ```text
 GET  /api/status
-GET  /api/history?component=E,F&reason=asymmetric_eye_excursion
+GET  /api/history?component=E,F&reason=conjugate_rest_gaze_deviation
 GET  /api/history/<record-id>
 GET  /api/history/<record-id>/frame
 GET  /api/history/<record-id>/audio

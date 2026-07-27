@@ -220,7 +220,7 @@ def parse_args() -> argparse.Namespace:
 
 
 FACE_CAMERA_STAGES = frozenset(
-    {"retry_eyes", "eyes", "ready_face", "retry_face", "face"}
+    {"manual_eyes", "retry_eyes", "eyes", "ready_face", "retry_face", "face"}
 )
 
 

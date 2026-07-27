@@ -27,15 +27,34 @@ class BefastConfig:
     # 双眼外眼角距离过小时，面部像素不足，E/F 检查按质量不足处理。
     face_min_interocular_width: float = 0.075
 
-    # E：每个目标停留 3 秒，让用户有时间看见、重新聚焦并保持注视。
-    eye_target_seconds: float = 3.0
-    eye_min_samples_per_target: int = 4
-    eye_min_valid_fraction: float = 0.50
-    # 依次限制总眼球活动范围、双眼范围差、共轭运动误差和头部代偿。
-    eye_gaze_range_threshold: float = 0.12
-    eye_range_asymmetry_threshold: float = 0.10
-    eye_conjugacy_threshold: float = 0.14
-    eye_head_motion_threshold: float = 0.35
+    # E：中心和左右目标按配对试次重复三次。每次切换后先留出稳定时间，
+    # 只分析随后保持注视的低帧率终点，不把它描述成扫视速度/潜伏期测量。
+    eye_target_seconds: float = 2.0
+    eye_settle_seconds: float = 0.5
+    eye_min_samples_per_trial: int = 5
+    eye_min_valid_fraction_per_trial: float = 0.60
+    # 实际视频帧尺寸可用时，同时要求每只眼有足够像素；7.5% 脸宽规则不再
+    # 单独决定 E 的可用性。该像素门槛仍是实现质量参数，需按设备验证。
+    eye_min_eye_width_pixels: float = 24.0
+    # MAD、重复差和头姿只负责拒绝不稳定测量，不是卒中阳性 cutoff。
+    eye_max_gaze_mad: float = 0.08
+    # 三次响应取中位数并允许一个离群试次；1.0 只要求最接近中位数的另
+    # 一次响应处在约 3 倍量级内，不再要求每两次幅度都接近。
+    eye_max_repeat_relative_error: float = 1.00
+    eye_min_head_pose_fraction: float = 0.80
+    eye_max_head_rotation_degrees: float = 8.0
+    # 3.5 表示可见终点位移需明显高于同一试次的稳健噪声。下列相对差阈值
+    # 仍是待临床标定的研究参数，但不再依赖眼裂绝对比例或拍摄距离。
+    eye_response_snr_threshold: float = 3.5
+    eye_directional_asymmetry_threshold: float = 0.45
+    eye_conjugacy_relative_error_threshold: float = 0.35
+    # CT/MRI 研究中约 12～14° 的共轭眼偏向具有较高特异度；这里只把
+    # 12° 用作待外部验证的高幅度候选界值，不能视为可直接迁移的临床 cutoff。
+    eye_rest_gaze_deviation_degrees_threshold: float = 12.0
+    # 前端根据物理屏宽和观看距离把目标放到约 ±15°；默认值只用于预填表单。
+    eye_target_visual_angle_degrees: float = 15.0
+    eye_default_viewing_distance_cm: float = 50.0
+    eye_default_screen_width_cm: float = 31.0
 
     # F：先采集中性表情作为个人基线，再采集微笑阶段。
     face_neutral_seconds: float = 2.0

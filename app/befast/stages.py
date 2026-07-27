@@ -6,6 +6,7 @@ ACTIVE_STAGES = ("eyes", "face", "arms", "balance")
 # 把等待、重试和采样状态统一映射回所属检查，供“跳过当前项”使用。
 SKIP_STAGE_ALIASES = {
     "idle": "eyes",
+    "manual_eyes": "eyes",
     "eyes": "eyes",
     "retry_eyes": "eyes",
     "ready_face": "face",
@@ -29,6 +30,7 @@ SKIP_FLOW = {
 
 # 阶段提示只负责文案，不参与状态机判断。
 PROMPTS = {
+    "manual_eyes": "Report sudden visual symptoms before the camera eye check.",
     "eyes": "Keep your head still and follow the moving target using only your eyes.",
     "retry_eyes": "Center your face and eyes so the eye check can restart.",
     "ready_face": "Eye movement check finished. Prepare for the smile check.",

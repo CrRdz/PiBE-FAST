@@ -16,6 +16,7 @@
       --green: #31d07f;
       --red: #ff5864;
       --yellow: #ffc857;
+      --eye-target-offset: 32%;
     }
     * { box-sizing: border-box; }
     html, body { min-height: 100%; }
@@ -54,8 +55,8 @@
     .step.active { color: #04131e; background: #8cd4ff; box-shadow: 0 0 0 4px #35a9ff24; }
     .eye-target { display: none; position: absolute; top: 45%; left: 50%; width: 30px; height: 30px; margin: -15px; border: 5px solid white; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 8px #35a9ff35, 0 0 28px #35a9ff; transition: left .18s ease; }
     .eye-target.visible { display: block; }
-    .eye-target.left { left: 18%; }
-    .eye-target.right { left: 82%; }
+    .eye-target.left { left: calc(50% - var(--eye-target-offset)); }
+    .eye-target.right { left: calc(50% + var(--eye-target-offset)); }
     .guide { position: absolute; left: 50%; bottom: 28px; width: min(760px, calc(100% - 32px)); transform: translateX(-50%); }
     .signal { display: grid; grid-template-columns: 48px 1fr; align-items: center; gap: 13px; padding: 14px 17px; border: 1px solid var(--line); border-left: 5px solid #83919c; border-radius: 14px; background: var(--glass); box-shadow: 0 14px 48px #0008; backdrop-filter: blur(18px); }
     .signal.correct { border-left-color: var(--green); background: rgba(8, 39, 26, .86); }
@@ -253,7 +254,7 @@
     </header>
     <div id="emergencyText" class="emergency">⚠ 突然出现任何 BE-FAST 症状，请立即拨打 120，不要等待本 Demo 完成。</div>
 
-    <main class="workspace">
+    <main id="workspace" class="workspace">
       <img id="liveVideo" class="video" src="/video_feed" alt="实时摄像头画面">
       <video id="clientVideo" class="video client-video" autoplay muted playsinline hidden></video>
       <canvas id="clientCanvas" hidden></canvas>
@@ -398,7 +399,10 @@
         <h2 id="manualTitle">B · 平衡观察</h2>
         <p id="manualText">如果已经突然失去平衡或协调困难，请直接勾选，无需冒险站立。</p>
         <div class="manual-grid">
-          <label class="check"><input id="balance_problem" type="checkbox"><span id="balanceLabel">突然失去平衡或协调困难</span></label>
+          <label id="balanceProblemRow" class="check"><input id="balance_problem" type="checkbox"><span id="balanceLabel">突然失去平衡或协调困难</span></label>
+          <label id="eyeProblemRow" class="check" hidden><input id="eye_problem" type="checkbox"><span id="eyeProblemLabel">突然视力下降、视野缺损、复视或眼睛偏向一侧</span></label>
+          <label id="eyeDistanceRow" class="time-field" hidden><span id="eyeDistanceLabel">眼睛到屏幕距离（厘米）</span><input id="eye_viewing_distance_cm" type="number" min="20" max="150" step="1" value="50"></label>
+          <label id="eyeScreenWidthRow" class="time-field" hidden><span id="eyeScreenWidthLabel">屏幕物理宽度（厘米）</span><input id="eye_screen_width_cm" type="number" min="5" max="100" step="0.1" value="31"></label>
           <label class="check"><input id="new_or_sudden" type="checkbox"><span id="suddenLabel">以上任一异常是新出现或突然发生</span></label>
           <label class="time-field"><span id="onsetLabel">首次发现异常时间（可留空）</span><input id="onset_time" type="datetime-local"></label>
         </div>
@@ -441,11 +445,12 @@
         startText: '先选择摄像头，再进入单项检测。B、E、F、A、S 可任意选择、独立完成并不限次数重复；自动项目仍会用红绿提示引导，每次完成都会立即生成报告。', start: '选择检测项目', exit: '退出筛查',
         passiveMonitorTitle:'长期语音监测', passiveDisabled:'长期语音监测未启用', passiveDisabledDetail:'启动服务时不要使用 --disable-passive-speech，即可在本地建立自然语音基线。', passiveUnavailable:'本地麦克风不可用', passivePaused:'长期监听已暂停', passivePausedDetail:'恢复后才会继续采集短窗口；固定句检测期间会自动暂停。', passiveCalibrating:'正在建立个人语音基线', passiveCalibrationDetail:'已采集 {count}/{target} 个有效自然语音窗口。请在安静环境中由同一人自然说话。', passiveWaiting:'正在等待自然语音', passiveWaitingDetail:'没有检测到足够的有效说话声音，原始录音不会保留。', passiveStable:'长期语音监测运行中', passiveStableDetail:'最近窗口与个人基线一致；这里只做变化触发，不用于诊断构音障碍或脑卒中。', passiveObserving:'检测到一次语音特征变化', passiveObservingDetail:'系统会继续观察多个窗口，单次变化不会触发告警。', passiveSuspected:'检测到持续语音特征变化', passiveSuspectedDetail:'建议立即进行固定句本地确认；该结果本身不是医学诊断。', passiveError:'长期语音监测发生错误', passivePause:'暂停监听', passiveResume:'继续监听', passiveReset:'重建个人基线', passiveResetConfirm:'确定清除当前个人语音基线并重新校准吗？', passiveConfirm:'朗读固定句确认', passiveConfirmReady:'建议立即朗读固定句', passiveChangedDomains:'变化域', passiveDomainNames:{timing:'时序',phonation:'发声',articulation_resonance:'构音/共振'}, passiveEvidenceNote:'论文启发的工程触发器，尚未临床验证。', passiveBaseline:'个人基线', passiveLevel:'当前响度', passiveVoiced:'有效语音', passiveVotes:'异常投票', passivePrivacy:'仅在本机分析 · 日常原始录音分析后立即删除', passiveRecentWindows:'最近 {count} 个有效窗口', passiveNoWindow:'等待第一个有效语音窗口', passiveWindowValid:'最近窗口有效', passiveWindowInvalid:'最近窗口未计入：{reason}', passiveThreshold:'变化阈值 {threshold}', passiveVoteEmpty:'尚无窗口', passiveVoteNormal:'该窗口未变化', passiveVoteChanged:'该窗口发生变化', passiveState:{capturing:'采集中',listening:'等待下一窗',paused:'已暂停',error:'错误',unavailable:'未启用',stopped:'已停止'}, passiveReasons:{passive_speech_audio_too_quiet:'声音太小',passive_speech_audio_clipped:'声音削波',passive_speech_not_detected:'有效语音不足',passive_speech_window_too_short:'录音过短'}, passiveMonitorSheetTitle:'S · 长期语音监测', passiveMonitorSheetText:'自然说话会与本机保存的个人声学基线比较；这里只提示持续变化，不直接诊断中风。', passiveBack:'返回语音方式',
         speechModeTitle:'S · 选择语音检测方式', speechModeText:'长期监测用于观察自然说话相对个人基线的变化；固定句朗读用于一次本地确认。', speechModePassiveTitle:'长期语音监测', speechModePassiveText:'持续采集本地短窗口，显示个人基线、声学域偏离和最近异常投票。', speechModeGuidedTitle:'朗读固定句', speechModeGuidedText:'录制约 7 秒提示句，在本地检查复述内容、语速和停顿。', speechModeGuidedState:'进入一次 S 检查', speechModeBack:'返回',
-        componentTitle:'选择单项检测', componentText:'各项目彼此独立。完成一项即可查看该次报告，也可以随时重复。', componentNames:{B:'平衡',E:'眼动',F:'面部',A:'手臂',S:'言语'}, componentDescriptions:{B:'人工失衡观察 + 安全站立检测',E:'跟随左右目标，检查眼动范围',F:'自然表情与微笑对称性',A:'双臂平举与单侧下落',S:'长期自然语音监测或固定句朗读确认'}, historyTitle:'本轮单项报告', historyEmpty:'尚无报告，选择任一项目开始。', menuFinish:'完成并退出',
+        componentTitle:'选择单项检测', componentText:'各项目彼此独立。完成一项即可查看该次报告，也可以随时重复。', componentNames:{B:'平衡',E:'眼动',F:'面部',A:'手臂',S:'言语'}, componentDescriptions:{B:'人工失衡观察 + 安全站立检测',E:'视觉症状优先 + 重复眼动终点检查',F:'自然表情与微笑对称性',A:'双臂平举与单侧下落',S:'长期自然语音监测或固定句朗读确认'}, historyTitle:'本轮单项报告', historyEmpty:'尚无报告，选择任一项目开始。', menuFinish:'完成并退出',
         historyEntry:'异常历史', persistentHistoryTitle:'异常历史记录', persistentHistoryText:'查看已保存的异常报告、画面和言语录音。', historyComponentLabel:'BE-FAST 项目', historySideLabel:'侧别', historySuddenLabel:'突发情况', historyAll:'全部', historyLeft:'左侧', historyRight:'右侧', historySuddenYes:'新发 / 突然', historySuddenNo:'非突发', historyRefresh:'刷新', historyClose:'关闭', historyLoading:'正在加载异常历史…', historyLoadError:'无法加载异常历史。', historyEmptyPersistent:'暂无符合当前筛选条件的异常记录。', historyCount:'共 {count} 条异常记录', historyFrameUnavailable:'没有保存画面', historyFrameLoadError:'画面文件无法加载，请刷新后重试。', historyDetectedAt:'检测时间', historyAttemptLabel:'第 {attempt} 次', historySuddenUnknown:'未确认是否突发',
         standbyGuide: ['准备开始', '请先确认摄像头画面清晰。'],
         idle: ['E · 眼动准备', '正对当前选择的摄像头，让面部和双眼清晰入镜。'],
-        eyes: ['E · 跟随目标', '头保持不动，只用眼睛跟随蓝色目标点。'],
+        eyes: ['E · 重复跟随目标', '头保持不动，只用眼睛跟随蓝色目标点；左右方向各测三次。'],
+        eyes_rest: ['E · 自然直视', '先自然看向正前方，不追随目标，头保持不动。'],
         eyes_center: ['E · 看中间', '目标在画面中间，头保持不动，只移动眼睛。'],
         eyes_left: ['E · 看左侧', '跟随蓝点看向画面左侧，头保持不动。'],
         eyes_right: ['E · 看右侧', '跟随蓝点看向画面右侧，头保持不动。'],
@@ -458,7 +463,7 @@
         balance: ['B · 保持自然站立约 30 秒', '看护者请在旁保护；有效窗口将与个人基线比较，感觉不稳立即停止。'],
         review: ['S/T · 完成人工观察', '检查言语是否清晰，并记录异常首次出现时间。'],
         correct: '动作正确', adjust: '请调整动作', waiting: '等待动作识别', remainingSeconds:'约剩 {seconds} 秒', continueStage: '开始检测', retryStage: '重新检测本项', skipStage:'跳过本项', skipConfirm:'确定跳过当前检测吗？报告会标记为“已跳过”，不会视为正常结果。',
-        safety: '已有人看护，可以安全站立', manualTitle: 'B · 平衡观察', manualText: '如果已经突然失去平衡或协调困难，请直接勾选，无需冒险站立；未发现时再继续安全站立检测。', balanceManualTitle:'B · 平衡观察', balanceManualText:'如果已经突然失去平衡或协调困难，请直接勾选，无需冒险站立；未发现时再继续安全站立检测。',
+        safety: '已有人看护，可以安全站立', manualTitle: 'B · 平衡观察', manualText: '如果已经突然失去平衡或协调困难，请直接勾选，无需冒险站立；未发现时再继续安全站立检测。', balanceManualTitle:'B · 平衡观察', balanceManualText:'如果已经突然失去平衡或协调困难，请直接勾选，无需冒险站立；未发现时再继续安全站立检测。', eyeManualTitle:'E · 先确认视觉症状', eyeManualText:'若突然出现视力下降、黑蒙、视野缺损、复视或眼睛持续偏向一侧，请直接勾选；摄像头阴性不能排除这些症状。未发现时再进行重复眼动终点检查。', eyeProblemLabel:'突然视力下降、黑蒙、视野缺损、复视或眼睛偏向一侧', eyeSuddenLabel:'该视觉异常是新出现或突然发生', eyeDistanceLabel:'眼睛到屏幕距离（厘米）', eyeScreenWidthLabel:'屏幕物理宽度（厘米）',
         balanceLabel: '突然失去平衡或协调困难', suddenLabel: '该异常是新出现或突然发生', onsetLabel: '首次发现异常时间（可留空）', cancel: '返回项目选择', submit: '继续',
         speechTitle:'S · 麦克风言语检测', speechText:'靠近树莓派麦克风，点击开始后完整复述下面的句子。录音与识别均在本地完成。', speechPromptLabel:'请复述', speechPromptDefault:'今天天气很好，我们一起去公园散步', speechSuddenLabel:'言语变化是新出现或突然发生', speechOnsetLabel:'首次发现异常时间（可留空）', speechCancel:'返回项目选择', speechStart:'开始录音', speechReady:'等待开始录音', speechReadyText:'系统将采集约 7 秒音频，并在树莓派本地分析。', speechRecording:'正在录音', speechRecordingText:'请完整复述提示句，不要让其他人同时说话。', speechAnalyzing:'正在本地分析', speechAnalyzingText:'正在检查音频质量、复述内容、语速和停顿。', speechCompleting:'正在生成报告', speechBackendMissing:'本地语音引擎尚未就绪', speechTranscriptLabel:'识别文本',
         resultTitle: '单项检测报告', again: '重新检测本项', other:'检测其他项目', finish: '完成并退出', reportAttempt:'{name} · 第 {attempt} 次报告', historyAttempt:'{code} 第{attempt}次',
@@ -478,6 +483,7 @@
         standbyGuide: ['Ready to begin', 'Confirm that the live camera view is clear.'],
         idle: ['E · Eye setup', 'Face the selected camera and keep both eyes clearly visible.'],
         eyes: ['E · Follow the target', 'Keep your head still and follow the blue target using only your eyes.'],
+        eyes_rest: ['E · Natural forward gaze', 'Look naturally straight ahead without following a target. Keep your head still.'],
         eyes_center: ['E · Look at center', 'The target is in the center. Keep your head still and move only your eyes.'],
         eyes_left: ['E · Look left', 'Follow the blue target to the left side of the screen without turning your head.'],
         eyes_right: ['E · Look right', 'Follow the blue target to the right side of the screen without turning your head.'],
@@ -501,6 +507,59 @@
         reasons: {show_face_and_eyes:'Move closer and keep both eyes visible', face_and_eyes_ready:'Face and eyes recognized', show_full_face:'Keep your full face inside the frame', neutral_face_ready:'Neutral expression recognized', relax_face_first:'Relax your face and do not smile yet', smile_now:'Smile naturally now', smile_detected:'Smile recognized', show_shoulders_and_wrists:'Keep both shoulders and wrists visible', raise_both_arms:'Raise both arms forward', arms_detected_hold_still:'Arm action recognized — keep holding', show_full_body_and_stand_safely:'Show your full body and ankles, then stand only with supervision', standing_pose_ready:'Standing pose recognized — hold still', collecting_action:'Starting capture', face_or_irises_not_visible_long_enough:'Eyes were not continuously visible — adjust and retry', head_moved_during_eye_test:'Too much head movement — keep your head still', face_not_visible_during_neutral_and_smile:'Face was not continuously visible — adjust and retry', smile_expression_not_detected:'No smile was detected — try again', arms_not_visible_long_enough:'Shoulders or wrists were not continuously visible — retry', both_arms_were_not_held_up:'The arm-raise action was not detected — retry', stable_standing_pose_not_visible_long_enough:'Full body or ankles were not continuously visible — retry'}
       }
     };
+
+    Object.assign(text.zh.resultReasons, {
+      reported_visual_problem:'本人或照护者报告了视力下降、黑蒙、视野缺损、复视或持续凝视偏向。',
+      eye_trials_not_visible_long_enough:'至少一个重复试次没有获得足够的清晰眼部终点样本。',
+      unstable_eye_landmarks_during_test:'眼部关键点在保持注视时波动过大，本次结果不可解释。',
+      head_pose_not_available_during_eye_test:'没有持续获得三维头姿，无法排除转头代偿。',
+      eye_response_not_repeatable:'三次同方向眼动未形成至少两次一致响应，本次不作正常或异常判断。',
+      visual_target_following_not_demonstrated:'双眼在两个方向均未形成可重复目标响应，无法确认受试者是否完成了任务。',
+      bilateral_directional_gaze_restriction:'双眼共同向一个方向的目标响应持续缺失，符合方向性共轭凝视受限表型。',
+      possible_disconjugate_gaze_restriction:'一只眼在特定方向的目标响应持续缺失，提示可能存在不共轭凝视受限。',
+      conjugate_rest_gaze_deviation:'自然直视时双眼共同持续偏向一侧。',
+      binocular_directional_gaze_hypometria:'双眼共同向一个方向的终点响应明显弱于相反方向。',
+      possible_internuclear_gaze_dysconjugacy:'双眼在同一方向的相对终点响应明显不协调，提示可能存在核间性眼动异常。',
+      no_repeatable_visible_eye_endpoint_abnormality:'低帧率终点检查形成可重复响应，未见明显静息共轭偏向、方向性受限或双眼不协调。'
+    });
+    Object.assign(text.zh.reasons, {
+      eye_trials_not_visible_long_enough:'部分重复试次双眼未持续清晰可见，请重试',
+      unstable_eye_landmarks_during_test:'眼部定位波动过大，请改善光线并保持注视',
+      head_pose_not_available_during_eye_test:'三维头姿不可用，请正对镜头后重试',
+      eye_response_not_repeatable:'三轮未形成至少两次一致响应，请重新跟随目标',
+      visual_target_following_not_demonstrated:'两个方向均未确认目标跟随，请理解指令后重试'
+    });
+    Object.assign(text.en, {
+      componentDescriptions:{...text.en.componentDescriptions, E:'Visual symptoms first + repeated eye endpoint check'},
+      eyes:['E · Repeat target following','Keep your head still and follow the blue target using only your eyes; each side is measured three times.'],
+      eyeManualTitle:'E · Check visual symptoms first',
+      eyeManualText:'If there is sudden visual loss, dimming, a field defect, double vision, or sustained gaze deviation, report it now. A camera result cannot exclude these symptoms. Continue to the repeated endpoint check only when none is reported.',
+      eyeProblemLabel:'Sudden visual loss, dimming, field defect, double vision, or sustained gaze deviation',
+      eyeSuddenLabel:'This visual sign is new or sudden',
+      eyeDistanceLabel:'Eye-to-screen distance (cm)',
+      eyeScreenWidthLabel:'Physical screen width (cm)'
+    });
+    Object.assign(text.en.resultReasons, {
+      reported_visual_problem:'The person or caregiver reported visual loss, dimming, a field defect, double vision, or sustained gaze deviation.',
+      eye_trials_not_visible_long_enough:'At least one repeated trial lacked enough clear eye endpoint samples.',
+      unstable_eye_landmarks_during_test:'Eye landmarks varied too much during fixation for an interpretable result.',
+      head_pose_not_available_during_eye_test:'3D head pose was not available consistently enough to exclude head-turn compensation.',
+      eye_response_not_repeatable:'The three trials did not produce at least two consistent responses in the same direction, so no normal or abnormal conclusion was made.',
+      visual_target_following_not_demonstrated:'Neither direction produced a repeatable binocular target response, so task completion could not be confirmed.',
+      bilateral_directional_gaze_restriction:'Both eyes consistently lacked a target response in one direction, matching a directional conjugate-gaze restriction phenotype.',
+      possible_disconjugate_gaze_restriction:'One eye consistently lacked a target response in a specific direction, suggesting possible disconjugate gaze restriction.',
+      conjugate_rest_gaze_deviation:'Both eyes were persistently deviated toward the same side during natural forward gaze.',
+      binocular_directional_gaze_hypometria:'The binocular endpoint response was substantially weaker in one direction than the other.',
+      possible_internuclear_gaze_dysconjugacy:'The eyes had substantially different relative endpoint responses in the same direction, suggesting possible internuclear dysconjugacy.',
+      no_repeatable_visible_eye_endpoint_abnormality:'The low-rate endpoint check was repeatable without an obvious resting conjugate deviation, directional restriction, or binocular dysconjugacy.'
+    });
+    Object.assign(text.en.reasons, {
+      eye_trials_not_visible_long_enough:'Eyes were not continuously clear in every repeated trial — retry',
+      unstable_eye_landmarks_during_test:'Eye tracking was unstable — improve lighting and hold fixation',
+      head_pose_not_available_during_eye_test:'3D head pose was unavailable — face the camera and retry',
+      eye_response_not_repeatable:'The three trials lacked two consistent responses — follow the target and retry',
+      visual_target_following_not_demonstrated:'Target following was not confirmed in either direction — review the instruction and retry'
+    });
 
     const speechReasonText = {
       zh: {
@@ -706,7 +765,9 @@
         historyCloseButton:t.historyClose, standbyButton:t.exit, safetyButton:t.safety,
         continueButton:t.continueStage, skipButton:t.skipStage, manualTitle:t.manualTitle,
         manualText:t.manualText, balanceLabel:t.balanceLabel, suddenLabel:t.suddenLabel,
-        onsetLabel:t.onsetLabel, cancelButton:t.cancel, submitButton:t.submit,
+        eyeProblemLabel:t.eyeProblemLabel || '', eyeDistanceLabel:t.eyeDistanceLabel || '',
+        eyeScreenWidthLabel:t.eyeScreenWidthLabel || '', onsetLabel:t.onsetLabel,
+        cancelButton:t.cancel, submitButton:t.submit,
         speechTitle:t.speechTitle, speechText:t.speechText,
         speechPromptLabel:t.speechPromptLabel, speechSuddenLabel:t.speechSuddenLabel,
         speechOnsetLabel:t.speechOnsetLabel, speechCancelButton:t.speechCancel,
@@ -1019,6 +1080,7 @@
         }
         await postJson('/api/befast/component', {component:code});
         document.getElementById('balance_problem').checked = false;
+        document.getElementById('eye_problem').checked = false;
         document.getElementById('new_or_sudden').checked = false;
         document.getElementById('onset_time').value = '';
         document.getElementById('speech_new_or_sudden').checked = false;
@@ -1077,12 +1139,60 @@
       render(latest);
     }
 
+    function applyEyeTargetCalibration(setup) {
+      const workspace = document.getElementById('workspace');
+      const distance = Number(setup?.viewing_distance_cm);
+      const physicalWidth = Number(setup?.screen_width_cm);
+      const angle = Number(setup?.target_visual_angle_degrees || 15);
+      if (!workspace || !Number.isFinite(distance) || !Number.isFinite(physicalWidth)
+          || distance <= 0 || physicalWidth <= 0) return null;
+      const screenCssWidth = Number(window.screen?.width) || workspace.clientWidth;
+      const requestedOffset = Math.tan(angle * Math.PI / 180)
+        * distance * screenCssWidth / physicalWidth;
+      // 过窄视口无法容纳目标时只做可见性限幅；物理输入仍保存在报告指标中。
+      const visibleOffset = Math.min(requestedOffset, workspace.clientWidth * 0.43);
+      const achievedOffset = Math.max(40, visibleOffset);
+      document.documentElement.style.setProperty(
+        '--eye-target-offset',
+        `${achievedOffset}px`
+      );
+      const achievedAngle = Math.atan(
+        achievedOffset * physicalWidth / screenCssWidth / distance
+      ) * 180 / Math.PI;
+      return {
+        ...setup,
+        achieved_target_visual_angle_degrees:achievedAngle
+      };
+    }
+
     async function submitCurrentManual() {
+      const eyeManual = (latest.befast || {}).stage === 'manual_eyes';
+      const viewingDistance = Number(
+        document.getElementById('eye_viewing_distance_cm').value
+      );
+      const screenWidth = Number(
+        document.getElementById('eye_screen_width_cm').value
+      );
+      const problem = document.getElementById(
+        eyeManual ? 'eye_problem' : 'balance_problem'
+      ).checked;
+      let calibratedEyeSetup = null;
+      if (eyeManual && !problem) {
+        calibratedEyeSetup = applyEyeTargetCalibration({
+          viewing_distance_cm:viewingDistance,
+          screen_width_cm:screenWidth,
+          target_visual_angle_degrees:15
+        });
+      }
       await postJson('/api/befast/manual-item', {
-        component:'B',
-        problem:document.getElementById('balance_problem').checked,
+        component:eyeManual ? 'E' : 'B',
+        problem,
         new_or_sudden: document.getElementById('new_or_sudden').checked,
-        onset_time: document.getElementById('onset_time').value || null
+        onset_time: document.getElementById('onset_time').value || null,
+        viewing_distance_cm:eyeManual ? viewingDistance : null,
+        screen_width_cm:eyeManual ? screenWidth : null,
+        achieved_target_visual_angle_degrees:
+          calibratedEyeSetup?.achieved_target_visual_angle_degrees ?? null
       });
       await refresh();
     }
@@ -1195,7 +1305,15 @@
         const countdown = Number.isFinite(remaining)
           ? t.remainingSeconds.replace('{seconds}', remaining.toFixed(1))
           : '';
-        return [targetCopy[0], countdown ? `${targetCopy[1]} · ${countdown}` : targetCopy[1]];
+        const trial = Number(befast.eye_trial);
+        const total = Number(befast.eye_trial_total);
+        const trialCopy = Number.isFinite(trial) && Number.isFinite(total)
+          ? `${trial}/${total}`
+          : '';
+        return [
+          targetCopy[0],
+          [targetCopy[1], trialCopy, countdown].filter(Boolean).join(' · ')
+        ];
       }
       if (stage === 'face') return befast.face_phase === 'smile' ? t.face_smile : t.face_neutral;
       if (stage === 'arms') return t.arms;
@@ -1208,7 +1326,7 @@
     }
 
     function activeCode(stage) {
-      if (['idle','retry_eyes','eyes'].includes(stage)) return 'E';
+      if (['idle','manual_eyes','retry_eyes','eyes'].includes(stage)) return 'E';
       if (['ready_face','retry_face','face'].includes(stage)) return 'F';
       if (['ready_arms','retry_arms','arms'].includes(stage)) return 'A';
       if (['ready_balance','retry_balance','balance'].includes(stage)) return 'B';
@@ -1472,7 +1590,9 @@
       const runtime = status.runtime || {};
       const befast = status.befast || {mode:'standby',stage:'idle',guidance:{}};
       const standby = befast.mode !== 'screening';
-      const manual = befast.stage === 'manual_balance';
+      const manualBalance = befast.stage === 'manual_balance';
+      const manualEyes = befast.stage === 'manual_eyes';
+      const manual = manualBalance || manualEyes;
       const speech = ['speech_ready','speech_recording'].includes(befast.stage);
       const report = selectedReport || befast.current_report;
       const menu = !standby && befast.stage === 'idle' && !report;
@@ -1497,8 +1617,17 @@
       document.getElementById('resultSheet').hidden = !report
         || persistentHistoryOpen || speechChooser || passiveMonitorView;
       renderHistory(befast, t);
-      document.getElementById('manualTitle').textContent = t.balanceManualTitle;
-      document.getElementById('manualText').textContent = t.balanceManualText;
+      document.getElementById('manualTitle').textContent = manualEyes
+        ? t.eyeManualTitle : t.balanceManualTitle;
+      document.getElementById('manualText').textContent = manualEyes
+        ? t.eyeManualText : t.balanceManualText;
+      document.getElementById('balanceProblemRow').hidden = manualEyes;
+      document.getElementById('eyeProblemRow').hidden = !manualEyes;
+      document.getElementById('eyeDistanceRow').hidden = !manualEyes;
+      document.getElementById('eyeScreenWidthRow').hidden = !manualEyes;
+      document.getElementById('suddenLabel').textContent = manualEyes
+        ? t.eyeSuddenLabel : t.suddenLabel;
+      if (befast.eye_setup) applyEyeTargetCalibration(befast.eye_setup);
       renderSpeechState(status.speech || {});
       renderPassiveSpeech(status.passive_speech || {});
 
@@ -1540,7 +1669,9 @@
       document.getElementById('progressBar').style.width = `${Math.round(Number(befast.progress || 0) * 100)}%`;
 
       const eyeTarget = document.getElementById('eyeTarget');
-      eyeTarget.className = `eye-target ${befast.eye_target || 'center'}${befast.stage === 'eyes' ? ' visible' : ''}`;
+      eyeTarget.className = `eye-target ${befast.eye_target || 'center'}${
+        befast.stage === 'eyes' && befast.eye_target !== 'rest' ? ' visible' : ''
+      }`;
       const safetyStage = ['ready_balance','retry_balance'].includes(befast.stage);
       document.getElementById('safetyButton').hidden = !safetyStage || balanceSafetyConfirmed;
       const next = nextStageMap[befast.stage];
