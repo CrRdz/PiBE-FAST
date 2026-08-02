@@ -10,17 +10,44 @@ class BefastConfig:
     # MoveNet 关键点低于该置信度时按不可见处理。
     min_keypoint_score: float = 0.35
 
-    # A：先预留抬臂准备时间，再进入正式采样窗口。
-    arm_warmup_seconds: float = 1.5
-    arm_capture_seconds: float = 6.0
+    # A：先展示完整动作；双臂自然下垂稳定后自动倒数，也可手动提前开始。
+    arm_warmup_seconds: float = 1.5  # 兼容旧配置，不再用于阶段切换。
+    arm_phase_countdown_seconds: float = 3.0
+    arm_auto_ready_enabled: bool = True
+    arm_preview_min_seconds: float = 2.0
+    arm_auto_ready_seconds: float = 1.2
+    arm_capture_seconds: float = 18.0  # 兼容旧调用；实际由下列阶段时长控制。
+    arm_raise_timeout_seconds: float = 8.0
+    arm_hold_seconds: float = 5.0
+    arm_lower_timeout_seconds: float = 5.0
+    arm_pose_sustain_seconds: float = 0.45
     # 样本数和有效帧比例同时达标，才允许输出阴性或阳性结果。
     arm_min_valid_samples: int = 20
     arm_min_valid_fraction: float = 0.55
+    # 完成门控：必须从自然下垂开始、双臂横向抬至肩高、保持、再放下。
+    arm_start_wrist_below_shoulder: float = 0.45
+    arm_raise_wrist_height_tolerance: float = 0.42
+    arm_min_elbow_angle_degrees: float = 125.0
+    arm_min_lateral_reach: float = 0.45
     # 手臂距离统一除以肩宽，以降低人与相机距离变化造成的影响。
     arm_level_difference_threshold: float = 0.30
     arm_drift_difference_threshold: float = 0.22
     # 手腕相对肩膀低得过多，说明受试者没有完成抬臂动作。
     arm_max_initial_wrist_below_shoulder: float = 0.85
+    # 学习模型需匹配本协议的数据才可启用；默认使用可解释的左右时序指标。
+    arm_model_enabled: bool = False
+    arm_model_path: str = "models/arm_screen_v2.json"
+    # Toronto Rehab 代偿模型仅输出影子概率，不参与用户可见判定。
+    arm_compensation_shadow_enabled: bool = True
+    arm_compensation_shadow_model_dir: str = "models/research"
+    arm_compensation_shadow_window_frames: int = 30
+    # IntelliRehabDS 正确/错误模型也仅作影子观察，等待 Web 双臂协议验证。
+    arm_action_quality_shadow_enabled: bool = True
+    arm_action_quality_shadow_model_path: str = (
+        "models/research/intellirehab_action_quality_v1.json"
+    )
+    # Toronto 训练窗口中活动侧手腕二维波动的约第 5 百分位；只验证动作完成度。
+    arm_reach_min_wrist_motion_std: float = 0.02
 
     # MediaPipe Face Landmarker 以低于摄像头帧率的频率运行，减少树莓派负载。
     face_inference_fps: float = 5.0

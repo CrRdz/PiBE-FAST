@@ -206,6 +206,21 @@ class BefastSession:
             setattr(self, result_attr, MotionResult(status="checking", reason="checking"))
             screen.start(ts)
 
+    def ready_arm_phase(self, now: float | None = None) -> None:
+        """确认完整双臂平举动作已看懂，并启动 3 秒倒数。"""
+
+        ts = time.time() if now is None else float(now)
+        with self.lock:
+            if self.stage != "arms" or self.active_component != "A":
+                raise ValueError("the arm check must be active before confirming readiness")
+            # Hands-free start may win the race with a still-visible button.
+            # Treat a duplicate confirmation during countdown as idempotent.
+            if self.arm_screen.phase_state == "countdown":
+                return
+            self.arm_screen.ready_phase(ts)
+            self.stage_started_at = ts
+            self._set_guidance(False, "arm_phase_countdown", ts)
+
     def skip_current_stage(self, now: float | None = None) -> str:
         """跳过当前自动检查，但用 skipped 明确区分于正常阴性。"""
 
@@ -452,6 +467,8 @@ class BefastSession:
             )
             duration = self._active_duration()
             progress = min(1.0, elapsed / duration) if duration > 0 else 0.0
+            if self.stage == "arms":
+                progress = self.arm_screen.progress(ts)
             snapshot = self._snapshot_payload(
                 items, decision, reasons, progress
             )
@@ -468,6 +485,31 @@ class BefastSession:
             if self.stage == "face":
                 # F 阶段额外告诉前端当前应保持中性还是微笑。
                 snapshot["face_phase"] = self.face_screen.phase(ts)
+            if self.stage == "arms":
+                snapshot["arm_phase"] = self.arm_screen.phase(ts)
+                arm_phase_index, arm_phase_remaining = self.arm_screen.phase_status(ts)
+                snapshot["arm_phase_index"] = arm_phase_index + 1
+                snapshot["arm_phase_total"] = len(self.arm_screen.PHASES)
+                snapshot["arm_phase_remaining"] = round(arm_phase_remaining, 1)
+                snapshot["arm_phase_state"] = self.arm_screen.phase_state
+                snapshot["arm_phase_failure_reason"] = (
+                    self.arm_screen.phase_failure_reason
+                )
+                snapshot["arm_phase_metrics"] = dict(
+                    self.arm_screen.phase_completion_metrics.get(
+                        self.arm_screen.current_phase, {}
+                    )
+                )
+                auto_ready_active, auto_ready_remaining = (
+                    self.arm_screen.auto_ready_status(ts)
+                )
+                snapshot["arm_auto_ready_enabled"] = bool(
+                    self.config.arm_auto_ready_enabled
+                )
+                snapshot["arm_auto_ready_active"] = auto_ready_active
+                snapshot["arm_auto_ready_remaining"] = round(
+                    auto_ready_remaining, 1
+                )
             return snapshot
 
     def _snapshot_payload(
@@ -509,11 +551,82 @@ class BefastSession:
             },
             "retry_counts": dict(self.retry_counts),
             "eye_setup": dict(self.eye_screen.setup),
+            "live_collection": self._live_collection_snapshot(),
+            "factor_thresholds": self._factor_thresholds_snapshot(),
             "disclaimer": (
                 "Screening prototype only; it cannot diagnose or exclude stroke. "
                 "Any sudden BE-FAST sign requires emergency medical help."
             ),
         }
+
+    def _live_collection_snapshot(self) -> dict[str, Any]:
+        """Expose the current check's collected samples without leaking mutable state."""
+
+        screen = self._screens().get(self.stage.replace("retry_", "").replace("ready_", ""))
+        if screen is None:
+            return {"metrics": {}, "valid_samples": 0, "captured_samples": 0}
+        payload: dict[str, Any] = {
+            "metrics": {
+                str(key): round(float(value), 5)
+                for key, value in getattr(screen, "live_metrics", {}).items()
+            }
+        }
+        if screen is self.eye_screen:
+            valid = sum(self.eye_screen.valid_frames_by_trial)
+            captured = sum(self.eye_screen.capture_frames_by_trial)
+            payload.update(
+                {
+                    "valid_samples": valid,
+                    "captured_samples": captured,
+                    "trial_valid_samples": list(self.eye_screen.valid_frames_by_trial),
+                    "trial_captured_samples": list(self.eye_screen.capture_frames_by_trial),
+                }
+            )
+        else:
+            valid = int(getattr(screen, "valid_frames", 0))
+            captured = int(getattr(screen, "capture_frames", 0))
+            payload.update(
+                {
+                    "valid_samples": valid,
+                    "captured_samples": captured,
+                }
+            )
+            if screen is self.face_screen:
+                payload["neutral_samples"] = len(self.face_screen.neutral_samples)
+                payload["smile_samples"] = len(self.face_screen.smile_samples)
+            if screen is self.balance_screen:
+                baseline = self.balance_screen.baseline.snapshot()
+                payload["baseline_windows"] = baseline["windows"]
+                payload["baseline_target"] = baseline["target_windows"]
+        payload["valid_fraction"] = round(valid / max(captured, 1), 4)
+        return payload
+
+    def _factor_thresholds_snapshot(self) -> dict[str, float]:
+        """Return the engineering thresholds used by the UI factor indicators."""
+
+        names = (
+            "eye_max_gaze_mad",
+            "eye_max_repeat_relative_error",
+            "eye_max_head_rotation_degrees",
+            "eye_response_snr_threshold",
+            "eye_directional_asymmetry_threshold",
+            "eye_conjugacy_relative_error_threshold",
+            "eye_rest_gaze_deviation_degrees_threshold",
+            "eye_min_valid_fraction_per_trial",
+            "face_min_valid_fraction",
+            "face_min_smile_score",
+            "face_corner_delta_threshold",
+            "face_smile_score_difference_threshold",
+            "arm_min_valid_fraction",
+            "arm_raise_wrist_height_tolerance",
+            "arm_min_elbow_angle_degrees",
+            "arm_min_lateral_reach",
+            "arm_level_difference_threshold",
+            "arm_drift_difference_threshold",
+            "balance_min_valid_fraction",
+            "balance_robust_z_threshold",
+        )
+        return {name: float(getattr(self.config, name)) for name in names}
 
     def _finish_or_retry(
         self,

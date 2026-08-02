@@ -97,16 +97,11 @@ def pose_guidance(
     if stage in {"ready_arms", "retry_arms", "arms"}:
         metrics = arm_frame_metrics(keypoints, config.min_keypoint_score)
         if metrics is None:
-            return guidance_value(stage, False, "show_shoulders_and_wrists", ts)
-        # 这里不能要求两臂水平，否则会屏蔽 A 检查本来要发现的单侧无力。
-        one_arm_raised = min(
-            metrics["left_wrist_relative_y"],
-            metrics["right_wrist_relative_y"],
-        ) <= config.arm_max_initial_wrist_below_shoulder
+            return guidance_value(stage, False, "show_shoulders_elbows_wrists", ts)
         return guidance_value(
             stage,
-            one_arm_raised,
-            "arms_detected_hold_still" if one_arm_raised else "raise_both_arms",
+            True,
+            "arm_camera_ready",
             ts,
             metrics,
         )

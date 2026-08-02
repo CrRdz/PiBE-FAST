@@ -53,6 +53,6 @@ def build_report_items(
             eye_result,
         ),
         "F": motion_report_item(face_result, "mediapipe_face"),
-        "A": motion_report_item(arm_result, "pose"),
+        "A": motion_report_item(arm_result, "movenet_bilateral_arm_hold"),
         "S": speech_report_item(speech_result or MotionResult()),
     }
