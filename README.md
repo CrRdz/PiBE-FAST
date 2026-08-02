@@ -112,9 +112,10 @@ A 需要双臂平举，B 需要在安全条件下站立。标准化动作让不�
 保留在报告历史中，不会被后一次覆盖。
 
 E/F/A/B 自动项目的动作说明直接叠加在预览画面底部：红色表示人物位置、关键点可见性
-或动作尚未满足采集条件，绿色表示当前动作与画面质量已经适合开始测量。系统只有在动作
-质量连续通过后才自动进入该项采集；若采集期间质量不足，会立即生成“数据质量不足”的
-单项报告，使用者可不限次数重试，不会把数据不足当作正常结果。每个自动检测项目也提供
+或动作尚未满足采集条件，绿色表示当前动作与画面质量已经适合开始测量。每个项目真正
+开始采集前都会在视频中央显示实心 `3、2、1` 倒数。A 不显示人物示范或手动开始按钮：
+双臂自然下垂且稳定后，系统自动倒数并开始记录。若采集期间质量不足，会进入重做流程，
+不会把数据不足当作正常结果。每个自动检测项目也提供
 “跳过本项”；确认后立即生成标记为“已跳过”的单项报告，不会视为阴性。
 
 页面右上角可在两种输入之间选择：
@@ -126,9 +127,9 @@ E/F/A/B 自动项目的动作说明直接叠加在预览画面底部：红色表
   必须在手机上打开该页面并选择此项。浏览器将画面缩放到最长边 640 px，
   以约 6 FPS 上传 JPEG 帧，服务端将其送入同一套 MediaPipe / MoveNet 流程。
 
-“主机自动切换”和“手机 / 当前设备”两种输入可在待机页或项目选择页手动切换；正式采集动作期间
-会锁定输入，避免中途更换视角。主机模式内部的
-E/F 与 A/B 摄像头路由会在步骤交界处自动完成，同一项测量期间不会改变视角。除 `localhost` 外，
+“主机自动切换”和“手机 / 当前设备”两种输入可在任一 BE-FAST 项目中手动切换。E/F/A/B
+正在采集时切换会自动重新开始当前项目，避免把两台摄像头的视角和坐标混进同一次判定；已经填入的
+人工观察和历史报告会保留。主机模式内部的 E/F 与 A/B 摄像头路由会在步骤交界处自动完成。除 `localhost` 外，
 手机和电脑浏览器都要求可信任的 HTTPS 上下文才会允许页面调用摄像头。浏览器麦克风仍被禁用；
 S 直接使用连接到树莓派的 ALSA 麦克风，因此不依赖手机授权、网络质量或人工勾选。
 预览帧内的大型调试文字默认关闭，需排障时可用 `--debug-overlay` 显式开启。
@@ -176,10 +177,10 @@ Raspberry Pi
 
 ### B — Balance / 平衡
 
-**目标：**在持续监控中发现相对个人基线的躯干方向或横向摆动变化，并允许
+**目标：** 在持续监控中发现相对个人基线的躯干方向或横向摆动变化，并允许
 本人/照护者直接报告突然失衡。
 
-**输入：**MoveNet 的左右肩、左右髋和左右踝关键点，以及站立姿态质量门槛。
+**输入：** MoveNet 的左右肩、左右髋和左右踝关键点，以及站立姿态质量门槛。
 
 **计算：**
 
@@ -202,7 +203,7 @@ Raspberry Pi
 
 - 至少 30 个有效样本且有效帧比例不低于 75%；
 - 校准完成前返回 `insufficient`，不伪造自动正常结论；
-- 移除了 `0.40 × 肩宽` 和 `0.50 × 肩宽` 固定工程阈值；
+- 自动判定仅比较当前窗口与个人基线，不采用固定肩宽比例作为异常阈值；
 - 躯干方向变化或横向摆动平均速度增加达到 modified Z-score `3.5` 时，仅触发
   后续主动筛查；`3.5` 是稳健统计过程界值，不是卒中临床 cutoff；
 - 若个人基线离散度为零，变化分数不可估计时返回 `insufficient`，不加入任意噪声下限；
@@ -212,18 +213,18 @@ Raspberry Pi
 参数与论文的逐项映射见
 [持续平衡监测：证据、实现与限制](docs/balance-evidence.md)。
 
-**限制：**单目姿态不能测量 COP、眩晕、共济失调或深度方向摆动；地面、镜头角度、
+**限制：** 单目姿态不能测量 COP、眩晕、共济失调或深度方向摆动；地面、镜头角度、
 辅助器具、骨科疾病和既往残疾都会影响结果。“与个人基线一致”不能排除卒中。
 
 ### E — Eyes / 眼睛
 
-**摄像头来源：**可使用服务主机的本地摄像头，也可使用当前浏览器设备的
+**摄像头来源：** 可使用服务主机的本地摄像头，也可使用当前浏览器设备的
 前置摄像头。两者都会进入相同的 E/F 特征识别流程。
 
-**目标：**先记录突发视觉症状，再辅助检查静息共轭偏向、双眼共同的方向性终点
+**目标：** 先记录突发视觉症状，再辅助检查静息共轭偏向、双眼共同的方向性终点
 减弱和明显不共轭响应。它不是视力、视野或高速扫视检查。
 
-**输入：**MediaPipe Face Landmarker 的 478 点面部网格，其中包括：
+**输入：** MediaPipe Face Landmarker 的 478 点面部网格，其中包括：
 
 - 右虹膜中心 `468`，左虹膜中心 `473`；
 - 右眼角 `33/133`，左眼角 `362/263`；
@@ -258,22 +259,22 @@ Raspberry Pi
 - 同方向三次响应取中位数，最接近中位数的另一轮相对差不高于 `1.00`；
 - 至少 80% 有效帧带有三维头姿，任一头姿角一轮内变化不超过 `8°`；
 - 任一质量项失败均为 `insufficient`，不会被当作正常；
-- 原来的 `0.12 / 0.10 / 0.14 / 0.35 / 7.5%` 规则已移除。
+- 可靠性门控只采用上述采样、眼裂宽度、MAD、重复性和头姿质量条件。
 
-**研究阈值：**可见响应使用同轮 `MAD` 形成 SNR。静息共轭偏向的 `12°` 候选值
+**研究阈值：** 可见响应使用同轮 `MAD` 形成 SNR。静息共轭偏向的 `12°` 候选值
 借鉴影像测角研究的高特异度区间，但尚未验证可迁移到本摄像头；方向减弱 `45%` 和
-归一化不共轭 `35%` 仍是待临床标定参数。单纯左右眼总范围差不再触发阳性。约
+归一化不共轭 `35%` 仍是待临床标定参数。左右眼总范围差仅用于质量分析，不单独触发阳性。约
 5 FPS 只分析稳定终点，不输出眼震、扫视潜伏期、速度或平滑追踪增益。
 
 参数、论文映射和验证要求见
 [E 眼动辅助检查：证据、实现与限制](docs/eyes-evidence.md)。
 
-**关键医学边界：**E 不能测量视力、视野、眼底，也不能排除视物模糊、复视、黑蒙
+**关键医学边界：** E 不能测量视力、视野、眼底，也不能排除视物模糊、复视、黑蒙
 或视野缺损。本人报告突然视觉异常时，必须直接按急症处理。
 
 ### F — Face / 面部
 
-**目标：**检测从中性表情到微笑时的单侧下脸部运动减弱。
+**目标：** 检测从中性表情到微笑时的单侧下脸部运动减弱。
 
 **输入：**
 
@@ -297,40 +298,34 @@ Raspberry Pi
 - 左右微笑激活差达到 `0.24`：阳性；
 - 面部太小、遮挡或阶段样本不足：`insufficient`。
 
-**限制：**天然面部不对称、既往面瘫、牙科/颌面疾病、光照、胡须、口罩和大幅转头
+**限制：** 天然面部不对称、既往面瘫、牙科/颌面疾病、光照、胡须、口罩和大幅转头
 都可能影响结果。
 
 ### A — Arms / 手臂
 
-**目标：**检测双臂平举时的持续高度差和保持过程中的单侧下沉。
+**目标：** 先确认使用者完整完成“抬起—保持—放下”，再评估保持阶段的双臂高度
+不对称或单侧下落。它是摄像头辅助筛查研究原型，不是卒中诊断。
 
-**输入：**MoveNet 的左右肩、左右肘和左右腕关键点。
+**输入：** MoveNet 的左右肩、左右肘、左右腕和左右髋关键点。
 
 **计算：**
 
-1. 受试者坐稳并将双臂向前平举。
-2. 预热 1.5 秒后采集约 6 秒。
-3. 每侧手腕相对同侧肩膀的纵向距离按肩宽归一化：
+1. 正面坐姿观看完整双臂侧平举动画，确保双肩、双肘和双腕入镜。
+2. 双臂自然下垂并保持约 1.2 秒后自动倒数实心 `3、2、1`；准备和倒数期间均不采样，
+   因此单人测试不需要举手点击屏幕。
+3. 记录开始后先确认双臂自然下垂，再在最多 8 秒内抬至肩高。
+4. 双臂有效保持 5 秒；只有该阶段样本进入左右高度和下落计算。
+5. 保持结束后必须放下双臂，完整动作才可形成报告；任一步失败都会清空本次尝试并提示重做。
+6. IntelliRehabDS 动作质量模型和 Toronto 三类代偿模型只输出 `shadow_*` 研究指标，
+   不影响用户可见的 A 判定。
 
-   ```text
-   wrist_relative_y = (wrist_y - shoulder_y) / shoulder_width
-   ```
-
-4. 使用整个阶段的中位数计算持续双臂高度差。
-5. 比较采样前 1/3 与后 1/3 的手腕位置，计算左右下沉量之差。
-
-**当前工程规则：**
-
-- 至少 20 个有效样本且有效帧比例不低于 55%；
-- 持续高度差达到 `0.30 × 肩宽`：阳性；
-- 左右下沉量之差达到 `0.22 × 肩宽`：阳性；
-- 开始时双臂没有抬起，或肩/腕持续不可见：`insufficient`。
-
-**限制：**肩周疾病、疼痛、旧有偏瘫、活动受限、宽松衣物和透视角度都会影响结果。
+**限制：** 当前完成门控与左右差阈值仍需在目标 Web 摄像头上验证。IntelliRehabDS
+使用 Kinect 且以单侧康复动作为主，Toronto 使用康复机器人；二者都不能替代本项目
+协议的临床标注，也不能用于排除或确诊卒中。
 
 ### S — Speech / 言语
 
-Speech 现在分成两层。第一层是在待机页持续运行的自然语音变化监测：它不依赖固定文本，
+Speech 包含两层。第一层是在待机页持续运行的自然语音变化监测：它不依赖固定文本，
 也不执行 ASR，而是与本机保存的个人声学基线比较。只有多个窗口持续变化时才提示进入
 第二层固定句确认。
 
@@ -473,7 +468,7 @@ MacBook 双摄像头自动切换（推荐）：
 本项目针对当前 MacBook + 连续互通相机配置提供阶段感知切换：待机、A（手臂）和
 B（平衡）使用索引 `0` 的手机摄像头，以便拍摄上半身或全身；E（眼动）和 F（面部）
 使用索引 `1` 的 MacBook 前置摄像头，以便稳定捕捉面部细节。进入新阶段时程序会先
-释放旧摄像头再打开目标摄像头，因此启动时不再需要传入 `--camera-index`。如果索引
+释放当前摄像头再打开目标摄像头，因此启动时无需传入 `--camera-index`。如果索引
 `1` 不可用，系统会自动回退到索引 `0`，不会中断筛查。
 
 macOS 的设备索引可能因连接顺序而变化。如需覆盖自动配置，可使用
@@ -735,7 +730,7 @@ a desktop computer. It:
 - captures fixed-duration S audio from an attached ALSA microphone and runs local
   offline transcription; a physical help button, buzzer, or wearable can be added later.
 
-The passive layer now has two trigger-only signals:
+The passive layer has two trigger-only signals:
 
 - low-rate pose observation with a fall sequence requiring a rapid transition
   followed by sustained lying; and
@@ -891,9 +886,10 @@ quality.
    degenerates.
 
 **Decision rules:** at least 30 valid samples and 75% valid frames. Calibration
-returns `insufficient` rather than a false normal result. The former
-`0.40 × shoulder width` and `0.50 × shoulder width` engineering cutoffs have been
-removed. A trunk-orientation change or increased mediolateral mean velocity at
+returns `insufficient` rather than a false normal result. Automatic decisions
+compare the current window only with the personal baseline.
+Fixed shoulder-width ratios are not used as abnormality thresholds. A
+trunk-orientation change or increased mediolateral mean velocity at
 modified Z-score `3.5` triggers active follow-up only; `3.5` is a robust process
 monitoring boundary, not a clinical stroke cutoff. If personal-baseline dispersion
 is zero, an unscorable change returns `insufficient` instead of introducing an
@@ -955,14 +951,16 @@ and 60% validity. Eye-opening width must be at least 24 pixels and fixation MAD 
 greater than `0.08`. Three responses use their median, allow one outlier, and
 require the nearest companion's relative error to be no greater than `1.00`.
 At least 80% of valid frames must include 3D head pose. More than `8°` of
-within-run pitch, yaw, or roll change makes the result insufficient. The former
-`0.12 / 0.10 / 0.14 / 0.35 / 7.5%` rules have been removed.
+within-run pitch, yaw, or roll change makes the result insufficient. Reliability
+gating uses only the sampling, eye-opening width, MAD, repeatability, and head-pose
+quality conditions listed above.
 
 Visible response uses same-run MAD to form an SNR. The `12°` resting-deviation
 candidate borrows a high-specificity range from imaging studies but is not
 validated for this webcam. The `45%` directional-reduction and `35%` normalized
 dysconjugacy thresholds remain research parameters. Inter-eye total-range
-difference alone no longer triggers a positive result. At about 5 FPS, the
+difference is retained for quality analysis and does not independently trigger a
+positive result. At about 5 FPS, the
 implementation analyzes stable endpoints only and does not report nystagmus,
 saccade latency/velocity, or pursuit gain.
 
@@ -1022,7 +1020,7 @@ loose clothing, and perspective distortion can affect the result.
 
 ### S — Speech
 
-Speech now has two layers. The standby page continuously compares natural speech
+Speech has two layers. The standby page continuously compares natural speech
 with a local personal acoustic baseline without fixed text or ASR. Only a
 sustained multi-window change recommends the second-layer guided phrase check.
 

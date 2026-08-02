@@ -132,14 +132,17 @@ class BefastWebApiTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("Pi BE-FAST 筛查 Demo".encode(), response.data)
         self.assertIn("Pi BE-FAST Screening Demo".encode(), response.data)
-        self.assertIn("红绿提示".encode(), response.data)
-        self.assertIn("setLanguage('zh')".encode(), response.data)
-        self.assertIn("setLanguage('en')".encode(), response.data)
+        self.assertNotIn("颜色会随数据和工程阈值变化".encode(), response.data)
+        self.assertIn(b'id="reactHeader"', response.data)
+        self.assertIn(b'id="reactSteps"', response.data)
+        self.assertIn(b'id="standbyHint"', response.data)
+        self.assertNotIn(b'id="reactStart"', response.data)
+        self.assertIn(b'/static/react/app.js', response.data)
         self.assertIn("maybeAdvance".encode(), response.data)
         self.assertIn("advanceCurrentStage".encode(), response.data)
-        self.assertIn("重新检测本项".encode(), response.data)
-        self.assertIn("选择单项检测".encode(), response.data)
-        self.assertIn("每次完成都会立即生成报告".encode(), response.data)
+        self.assertIn("再测一次".encode(), response.data)
+        self.assertIn("选择检测项目".encode(), response.data)
+        self.assertNotIn("每次完成都会立即生成报告".encode(), response.data)
         self.assertIn(b"/api/befast/component", response.data)
         self.assertIn(b"/api/befast/manual-item", response.data)
         self.assertIn(b"/api/speech/start", response.data)
@@ -153,14 +156,20 @@ class BefastWebApiTest(unittest.TestCase):
         self.assertIn(b'id="passiveBaselineProgress"', response.data)
         self.assertIn(b'id="passiveDomainTiming"', response.data)
         self.assertIn(b'id="passiveRecentVotes"', response.data)
+        self.assertIn(b'id="reactSidebar"', response.data)
+        self.assertIn(b'id="stageCountdown"', response.data)
+        self.assertNotIn(b'id="armMotionGuide"', response.data)
+        self.assertIn(b"renderFactorPanel", response.data)
+        self.assertNotIn("实时判定".encode(), response.data)
         self.assertIn("S · 选择语音检测方式".encode(), response.data)
-        self.assertIn("长期自然语音监测或固定句朗读确认".encode(), response.data)
+        self.assertNotIn("长期自然语音监测或固定句朗读确认".encode(), response.data)
         self.assertIn("朗读固定句确认".encode(), response.data)
         self.assertNotIn(b'passiveConfirmButton" class="button primary"', response.data)
         self.assertIn(b'id="speechSheet"', response.data)
         self.assertNotIn(b'id="speech_problem"', response.data)
         self.assertIn("跳过本项".encode(), response.data)
         self.assertIn(b"/api/befast/skip", response.data)
+        self.assertNotIn(b'id="armReadyButton"', response.data)
         self.assertIn(b"user_skipped", response.data)
         self.assertNotIn(b"transitionKey", response.data)
         self.assertIn("手机 / 当前设备".encode(), response.data)
@@ -178,7 +187,7 @@ class BefastWebApiTest(unittest.TestCase):
         self.assertIn(b"openPersistentHistory", response.data)
         self.assertIn(b"/api/history?", response.data)
         self.assertIn(b"historyComponentFilter", response.data)
-        self.assertIn(b"screen.stage === 'idle'", response.data)
+        self.assertIn(b"cameraSelect.disabled = cameraSwitchBusy", response.data)
         self.assertNotIn(b'class="brand-mark"', response.data)
         self.assertIn(b"flex-direction: column", response.data)
         self.assertNotIn(
@@ -227,14 +236,19 @@ class BefastWebApiTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["runtime"]["camera_mode"], "client")
 
-    def test_camera_source_cannot_change_during_active_capture(self):
+    def test_camera_source_can_change_and_restarts_active_capture(self):
         self.session.start_stage("eyes", now=1.0)
+        self.session.eye_screen.samples[0].append({"left_x": 0.1})
 
         response = self.client.post(
             "/api/camera/source", json={"source": "client"}
         )
 
-        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["runtime"]["camera_mode"], "client")
+        self.assertTrue(response.get_json()["stage_restarted"])
+        self.assertEqual(self.session.stage, "eyes")
+        self.assertTrue(all(not trial for trial in self.session.eye_screen.samples))
 
     def test_status_exposes_camera_and_model_lifecycle(self):
         response = self.client.get("/api/status")
@@ -274,6 +288,16 @@ class BefastWebApiTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["befast"]["stage"], "eyes")
+
+    def test_arm_phase_ready_endpoint_starts_countdown(self):
+        self.client.post("/api/befast/stage", json={"stage": "arms"})
+
+        response = self.client.post("/api/befast/arm-ready")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()["befast"]
+        self.assertEqual(payload["arm_phase_state"], "countdown")
+        self.assertEqual(payload["arm_phase_index"], 1)
 
     def test_eye_component_checks_visual_symptoms_before_camera_capture(self):
         selected = self.client.post(

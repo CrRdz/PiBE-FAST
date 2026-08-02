@@ -10,6 +10,8 @@ from app.befast import (
     PersonalBalanceBaseline,
 )
 from app.face_landmarker import FaceObservation
+from app.arm_model import LinearBinaryModel
+from app.compensation_model import COMPENSATION_MODEL_FEATURES, COMPENSATION_TARGETS
 from app.keypoints import KEYPOINT_NAMES
 
 
@@ -25,15 +27,21 @@ def make_keypoints(overrides=None):
     return keypoints
 
 
-def standing_points(left_wrist_y=0.30, right_wrist_y=0.30, body_shift=0.0):
+def standing_points(
+    left_wrist_y=0.30,
+    right_wrist_y=0.30,
+    body_shift=0.0,
+    left_wrist_x=0.28,
+    right_wrist_x=0.72,
+):
     return make_keypoints(
         {
             "left_shoulder": {"x": 0.40 + body_shift, "y": 0.30},
             "right_shoulder": {"x": 0.60 + body_shift, "y": 0.30},
             "left_elbow": {"x": 0.34 + body_shift, "y": 0.30},
             "right_elbow": {"x": 0.66 + body_shift, "y": 0.30},
-            "left_wrist": {"x": 0.28 + body_shift, "y": left_wrist_y},
-            "right_wrist": {"x": 0.72 + body_shift, "y": right_wrist_y},
+            "left_wrist": {"x": left_wrist_x + body_shift, "y": left_wrist_y},
+            "right_wrist": {"x": right_wrist_x + body_shift, "y": right_wrist_y},
             "left_hip": {"x": 0.44 + body_shift, "y": 0.52},
             "right_hip": {"x": 0.56 + body_shift, "y": 0.52},
             "left_knee": {"x": 0.44, "y": 0.70},
@@ -41,6 +49,16 @@ def standing_points(left_wrist_y=0.30, right_wrist_y=0.30, body_shift=0.0):
             "left_ankle": {"x": 0.44, "y": 0.90},
             "right_ankle": {"x": 0.56, "y": 0.90},
         }
+    )
+
+
+def reaching_points(index):
+    offset = 0.04 if index % 2 else -0.04
+    return standing_points(
+        left_wrist_y=0.30 + offset,
+        right_wrist_y=0.30 - offset,
+        left_wrist_x=0.28 + offset,
+        right_wrist_x=0.72 - offset,
     )
 
 
@@ -104,8 +122,13 @@ class BefastSessionTest(unittest.TestCase):
             face_smile_seconds=0.3,
             face_min_samples_per_phase=3,
             arm_warmup_seconds=0.1,
-            arm_capture_seconds=0.8,
-            arm_min_valid_samples=5,
+            arm_phase_countdown_seconds=0.1,
+            arm_raise_timeout_seconds=0.7,
+            arm_hold_seconds=0.5,
+            arm_lower_timeout_seconds=0.7,
+            arm_pose_sustain_seconds=0.1,
+            arm_min_valid_samples=3,
+            arm_min_valid_fraction=0.5,
             balance_warmup_seconds=0.1,
             balance_capture_seconds=0.8,
             balance_min_valid_samples=5,
@@ -121,6 +144,22 @@ class BefastSessionTest(unittest.TestCase):
                 }
             )
         self.session = BefastSession(self.config, balance_baseline)
+        self._set_compensation_models(positive_targets=set())
+
+    def _set_compensation_models(self, positive_targets):
+        self.session.arm_screen.compensation_models = {
+            target: LinearBinaryModel(
+                component=f"A_COMPENSATION_SHADOW_{target.upper()}",
+                version=f"test-{target}",
+                feature_names=tuple(COMPENSATION_MODEL_FEATURES),
+                means=(0.0,) * len(COMPENSATION_MODEL_FEATURES),
+                scales=(1.0,) * len(COMPENSATION_MODEL_FEATURES),
+                coefficients=(0.0,) * len(COMPENSATION_MODEL_FEATURES),
+                intercept=10.0 if target in positive_targets else -10.0,
+                decision_threshold=0.5,
+            )
+            for target in COMPENSATION_TARGETS
+        }
 
     def run_eye_screen(self, gaze_factory):
         self.session.start_stage("eyes", now=0.0)
@@ -136,12 +175,19 @@ class BefastSessionTest(unittest.TestCase):
             self.session.update_face(ts, face_factory(ts))
         return self.session.snapshot(now=1.8)
 
-    def run_arm_screen(self, frame_factory):
+    def run_arm_screen(self, hold_factory=lambda _: standing_points()):
         self.session.start_stage("arms", now=0.0)
-        for index in range(11):
-            ts = index * 0.1
-            self.session.update(ts, frame_factory(index), "standing")
-        return self.session.snapshot(now=1.1)
+        self.session.ready_arm_phase(now=0.0)
+        down = standing_points(left_wrist_y=0.55, right_wrist_y=0.55)
+        for ts in (0.05, 0.11, 0.23):
+            self.session.update(ts, down, "standing")
+        for ts in (0.30, 0.42):
+            self.session.update(ts, standing_points(), "standing")
+        for index, ts in enumerate((0.52, 0.62, 0.72, 0.82, 0.92, 1.02)):
+            self.session.update(ts, hold_factory(index), "standing")
+        for ts in (1.12, 1.24):
+            self.session.update(ts, down, "standing")
+        return self.session.snapshot(now=1.24)
 
     def run_balance_screen(self, frame_factory):
         self.session.start_stage("balance", now=2.0)
@@ -212,7 +258,48 @@ class BefastSessionTest(unittest.TestCase):
         self.assertTrue(result["guidance"]["ready"])
         self.assertEqual(result["guidance"]["reason"], "face_and_eyes_ready")
 
-    def test_arm_setup_guidance_requires_visible_raised_arm(self):
+    def test_snapshot_exposes_live_collection_and_factor_thresholds(self):
+        self.session.start_stage("arms", now=0.0)
+        self.session.ready_arm_phase(now=0.0)
+        self.session.update(0.2, standing_points(), "standing")
+
+        result = self.session.snapshot(now=0.2)
+
+        self.assertEqual(result["live_collection"]["valid_samples"], 1)
+        self.assertEqual(result["live_collection"]["captured_samples"], 1)
+        self.assertIn("left_elbow_angle_degrees", result["live_collection"]["metrics"])
+        self.assertIn("arm_level_difference_threshold", result["factor_thresholds"])
+
+    def test_arm_preview_and_countdown_do_not_collect_samples(self):
+        self.session.start_stage("arms", now=0.0)
+        self.session.update(0.05, reaching_points(0), "standing")
+        before_ready = self.session.snapshot(now=0.05)
+
+        self.session.ready_arm_phase(now=0.1)
+        self.session.update(0.15, reaching_points(1), "standing")
+        during_countdown = self.session.snapshot(now=0.15)
+        self.session.update(0.21, reaching_points(2), "standing")
+        recording = self.session.snapshot(now=0.21)
+
+        self.assertEqual(before_ready["live_collection"]["captured_samples"], 0)
+        self.assertEqual(during_countdown["live_collection"]["captured_samples"], 0)
+        self.assertEqual(recording["live_collection"]["captured_samples"], 1)
+
+    def test_arm_preview_auto_starts_countdown_with_arms_down(self):
+        self.session.start_stage("arms", now=0.0)
+        down = standing_points(left_wrist_y=0.55, right_wrist_y=0.55)
+
+        self.session.update(2.1, down, "standing")
+        waiting = self.session.snapshot(now=2.5)
+        self.session.update(3.31, down, "standing")
+        countdown = self.session.snapshot(now=3.31)
+
+        self.assertEqual(waiting["arm_phase_state"], "preview")
+        self.assertTrue(waiting["arm_auto_ready_active"])
+        self.assertEqual(countdown["arm_phase_state"], "countdown")
+        self.assertEqual(countdown["live_collection"]["captured_samples"], 0)
+
+    def test_arm_setup_guidance_requires_visible_upper_body(self):
         self.session.start_stage("arms", now=0.0)
         self.session.stage = "ready_arms"
 
@@ -220,33 +307,58 @@ class BefastSessionTest(unittest.TestCase):
         result = self.session.snapshot(now=0.1)
 
         self.assertTrue(result["guidance"]["ready"])
-        self.assertEqual(result["guidance"]["reason"], "arms_detected_hold_still")
+        self.assertEqual(result["guidance"]["reason"], "arm_camera_ready")
 
-    def test_symmetric_arm_hold_is_negative(self):
-        result = self.run_arm_screen(lambda _: standing_points())
+    def test_arm_snapshot_exposes_reach_phase_and_countdown(self):
+        self.session.start_stage("arms", now=0.0)
+        preview = self.session.snapshot(now=0.0)
+        self.session.ready_arm_phase(now=0.0)
+        countdown = self.session.snapshot(now=0.05)
+        self.session.update(
+            0.2,
+            standing_points(left_wrist_y=0.55, right_wrist_y=0.55),
+            "standing",
+        )
+
+        first = self.session.snapshot(now=0.2)
+
+        self.assertEqual(preview["arm_phase_state"], "preview")
+        self.assertEqual(countdown["arm_phase_state"], "countdown")
+        self.assertEqual(first["arm_phase"], "raise")
+        self.assertEqual(first["arm_phase_state"], "recording")
+        self.assertEqual(first["arm_phase_index"], 1)
+        self.assertEqual(first["arm_phase_total"], 3)
+        self.assertAlmostEqual(first["arm_phase_remaining"], 0.6)
+
+    def test_reach_protocol_is_negative_when_models_do_not_trigger(self):
+        result = self.run_arm_screen()
 
         self.assertEqual(result["items"]["A"]["status"], "negative")
         self.assertEqual(result["stage"], "ready_balance")
 
-    def test_persistent_lower_left_arm_is_positive(self):
-        result = self.run_arm_screen(
-            lambda _: standing_points(left_wrist_y=0.38, right_wrist_y=0.30)
+    def test_compensation_model_is_shadow_only(self):
+        self._set_compensation_models({"shoulder_elevation"})
+        result = self.run_arm_screen()
+
+        self.assertEqual(result["items"]["A"]["status"], "negative")
+        self.assertIsNone(result["items"]["A"]["affected_side"])
+        self.assertEqual(
+            result["items"]["A"]["details"]["compensation_shadow_mode"],
+            "research_only_no_decision",
         )
 
-        self.assertEqual(result["items"]["A"]["status"], "positive")
-        self.assertEqual(result["items"]["A"]["affected_side"], "left")
+    def test_incomplete_raise_requires_retry(self):
+        self.session.start_stage("arms", now=0.0)
+        self.session.ready_arm_phase(now=0.0)
+        down = standing_points(left_wrist_y=0.55, right_wrist_y=0.55)
+        for ts in (0.11, 0.3, 0.5, 0.8):
+            self.session.update(ts, down, "standing")
+        result = self.session.snapshot(now=0.8)
 
-    def test_asymmetric_drift_is_positive(self):
-        def frame(index):
-            left_y = 0.30 if index < 5 else 0.37
-            return standing_points(left_wrist_y=left_y, right_wrist_y=0.30)
-
-        result = self.run_arm_screen(frame)
-
-        self.assertEqual(result["items"]["A"]["status"], "positive")
-        self.assertIn(
-            result["items"]["A"]["reason"],
-            {"persistent_arm_height_asymmetry", "asymmetric_arm_drift"},
+        self.assertEqual(result["items"]["A"]["status"], "checking")
+        self.assertEqual(result["arm_phase_state"], "retry")
+        self.assertEqual(
+            result["arm_phase_failure_reason"], "both_arms_were_not_raised"
         )
 
     def test_stable_standing_balance_is_negative(self):
@@ -371,7 +483,7 @@ class BefastSessionTest(unittest.TestCase):
                 right_smile=0.61 if ts >= 1.3 else 0.0,
             )
         )
-        self.run_arm_screen(lambda _: standing_points())
+        self.run_arm_screen()
         self.run_balance_screen(lambda _: standing_points())
         self.session.submit_manual(
             {
@@ -399,9 +511,14 @@ class BefastSessionTest(unittest.TestCase):
     def test_low_quality_motion_is_not_treated_as_normal(self):
         result = self.run_arm_screen(lambda _: make_keypoints())
 
-        self.assertEqual(result["items"]["A"]["status"], "insufficient")
+        self.assertEqual(result["items"]["A"]["status"], "checking")
         self.assertEqual(result["decision"], "incomplete")
-        self.assertEqual(result["stage"], "retry_arms")
+        self.assertEqual(result["stage"], "arms")
+        self.assertEqual(result["arm_phase_state"], "retry")
+        self.assertEqual(
+            result["arm_phase_failure_reason"],
+            "both_arms_were_not_held_up",
+        )
 
     def test_absent_target_following_is_insufficient(self):
         result = self.run_eye_screen(lambda _: face_observation(gaze_ratio=0.5))
@@ -732,7 +849,7 @@ class BefastSessionTest(unittest.TestCase):
         self.session.prepare_component("A", now=0.0)
         self.assertEqual(self.session.snapshot(now=0.1)["stage"], "ready_arms")
 
-        result = self.run_arm_screen(lambda _: standing_points())
+        result = self.run_arm_screen()
 
         self.assertEqual(result["current_report"]["component"], "A")
         self.assertEqual(result["current_report"]["attempt"], 1)
@@ -743,7 +860,7 @@ class BefastSessionTest(unittest.TestCase):
     def test_independent_component_can_be_repeated_without_losing_history(self):
         for _ in range(2):
             self.session.prepare_component("A", now=0.0)
-            self.run_arm_screen(lambda _: standing_points())
+            self.run_arm_screen()
 
         result = self.session.snapshot(now=2.0)
 

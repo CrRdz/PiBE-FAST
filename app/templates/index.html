@@ -38,8 +38,9 @@
     .language button { min-width: 52px; padding: 6px 10px; border: 0; border-radius: 6px; color: #8fa0af; background: transparent; }
     .language button.active { color: #071018; background: #d9efff; font-weight: 750; }
     .emergency { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 38px; padding: 8px 18px; color: #ffd8da; background: #451a1f; border-bottom: 1px solid #713039; text-align: center; font-size: .88rem; }
-    .workspace { position: relative; min-height: calc(100vh - 102px); overflow: hidden; background: #020304; }
-    .video { width: 100%; height: calc(100vh - 102px); display: block; object-fit: contain; background: #020304; }
+    .workspace { min-height: calc(100vh - 102px); display: grid; grid-template-columns: minmax(0, 1fr) 340px; overflow: hidden; background: #020304; }
+    .video-stage { position: relative; min-width: 0; height: calc(100vh - 102px); overflow: hidden; background: #020304; }
+    .video { width: 100%; height: 100%; display: block; object-fit: contain; object-position: left center; background: #020304; }
     .client-video { transform: scaleX(-1); }
     .shade { pointer-events: none; position: absolute; inset: 0; background: linear-gradient(180deg, #0008 0, transparent 22%, transparent 57%, #000c 100%); }
     .status { position: absolute; top: 12px; left: 12px; display: flex; align-items: center; gap: 6px; max-width: min(300px, calc(100% - 24px)); padding: 6px 9px; border: 1px solid var(--line); border-radius: 999px; background: rgba(9, 15, 22, .68); backdrop-filter: blur(12px); color: #dce6ee; font-size: .72rem; }
@@ -68,6 +69,9 @@
     .neutral .signal-icon { background: var(--blue); color: #031722; }
     .signal strong { display: block; margin-bottom: 3px; font-size: clamp(1rem, 2.3vw, 1.28rem); }
     .signal p { margin: 0; color: #c7d1d9; line-height: 1.42; font-size: .9rem; }
+    .stage-countdown { pointer-events: none; position: absolute; z-index: 12; inset: 0; display: grid; place-items: center; color: #fff; font-size: clamp(7rem, 24vw, 15rem); font-weight: 850; font-variant-numeric: tabular-nums; line-height: 1; text-shadow: 0 5px 28px rgba(0,0,0,.72); }
+    .stage-countdown strong { animation: stage-countdown-pulse .9s cubic-bezier(.2,.7,.2,1) both; }
+    @keyframes stage-countdown-pulse { from { transform: scale(.72); } to { transform: scale(1.08); } }
     .progress { height: 4px; margin: 8px 8px 0; overflow: hidden; border-radius: 999px; background: #ffffff22; }
     .progress span { display: block; width: 0; height: 100%; background: var(--blue); transition: width .18s linear; }
     .controls { display: flex; justify-content: center; gap: 8px; margin-top: 9px; }
@@ -197,7 +201,42 @@
     .result strong { display: block; font-size: 1.08rem; }
     .result-status { font-weight: 750; }
     .result-detail { color: #d1d9df; line-height: 1.38; font-size: .88rem; }
+    .result.concise { display: block; padding: 7px 2px 0; border: 0; border-radius: 0; background: transparent; }
+    .result.concise .result-detail { display: block; }
+    .result.concise .speech-transcript { display: block; margin-top: 6px; }
     .report-meta { margin: 0 0 10px; color: #9fb0bd; font-size: .84rem; }
+    .data-sidebar { min-width: 0; height: calc(100vh - 102px); overflow-y: auto; border-left: 1px solid #26333e; background: #0a1016; box-shadow: -18px 0 38px #0005; }
+    .factor-panel { min-height: 100%; padding: 18px 16px 24px; }
+    .factor-kicker { color: #65c5fa; font-size: .7rem; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
+    .factor-title-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 5px; }
+    .factor-title-row h2 { margin: 0; font-size: 1.12rem; }
+    .factor-verdict { padding: 4px 8px; border: 1px solid #40505d; border-radius: 999px; color: #aebcc6; background: #141d25; font-size: .68rem; font-weight: 780; white-space: nowrap; }
+    .factor-verdict.normal { color: #75e4a2; border-color: #347b51; background: #102c1e; }
+    .factor-verdict.alert { color: #ff9da4; border-color: #93414a; background: #32151a; }
+    .factor-verdict.warning { color: #ffd77a; border-color: #80672f; background: #2d2517; }
+    .factor-summary { margin: 9px 0 14px; color: #91a3b1; font-size: .78rem; line-height: 1.45; }
+    .collection-strip { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin-bottom: 15px; }
+    .collection-stat { min-width: 0; padding: 9px 10px; border: 1px solid #263846; border-radius: 9px; background: #0d1a23; }
+    .collection-stat span { display: block; color: #8094a3; font-size: .66rem; }
+    .collection-stat strong { display: block; overflow: hidden; margin-top: 4px; color: #edf7fc; font-size: .95rem; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+    .factor-section-title { margin: 14px 0 8px; color: #b9c7d1; font-size: .75rem; font-weight: 780; }
+    .factor-list, .raw-data-list { display: grid; gap: 7px; }
+    .factor-row { position: relative; overflow: hidden; padding: 10px 10px 9px 13px; border: 1px solid #30414e; border-radius: 9px; background: #101922; transition: border-color .2s ease, background .2s ease; }
+    .factor-row::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 4px; background: #657580; }
+    .factor-row.normal { border-color: #2d6948; background: #0d2419; }
+    .factor-row.normal::before { background: var(--green); }
+    .factor-row.warning { border-color: #755e31; background: #272116; }
+    .factor-row.warning::before { background: var(--yellow); }
+    .factor-row.alert { border-color: #8d3c45; background: #2b1418; }
+    .factor-row.alert::before { background: var(--red); }
+    .factor-row.missing { opacity: .72; }
+    .factor-row-head { display: flex; align-items: baseline; justify-content: space-between; gap: 9px; }
+    .factor-row-name { min-width: 0; color: #d9e5ec; font-size: .76rem; font-weight: 730; }
+    .factor-row-value { flex: 0 0 auto; color: #f3f8fb; font-size: .78rem; font-weight: 790; font-variant-numeric: tabular-nums; }
+    .factor-row-rule { display: block; margin-top: 4px; color: #8295a4; font-size: .66rem; line-height: 1.35; }
+    .raw-data-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 7px 9px; border-bottom: 1px solid #1d2a34; color: #91a4b3; font-size: .69rem; }
+    .raw-data-row span:last-child { color: #d5e1e8; font-variant-numeric: tabular-nums; text-align: right; }
+    .factor-empty { padding: 22px 12px; border: 1px dashed #31414d; border-radius: 10px; color: #7f929f; font-size: .8rem; line-height: 1.55; text-align: center; }
     [hidden] { display: none !important; }
     @media (max-width: 680px) {
       .topbar { height: 58px; padding: 0 12px; }
@@ -207,7 +246,8 @@
       .camera-picker > span { display: none; }
       .camera-picker select { width: 118px; max-width: 118px; font-size: .72rem; }
       .history-entry { padding: 0 9px; }
-      .workspace, .video { min-height: calc(100vh - 96px); height: calc(100vh - 96px); }
+      .workspace { min-height: calc(100vh - 96px); grid-template-columns: minmax(0, 1fr) 270px; }
+      .video-stage, .data-sidebar { min-height: calc(100vh - 96px); height: calc(100vh - 96px); }
       .status { top: 8px; left: 8px; max-width: min(230px, calc(100% - 16px)); }
       .steps { top: 54px; right: 8px; left: auto; transform: none; }
       .guide { bottom: 14px; }
@@ -226,6 +266,7 @@
       .time-field { grid-column: auto; }
       .result { grid-template-columns: 42px 1fr; gap: 5px 9px; }
       .result-detail { grid-column: 2; }
+      .factor-panel { padding: 13px 11px 20px; }
     }
     @media (max-width: 460px) {
       .topbar { gap: 6px; padding: 0 7px; }
@@ -239,53 +280,39 @@
       .language button { min-width: 35px; padding: 6px 4px; font-size: .72rem; }
       .component-grid { grid-template-columns: 1fr; }
       .component-card { min-height: 86px; }
+      .workspace { grid-template-columns: minmax(0, 1fr) 220px; overflow-x: auto; }
+      .factor-title-row { align-items: flex-start; flex-direction: column; }
+      .collection-strip { grid-template-columns: 1fr; }
     }
   </style>
+  <link rel="stylesheet" href="{{ url_for('static', filename='organic.css') }}">
 </head>
 <body>
   <div class="app">
-    <header class="topbar">
-      <div class="brand"><div><div id="brandTitle">Pi BE-FAST 筛查 Demo</div><div id="brandSub" class="brand-sub">Camera-guided screening prototype</div></div></div>
-      <div class="top-actions">
-        <label class="camera-picker"><span id="cameraLabel">摄像头</span><select id="cameraSourceSelect" onchange="switchCameraSource(this.value)" aria-label="摄像头来源"><option id="hostCameraOption" value="host">主机摄像头</option><option id="clientCameraOption" value="client">手机 / 当前设备</option></select></label>
-        <button id="persistentHistoryButton" class="history-entry" onclick="openPersistentHistory()">异常历史</button>
-        <div id="languageSwitch" class="language" aria-label="语言"><button id="zhButton" class="active" onclick="setLanguage('zh')">中文</button><button id="enButton" onclick="setLanguage('en')">EN</button></div>
-      </div>
-    </header>
+    <div id="reactHeader"></div>
     <div id="emergencyText" class="emergency">⚠ 突然出现任何 BE-FAST 症状，请立即拨打 120，不要等待本 Demo 完成。</div>
 
-    <main id="workspace" class="workspace">
+    <main id="workspace" class="workspace steps-hidden">
+      <div class="video-stage">
       <img id="liveVideo" class="video" src="/video_feed" alt="实时摄像头画面">
       <video id="clientVideo" class="video client-video" autoplay muted playsinline hidden></video>
       <canvas id="clientCanvas" hidden></canvas>
       <div class="shade"></div>
+      <div id="stageCountdown" class="stage-countdown" aria-live="assertive" aria-atomic="true" hidden><strong id="stageCountdownValue">3</strong></div>
       <div id="runtime" class="status starting"><span class="dot"></span><span id="runtimeText">正在连接摄像头……</span></div>
-      <div id="steps" class="steps" aria-label="筛查进度">
-        <button class="step" data-code="B" onclick="startComponent('B')" aria-label="平衡检测">B</button><button class="step" data-code="E" onclick="startComponent('E')" aria-label="眼动检测">E</button><button class="step" data-code="F" onclick="startComponent('F')" aria-label="面部检测">F</button><button class="step" data-code="A" onclick="startComponent('A')" aria-label="手臂检测">A</button><button class="step" data-code="S" onclick="startComponent('S')" aria-label="言语检测">S</button>
-      </div>
       <span id="eyeTarget" class="eye-target center" aria-label="眼动目标"></span>
 
-      <section id="startOverlay" class="start">
-        <div class="start-inner">
-          <h1 id="startTitle">Pi BE-FAST 筛查 Demo</h1>
-          <p id="startText">进入后可单独选择 B、E、F、A 或 S；每项完成后立即生成报告，并可不限次数重复。</p>
-          <button id="startButton" class="button primary" onclick="startScreening()">选择检测项目</button>
-        </div>
-      </section>
+      <div id="standbyHint" class="standby-hint" aria-live="polite" hidden>
+        <span id="standbyHintText">点击右侧项目开始</span>
+        <svg viewBox="0 0 72 32" aria-hidden="true"><path d="M2 16h62M50 4l14 12-14 12"/></svg>
+      </div>
 
-      <section id="componentSheet" class="sheet" hidden>
+      <section id="componentSheet" class="sheet">
         <h2 id="componentTitle">选择单项检测</h2>
         <p id="componentText">各项目彼此独立。完成一项即可查看该次报告，也可以随时重复。</p>
-        <div class="component-grid">
-          <button class="component-card" onclick="startComponent('B')"><strong>B</strong><span id="componentBTitle">平衡</span><small id="componentBText">人工失衡观察 + 安全站立检测</small></button>
-          <button class="component-card" onclick="startComponent('E')"><strong>E</strong><span id="componentETitle">眼动</span><small id="componentEText">跟随左右目标，检查眼动范围</small></button>
-          <button class="component-card" onclick="startComponent('F')"><strong>F</strong><span id="componentFTitle">面部</span><small id="componentFText">自然表情与微笑对称性</small></button>
-          <button class="component-card" onclick="startComponent('A')"><strong>A</strong><span id="componentATitle">手臂</span><small id="componentAText">双臂平举与单侧下落</small></button>
-          <button class="component-card" onclick="startComponent('S')"><strong>S</strong><span id="componentSTitle">言语</span><small id="componentSText">长期自然语音监测或固定句朗读确认</small></button>
-        </div>
+        <div id="reactComponentGrid" class="component-grid"></div>
         <h3 id="historyTitle" class="history-title">本轮单项报告</h3>
         <div id="reportHistory" class="history"></div>
-        <div class="sheet-actions"><button class="button ghost" onclick="returnToStandby()" id="menuFinishButton">完成并退出</button></div>
       </section>
 
       <section id="speechModeSheet" class="sheet speech-mode-sheet" hidden>
@@ -429,23 +456,26 @@
       </section>
 
       <section id="resultSheet" class="sheet" hidden>
-        <h2 id="resultTitle">单项检测报告</h2>
+        <h2 id="resultTitle">检测结果</h2>
         <div id="reportMeta" class="report-meta"></div>
         <div id="decision" class="decision">评估未完成</div>
         <div id="results" class="results"></div>
-        <div class="sheet-actions"><button class="button ghost" onclick="repeatCurrentComponent()" id="againButton">重新检测本项</button><button class="button primary" onclick="openComponentMenu()" id="otherButton">检测其他项目</button><button class="button ghost" onclick="returnToStandby()" id="finishButton">完成并退出</button></div>
+        <div class="sheet-actions"><button class="button ghost" onclick="repeatCurrentComponent()" id="againButton">再测一次</button><button class="button primary" onclick="openComponentMenu()" id="otherButton">其他项目</button><button class="button ghost" onclick="returnToStandby()" id="finishButton">完成</button></div>
       </section>
+      </div>
+      <div id="reactSteps" class="steps-slot" aria-hidden="true" inert></div>
+      <div id="reactSidebar" class="sidebar-slot"></div>
     </main>
   </div>
 
   <script>
     const text = {
       zh: {
-        title: 'Pi BE-FAST 筛查 Demo', sub: '摄像头引导式筛查研究原型', emergency: '⚠ 突然出现任何 BE-FAST 症状，请立即拨打 120，不要等待本 Demo 完成。', cameraAlt: '当前选择的摄像头实时画面', languageLabel: '语言', progressLabel: '筛查进度', eyeTargetLabel: '眼动目标', cameraLabel:'摄像头', cameraSourceLabel:'摄像头来源', hostOption:'主机摄像头', autoHostOption:'自动切换（E/F 电脑 · A/B 手机）', faceHostCamera:'电脑前置摄像头 · E/F', poseHostCamera:'手机摄像头 · A/B', fallbackHostCamera:'目标摄像头不可用 · 当前摄像头回退', clientOption:'手机 / 当前设备',
-        startText: '先选择摄像头，再进入单项检测。B、E、F、A、S 可任意选择、独立完成并不限次数重复；自动项目仍会用红绿提示引导，每次完成都会立即生成报告。', start: '选择检测项目', exit: '退出筛查',
+        title: 'Pi BE-FAST 筛查 Demo', brandName:'Pi BE-FAST', sub: '摄像头引导式筛查研究原型', emergency: '⚠ 突然出现任何 BE-FAST 症状，请立即拨打 120，不要等待本 Demo 完成。', cameraAlt: '当前选择的摄像头实时画面', languageLabel: '语言', progressLabel: '筛查进度', eyeTargetLabel: '眼动目标', cameraLabel:'摄像头', cameraSourceLabel:'摄像头来源', hostOption:'主机摄像头', autoHostOption:'自动切换（E/F 电脑 · A/B 手机）', faceHostCamera:'电脑前置摄像头 · E/F', poseHostCamera:'手机摄像头 · A/B', fallbackHostCamera:'目标摄像头不可用 · 当前摄像头回退', clientOption:'手机 / 当前设备',
+        startText: '选择 B、E、F、A 或 S 任一项目开始。', start: '选择检测项目', exit: '退出筛查', standbyHint:'点击右侧项目开始', startKicker:'本地 · 私密', startAssuranceLocal:'本地分析', startAssuranceTime:'约 1–2 分钟', startAssuranceChecks:'五项独立筛查', startNote:'研究原型，不用于医学诊断',
         passiveMonitorTitle:'长期语音监测', passiveDisabled:'长期语音监测未启用', passiveDisabledDetail:'启动服务时不要使用 --disable-passive-speech，即可在本地建立自然语音基线。', passiveUnavailable:'本地麦克风不可用', passivePaused:'长期监听已暂停', passivePausedDetail:'恢复后才会继续采集短窗口；固定句检测期间会自动暂停。', passiveCalibrating:'正在建立个人语音基线', passiveCalibrationDetail:'已采集 {count}/{target} 个有效自然语音窗口。请在安静环境中由同一人自然说话。', passiveWaiting:'正在等待自然语音', passiveWaitingDetail:'没有检测到足够的有效说话声音，原始录音不会保留。', passiveStable:'长期语音监测运行中', passiveStableDetail:'最近窗口与个人基线一致；这里只做变化触发，不用于诊断构音障碍或脑卒中。', passiveObserving:'检测到一次语音特征变化', passiveObservingDetail:'系统会继续观察多个窗口，单次变化不会触发告警。', passiveSuspected:'检测到持续语音特征变化', passiveSuspectedDetail:'建议立即进行固定句本地确认；该结果本身不是医学诊断。', passiveError:'长期语音监测发生错误', passivePause:'暂停监听', passiveResume:'继续监听', passiveReset:'重建个人基线', passiveResetConfirm:'确定清除当前个人语音基线并重新校准吗？', passiveConfirm:'朗读固定句确认', passiveConfirmReady:'建议立即朗读固定句', passiveChangedDomains:'变化域', passiveDomainNames:{timing:'时序',phonation:'发声',articulation_resonance:'构音/共振'}, passiveEvidenceNote:'论文启发的工程触发器，尚未临床验证。', passiveBaseline:'个人基线', passiveLevel:'当前响度', passiveVoiced:'有效语音', passiveVotes:'异常投票', passivePrivacy:'仅在本机分析 · 日常原始录音分析后立即删除', passiveRecentWindows:'最近 {count} 个有效窗口', passiveNoWindow:'等待第一个有效语音窗口', passiveWindowValid:'最近窗口有效', passiveWindowInvalid:'最近窗口未计入：{reason}', passiveThreshold:'变化阈值 {threshold}', passiveVoteEmpty:'尚无窗口', passiveVoteNormal:'该窗口未变化', passiveVoteChanged:'该窗口发生变化', passiveState:{capturing:'采集中',listening:'等待下一窗',paused:'已暂停',error:'错误',unavailable:'未启用',stopped:'已停止'}, passiveReasons:{passive_speech_audio_too_quiet:'声音太小',passive_speech_audio_clipped:'声音削波',passive_speech_not_detected:'有效语音不足',passive_speech_window_too_short:'录音过短'}, passiveMonitorSheetTitle:'S · 长期语音监测', passiveMonitorSheetText:'自然说话会与本机保存的个人声学基线比较；这里只提示持续变化，不直接诊断中风。', passiveBack:'返回语音方式',
         speechModeTitle:'S · 选择语音检测方式', speechModeText:'长期监测用于观察自然说话相对个人基线的变化；固定句朗读用于一次本地确认。', speechModePassiveTitle:'长期语音监测', speechModePassiveText:'持续采集本地短窗口，显示个人基线、声学域偏离和最近异常投票。', speechModeGuidedTitle:'朗读固定句', speechModeGuidedText:'录制约 7 秒提示句，在本地检查复述内容、语速和停顿。', speechModeGuidedState:'进入一次 S 检查', speechModeBack:'返回',
-        componentTitle:'选择单项检测', componentText:'各项目彼此独立。完成一项即可查看该次报告，也可以随时重复。', componentNames:{B:'平衡',E:'眼动',F:'面部',A:'手臂',S:'言语'}, componentDescriptions:{B:'人工失衡观察 + 安全站立检测',E:'视觉症状优先 + 重复眼动终点检查',F:'自然表情与微笑对称性',A:'双臂平举与单侧下落',S:'长期自然语音监测或固定句朗读确认'}, historyTitle:'本轮单项报告', historyEmpty:'尚无报告，选择任一项目开始。', menuFinish:'完成并退出',
+        componentTitle:'选择检测项目', componentText:'', componentNames:{B:'平衡',E:'眼动',F:'面部',A:'手臂',S:'言语'}, componentDescriptions:{B:'',E:'',F:'',A:'',S:''}, historyTitle:'本轮报告', historyEmpty:'尚无报告', menuFinish:'完成并退出',
         historyEntry:'异常历史', persistentHistoryTitle:'异常历史记录', persistentHistoryText:'查看已保存的异常报告、画面和言语录音。', historyComponentLabel:'BE-FAST 项目', historySideLabel:'侧别', historySuddenLabel:'突发情况', historyAll:'全部', historyLeft:'左侧', historyRight:'右侧', historySuddenYes:'新发 / 突然', historySuddenNo:'非突发', historyRefresh:'刷新', historyClose:'关闭', historyLoading:'正在加载异常历史…', historyLoadError:'无法加载异常历史。', historyEmptyPersistent:'暂无符合当前筛选条件的异常记录。', historyCount:'共 {count} 条异常记录', historyFrameUnavailable:'没有保存画面', historyFrameLoadError:'画面文件无法加载，请刷新后重试。', historyDetectedAt:'检测时间', historyAttemptLabel:'第 {attempt} 次', historySuddenUnknown:'未确认是否突发',
         standbyGuide: ['准备开始', '请先确认摄像头画面清晰。'],
         idle: ['E · 眼动准备', '正对当前选择的摄像头，让面部和双眼清晰入镜。'],
@@ -457,8 +487,17 @@
         ready_face: ['F · 面部准备', '正对摄像头，闭嘴并放松面部。'],
         face_neutral: ['F · 保持自然表情', '暂时不要微笑，系统正在记录中性基线。'],
         face_smile: ['F · 现在微笑', '自然微笑并保持，直到进度完成。'],
-        ready_arms: ['A · 双臂准备', '退后或调整镜头，坐稳并将双臂向前平举。'],
-        arms: ['A · 保持双臂平举', '保持动作，不要转动身体。'],
+        ready_arms: ['A · 双臂平举准备', '正对摄像头坐稳，让双肩、双肘和双腕完整入镜。'],
+        arms: ['A · 双臂侧平举', '双臂从身体两侧抬到肩高，保持 5 秒，再自然放下。'],
+        arms_raise: ['A · 双臂抬起', '从身体两侧缓慢抬起双臂，直到手腕接近肩膀高度。'],
+        arms_hold: ['A · 保持 5 秒', '双臂保持在肩膀高度，身体正对镜头，不要提前放下。'],
+        arms_lower: ['A · 自然放下', '保持结束，请将双臂自然放回身体两侧。'],
+        armStep:'第 {current}/{total} 步', armSeconds:'秒采集中', armPreview:'免手准备', armCountdown:'准备倒数', armRecording:'正在记录',
+        armPreviewHint:'双臂先自然下垂，不要提前抬起；保持稳定后系统会自动倒数。',
+        armAutoReady:'下垂姿势已识别，再保持 {seconds} 秒将自动倒数。',
+        armRetryHint:'刚才的动作没有完整识别，不会用于计算。请先自然放下双臂，系统会自动重新倒数。',
+        armFailureReasons:{arm_start_pose_not_observed:'开始记录后没有看到双臂自然下垂。',both_arms_were_not_raised:'没有在规定时间内完整抬起双臂。',both_arms_were_not_held_up:'双臂没有持续保持在肩膀高度。',both_arms_were_not_lowered:'保持结束后没有检测到双臂放下。'},
+        armCueRaise:'双臂从身体两侧缓慢抬到肩膀高度。', armCueHold:'保持双臂展开，系统正在比较左右高度和下落。', armCueLower:'保持完成，请自然放下双臂。',
         ready_balance: ['B · 安全准备', '必须有人在旁看护。确认安全后，让全身和脚踝进入画面并站立。'],
         balance: ['B · 保持自然站立约 30 秒', '看护者请在旁保护；有效窗口将与个人基线比较，感觉不稳立即停止。'],
         review: ['S/T · 完成人工观察', '检查言语是否清晰，并记录异常首次出现时间。'],
@@ -466,19 +505,19 @@
         safety: '已有人看护，可以安全站立', manualTitle: 'B · 平衡观察', manualText: '如果已经突然失去平衡或协调困难，请直接勾选，无需冒险站立；未发现时再继续安全站立检测。', balanceManualTitle:'B · 平衡观察', balanceManualText:'如果已经突然失去平衡或协调困难，请直接勾选，无需冒险站立；未发现时再继续安全站立检测。', eyeManualTitle:'E · 先确认视觉症状', eyeManualText:'若突然出现视力下降、黑蒙、视野缺损、复视或眼睛持续偏向一侧，请直接勾选；摄像头阴性不能排除这些症状。未发现时再进行重复眼动终点检查。', eyeProblemLabel:'突然视力下降、黑蒙、视野缺损、复视或眼睛偏向一侧', eyeSuddenLabel:'该视觉异常是新出现或突然发生', eyeDistanceLabel:'眼睛到屏幕距离（厘米）', eyeScreenWidthLabel:'屏幕物理宽度（厘米）',
         balanceLabel: '突然失去平衡或协调困难', suddenLabel: '该异常是新出现或突然发生', onsetLabel: '首次发现异常时间（可留空）', cancel: '返回项目选择', submit: '继续',
         speechTitle:'S · 麦克风言语检测', speechText:'靠近树莓派麦克风，点击开始后完整复述下面的句子。录音与识别均在本地完成。', speechPromptLabel:'请复述', speechPromptDefault:'今天天气很好，我们一起去公园散步', speechSuddenLabel:'言语变化是新出现或突然发生', speechOnsetLabel:'首次发现异常时间（可留空）', speechCancel:'返回项目选择', speechStart:'开始录音', speechReady:'等待开始录音', speechReadyText:'系统将采集约 7 秒音频，并在树莓派本地分析。', speechRecording:'正在录音', speechRecordingText:'请完整复述提示句，不要让其他人同时说话。', speechAnalyzing:'正在本地分析', speechAnalyzingText:'正在检查音频质量、复述内容、语速和停顿。', speechCompleting:'正在生成报告', speechBackendMissing:'本地语音引擎尚未就绪', speechTranscriptLabel:'识别文本',
-        resultTitle: '单项检测报告', again: '重新检测本项', other:'检测其他项目', finish: '完成并退出', reportAttempt:'{name} · 第 {attempt} 次报告', historyAttempt:'{code} 第{attempt}次',
-        decisions: {standby:'等待开始', emergency:'发现新发异常：立即拨打 120', warning:'本项发现异常：请确认是否突然出现', clear:'本项未见明显异常', incomplete:'本项数据质量不足或已跳过'},
-        runtimeWaiting: '正在连接摄像头', live: '画面已连接', previewOnly: '画面已连接，部分模型未就绪', runtimeError: '摄像头或模型不可用', hostCamera: '主机', hostVideo: '本地视频', clientCamera:'当前设备', cameraSecureRequired:'当前地址不能调用手机摄像头。请通过 HTTPS 打开页面，或在运行服务的电脑上使用 localhost。', cameraPermissionDenied:'无法打开当前设备摄像头，请检查浏览器摄像头权限。', cameraSwitchIdle:'请在待机页或项目选择页切换摄像头。', statuses: {positive:'发现异常', negative:'未见明显异常', insufficient:'数据质量不足', skipped:'已跳过', checking:'检测中', pending:'待检测'},
+        resultTitle: '检测结果', again: '再测一次', other:'其他项目', finish: '完成', reportAttempt:'{name} · 第 {attempt} 次', historyAttempt:'{code} 第{attempt}次',
+        decisions: {standby:'等待开始', emergency:'发现新发异常：立即拨打 120', warning:'发现异常，请确认是否突然出现', clear:'未见明显异常', incomplete:'数据不足或未完成'},
+        runtimeWaiting: '正在连接摄像头', live: '画面已连接', previewOnly: '画面已连接，部分模型未就绪', runtimeError: '摄像头或模型不可用', hostCamera: '主机', hostVideo: '本地视频', clientCamera:'当前设备', cameraSecureRequired:'当前地址不能调用手机摄像头。请通过 HTTPS 打开页面，或在运行服务的电脑上使用 localhost。', cameraPermissionDenied:'无法打开当前设备摄像头，请检查浏览器摄像头权限。', statuses: {positive:'发现异常', negative:'未见明显异常', insufficient:'数据质量不足', skipped:'已跳过', checking:'检测中', pending:'待检测'},
         itemNames: {B:'平衡', E:'眼动', F:'面部', A:'手臂', S:'言语'}, sides: {left:'左', right:'右', unknown:'侧别未确定'}, detailUnavailable: '尚无可解释的检测详情。',
         resultReasons: {reported_balance_problem:'本人或照护者报告突然失去平衡或协调困难。', personal_balance_baseline_calibrating:'正在积累个人安静站立基线；校准完成前不会给出自动正常结论。', personal_balance_baseline_variability_not_estimable:'个人基线离散度为零，无法计算有依据的变化分数；本次不作自动判断。', sustained_trunk_orientation_change:'躯干持续侧倾方向相对个人基线发生明显变化。', increased_mediolateral_sway_velocity:'横向摆动平均速度相对个人基线明显增加。', no_sustained_change_from_personal_balance_baseline:'本次躯干方向和横向摆动与个人基线一致。', persistent_lateral_body_offset:'身体中心持续向{side}偏离双脚支撑中心。', large_standing_sway:'站立期间左右摆动范围超过旧版工程阈值。', no_clear_pose_based_balance_asymmetry:'旧版检测未发现明显持续侧偏或过大摆动。', stable_standing_pose_not_visible_long_enough:'全身、髋部或脚踝没有持续清晰入镜，无法完成站立平衡判断。', reduced_visual_target_response:'左右眼对屏幕左右目标的水平跟随幅度均不足。', asymmetric_eye_excursion:'{side}眼的水平移动范围明显小于另一只眼。', asymmetric_conjugate_gaze:'双眼跟随同一目标时运动不同步，存在共轭眼动不协调。', no_visible_eye_movement_abnormality:'本次未发现明显的水平眼动范围不足、左右不对称或双眼不同步。', face_or_irises_not_visible_long_enough:'面部或虹膜没有持续清晰可见，无法完成眼动判断。', head_moved_during_eye_test:'测试时头部移动过多，无法区分眼动和转头动作。', asymmetric_mouth_corner_movement:'微笑时{side}嘴角移动明显弱于另一侧。', asymmetric_smile_activation:'MediaPipe 表情特征显示{side}微笑激活明显较弱。', no_clear_smile_asymmetry:'本次中性表情与微笑对比未发现明显左右不对称。', face_not_visible_during_neutral_and_smile:'中性表情或微笑阶段面部未持续清晰入镜。', smile_expression_not_detected:'没有识别到足够明确的微笑动作，无法判断面部对称性。', persistent_arm_height_asymmetry:'保持平举时{side}手臂持续低于另一侧。', asymmetric_arm_drift:'保持过程中{side}手臂下落幅度明显更大。', no_clear_arm_asymmetry:'本次双臂平举未发现明显高度差或单侧下落。', arms_not_visible_long_enough:'双肩或双手腕没有持续清晰入镜，无法完成手臂判断。', both_arms_were_not_held_up:'未持续识别到双臂向前平举动作。', reported_speech_problem:'人工观察发现说话含混、复述错误或理解困难。', not_reported:'人工观察未报告明显言语异常。', not_checked:'尚未完成人工观察。', not_fully_checked:'该项目尚未完成自动检测和人工确认。', user_skipped:'使用者跳过了此项，本项没有产生检测结论。', checking:'正在采集并分析当前动作。', not_run:'该项目尚未检测。'},
         reasons: {show_face_and_eyes:'请靠近一些，让双眼清晰可见', face_and_eyes_ready:'面部和双眼已识别', show_full_face:'请让完整面部进入画面', neutral_face_ready:'中性表情已识别', relax_face_first:'请先放松面部，不要微笑', smile_now:'请自然微笑', smile_detected:'微笑动作已识别', show_shoulders_and_wrists:'请让双肩和双手腕进入画面', raise_both_arms:'请将双臂向前抬起', arms_detected_hold_still:'双臂动作已识别，请保持', show_full_body_and_stand_safely:'请让全身和脚踝入镜，并在看护下站立', standing_pose_ready:'站立动作已识别，请保持', collecting_action:'正在开始采集', face_or_irises_not_visible_long_enough:'双眼未持续清晰可见，请重新调整', head_moved_during_eye_test:'头部移动过多，请保持头不动', face_not_visible_during_neutral_and_smile:'面部未持续清晰可见，请重新调整', smile_expression_not_detected:'没有识别到微笑，请重新尝试', arms_not_visible_long_enough:'双肩或手腕未持续入镜，请重新调整', both_arms_were_not_held_up:'没有识别到抬臂动作，请重新尝试', stable_standing_pose_not_visible_long_enough:'全身或脚踝未持续入镜，请重新调整'}
       },
       en: {
-        title: 'Pi BE-FAST Screening Demo', sub: 'Camera-guided screening research prototype', emergency: '⚠ If any BE-FAST sign appears suddenly, call emergency services now. Do not wait for this demo.', cameraAlt: 'Live view from the selected camera', languageLabel: 'Language', progressLabel: 'Screening progress', eyeTargetLabel:'Eye-movement target', cameraLabel:'Camera', cameraSourceLabel:'Camera source', hostOption:'Host camera', autoHostOption:'Auto (E/F Mac · A/B phone)', faceHostCamera:'Mac front camera · E/F', poseHostCamera:'Phone camera · A/B', fallbackHostCamera:'Target unavailable · current camera fallback', clientOption:'Phone / this device',
-        startText: 'Choose a camera, then select any B, E, F, A, or S check. Each check runs independently, can be repeated without limit, and produces a report immediately.', start: 'Choose a check', exit: 'Exit screening',
+        title: 'Pi BE-FAST Screening Demo', brandName:'Pi BE-FAST', sub: 'Camera-guided screening research prototype', emergency: '⚠ If any BE-FAST sign appears suddenly, call emergency services now. Do not wait for this demo.', cameraAlt: 'Live view from the selected camera', languageLabel: 'Language', progressLabel: 'Screening progress', eyeTargetLabel:'Eye-movement target', cameraLabel:'Camera', cameraSourceLabel:'Camera source', hostOption:'Host camera', autoHostOption:'Auto (E/F Mac · A/B phone)', faceHostCamera:'Mac front camera · E/F', poseHostCamera:'Phone camera · A/B', fallbackHostCamera:'Target unavailable · current camera fallback', clientOption:'Phone / this device',
+        startText: 'Choose any B, E, F, A, or S check to begin.', start: 'Choose a check', exit: 'Exit screening', standbyHint:'Choose a check on the right', startKicker:'LOCAL · PRIVATE', startAssuranceLocal:'On-device', startAssuranceTime:'About 1–2 minutes', startAssuranceChecks:'Five checks', startNote:'Research prototype, not a medical diagnosis',
         passiveMonitorTitle:'Long-running speech monitoring', passiveDisabled:'Long-running speech monitoring is disabled', passiveDisabledDetail:'Start without --disable-passive-speech to build a local natural-speech baseline.', passiveUnavailable:'Local microphone unavailable', passivePaused:'Long-running monitoring is paused', passivePausedDetail:'Resume to continue local windows. Guided phrase checks pause it automatically.', passiveCalibrating:'Building a personal speech baseline', passiveCalibrationDetail:'Collected {count}/{target} valid natural-speech windows. Use the same speaker in a quiet setting.', passiveWaiting:'Waiting for natural speech', passiveWaitingDetail:'No sufficiently voiced window was detected. Raw recordings are not retained.', passiveStable:'Long-running speech monitoring is active', passiveStableDetail:'Recent windows match the personal baseline. This only triggers follow-up and does not diagnose dysarthria or stroke.', passiveObserving:'One speech-feature change detected', passiveObservingDetail:'The system will observe multiple windows; one changed window does not trigger an alert.', passiveSuspected:'Sustained speech-feature change detected', passiveSuspectedDetail:'Run the local fixed-phrase confirmation now. This signal is not a medical diagnosis.', passiveError:'Long-running speech monitoring error', passivePause:'Pause monitoring', passiveResume:'Resume monitoring', passiveReset:'Rebuild personal baseline', passiveResetConfirm:'Clear the current personal speech baseline and calibrate again?', passiveConfirm:'Read the fixed phrase', passiveConfirmReady:'Read the fixed phrase now', passiveChangedDomains:'Changed domains', passiveDomainNames:{timing:'timing',phonation:'phonation',articulation_resonance:'articulation/resonance'}, passiveEvidenceNote:'Paper-informed engineering trigger; not clinically validated.', passiveBaseline:'Personal baseline', passiveLevel:'Input level', passiveVoiced:'Voiced speech', passiveVotes:'Anomaly votes', passivePrivacy:'Processed on this device · routine raw audio is deleted after analysis', passiveRecentWindows:'Latest {count} valid windows', passiveNoWindow:'Waiting for the first valid speech window', passiveWindowValid:'Latest window is valid', passiveWindowInvalid:'Latest window excluded: {reason}', passiveThreshold:'change threshold {threshold}', passiveVoteEmpty:'no window yet', passiveVoteNormal:'unchanged window', passiveVoteChanged:'changed window', passiveState:{capturing:'capturing',listening:'between windows',paused:'paused',error:'error',unavailable:'disabled',stopped:'stopped'}, passiveReasons:{passive_speech_audio_too_quiet:'input too quiet',passive_speech_audio_clipped:'audio clipping',passive_speech_not_detected:'not enough voiced speech',passive_speech_window_too_short:'recording too short'}, passiveMonitorSheetTitle:'S · Long-running speech monitoring', passiveMonitorSheetText:'Natural speech is compared with the personal acoustic baseline stored on this device. It flags sustained change and does not diagnose stroke.', passiveBack:'Back to speech options',
         speechModeTitle:'S · Choose a speech mode', speechModeText:'Long-running monitoring tracks natural speech against a personal baseline; fixed-phrase reading runs one local confirmation check.', speechModePassiveTitle:'Long-running monitoring', speechModePassiveText:'Continuously analyze local short windows and show baseline progress, domain deviations, and recent votes.', speechModeGuidedTitle:'Read a fixed phrase', speechModeGuidedText:'Record the seven-second prompt and check repeated content, speaking rate, and pauses locally.', speechModeGuidedState:'Start one S check', speechModeBack:'Back',
-        componentTitle:'Choose one check', componentText:'Each check is independent. Finish any one to view its report, or repeat it at any time.', componentNames:{B:'Balance',E:'Eyes',F:'Face',A:'Arms',S:'Speech'}, componentDescriptions:{B:'Manual balance observation + safe standing check',E:'Follow left/right targets to assess eye movement',F:'Neutral face and smile symmetry',A:'Bilateral arm hold and one-sided drift',S:'Long-running natural speech or fixed-phrase confirmation'}, historyTitle:'Reports from this session', historyEmpty:'No reports yet. Choose any check to begin.', menuFinish:'Finish and exit',
+        componentTitle:'Choose a check', componentText:'', componentNames:{B:'Balance',E:'Eyes',F:'Face',A:'Arms',S:'Speech'}, componentDescriptions:{B:'',E:'',F:'',A:'',S:''}, historyTitle:'Reports', historyEmpty:'No reports yet', menuFinish:'Finish',
         historyEntry:'Abnormal history', persistentHistoryTitle:'Abnormal history', persistentHistoryText:'View saved abnormal reports, captured frames, and speech recordings.', historyComponentLabel:'BE-FAST check', historySideLabel:'Side', historySuddenLabel:'Onset', historyAll:'All', historyLeft:'Left', historyRight:'Right', historySuddenYes:'New / sudden', historySuddenNo:'Not sudden', historyRefresh:'Refresh', historyClose:'Close', historyLoading:'Loading abnormal history…', historyLoadError:'Unable to load abnormal history.', historyEmptyPersistent:'No abnormal records match the current filters.', historyCount:'{count} abnormal records', historyFrameUnavailable:'No captured frame', historyFrameLoadError:'The captured frame could not be loaded. Refresh and retry.', historyDetectedAt:'Detected', historyAttemptLabel:'Attempt {attempt}', historySuddenUnknown:'Sudden onset unconfirmed',
         standbyGuide: ['Ready to begin', 'Confirm that the live camera view is clear.'],
         idle: ['E · Eye setup', 'Face the selected camera and keep both eyes clearly visible.'],
@@ -490,8 +529,17 @@
         ready_face: ['F · Face setup', 'Face the camera, close your mouth, and relax your expression.'],
         face_neutral: ['F · Keep a neutral face', 'Do not smile yet while the neutral baseline is recorded.'],
         face_smile: ['F · Smile now', 'Smile naturally and hold it until the progress completes.'],
-        ready_arms: ['A · Arm setup', 'Step back if needed, sit safely, and raise both arms forward.'],
-        arms: ['A · Hold both arms up', 'Keep the pose and do not rotate your body.'],
+        ready_arms: ['A · Bilateral arm setup', 'Face the camera and keep both shoulders, elbows, and wrists visible.'],
+        arms: ['A · Bilateral arm raise', 'Raise both arms sideways to shoulder height, hold for five seconds, then lower.'],
+        arms_raise: ['A · Raise both arms', 'Slowly raise both arms sideways until the wrists are near shoulder height.'],
+        arms_hold: ['A · Hold for five seconds', 'Keep both arms at shoulder height and keep your body facing the camera.'],
+        arms_lower: ['A · Lower both arms', 'The hold is complete. Lower both arms naturally to your sides.'],
+        armStep:'Step {current} of {total}', armSeconds:'seconds recording', armPreview:'Hands-free setup', armCountdown:'Get ready', armRecording:'Recording',
+        armPreviewHint:'Keep both arms naturally at your sides; do not raise them yet. Hold still and the countdown will start automatically.',
+        armAutoReady:'Resting pose recognized. Hold for {seconds}s to start the countdown automatically.',
+        armRetryHint:'The previous movement was not analyzed. Lower both arms naturally and the countdown will restart automatically.',
+        armFailureReasons:{arm_start_pose_not_observed:'Both arms were not seen resting at the sides after recording began.',both_arms_were_not_raised:'Both arms were not fully raised before the time limit.',both_arms_were_not_held_up:'Both arms were not held near shoulder height long enough.',both_arms_were_not_lowered:'Both arms were not lowered after the hold.'},
+        armCueRaise:'Slowly raise both arms sideways to shoulder height.', armCueHold:'Keep both arms extended while left/right height and drift are measured.', armCueLower:'The hold is complete. Lower both arms naturally.',
         ready_balance: ['B · Safety setup', 'A caregiver must be present. When safe, show your full body and ankles and stand up.'],
         balance: ['B · Stand naturally for about 30 seconds', 'Keep a caregiver nearby; valid windows are compared with the personal baseline. Stop immediately if unsteady.'],
         review: ['S/T · Manual observation', 'Check speech and record when the change was first noticed.'],
@@ -499,9 +547,9 @@
         safety: 'Caregiver present — safe to stand', manualTitle: 'B · Balance observation', manualText: 'If sudden loss of balance or coordination is already present, check the box and do not risk standing. Otherwise continue to the supported standing check.', balanceManualTitle:'B · Balance observation', balanceManualText:'If sudden loss of balance or coordination is already present, check the box and do not risk standing. Otherwise continue to the supported standing check.',
         balanceLabel: 'Sudden loss of balance or coordination', suddenLabel: 'This sign is new or sudden', onsetLabel: 'First-known abnormal time (optional)', cancel: 'Back to checks', submit: 'Continue',
         speechTitle:'S · Microphone speech check', speechText:'Move near the Raspberry Pi microphone, then repeat the sentence after recording starts. Audio and recognition stay local.', speechPromptLabel:'Repeat this sentence', speechPromptDefault:'The sky is blue and we are walking in the park', speechSuddenLabel:'The speech change is new or sudden', speechOnsetLabel:'First-known abnormal time (optional)', speechCancel:'Back to checks', speechStart:'Start recording', speechReady:'Ready to record', speechReadyText:'The system records about 7 seconds and analyzes it locally on the Raspberry Pi.', speechRecording:'Recording', speechRecordingText:'Repeat the full sentence and keep other speakers quiet.', speechAnalyzing:'Analyzing locally', speechAnalyzingText:'Checking audio quality, repeated content, speaking rate, and pauses.', speechCompleting:'Creating report', speechBackendMissing:'Local speech engine is not ready', speechTranscriptLabel:'Transcript',
-        resultTitle: 'Individual check report', again: 'Repeat this check', other:'Choose another check', finish: 'Finish and exit', reportAttempt:'{name} · report #{attempt}', historyAttempt:'{code} #{attempt}',
-        decisions: {standby:'Waiting to start', emergency:'New sudden sign detected — call emergency services', warning:'This check found a sign — confirm whether it was sudden', clear:'No obvious sign in this check', incomplete:'This check had insufficient data or was skipped'},
-        runtimeWaiting: 'Connecting camera', live: 'Video connected', previewOnly: 'Video connected; some models are unavailable', runtimeError: 'Camera or model unavailable', hostCamera: 'host', hostVideo: 'local video', clientCamera:'this device', cameraSecureRequired:'This address cannot open a phone camera. Use HTTPS, or use localhost on the machine running this service.', cameraPermissionDenied:'Unable to open this device camera. Check browser camera permission.', cameraSwitchIdle:'Switch cameras from standby or the check-selection screen.', statuses: {positive:'specific sign detected', negative:'no obvious sign', insufficient:'insufficient data quality', skipped:'skipped', checking:'checking', pending:'pending'},
+        resultTitle: 'Check result', again: 'Test again', other:'Other checks', finish: 'Done', reportAttempt:'{name} · attempt {attempt}', historyAttempt:'{code} #{attempt}',
+        decisions: {standby:'Waiting to start', emergency:'New sudden sign detected — call emergency services', warning:'Sign detected — confirm whether it was sudden', clear:'No obvious sign detected', incomplete:'Insufficient data or incomplete'},
+        runtimeWaiting: 'Connecting camera', live: 'Video connected', previewOnly: 'Video connected; some models are unavailable', runtimeError: 'Camera or model unavailable', hostCamera: 'host', hostVideo: 'local video', clientCamera:'this device', cameraSecureRequired:'This address cannot open a phone camera. Use HTTPS, or use localhost on the machine running this service.', cameraPermissionDenied:'Unable to open this device camera. Check browser camera permission.', statuses: {positive:'specific sign detected', negative:'no obvious sign', insufficient:'insufficient data quality', skipped:'skipped', checking:'checking', pending:'pending'},
         itemNames: {B:'Balance', E:'Eyes', F:'Face', A:'Arms', S:'Speech'}, sides: {left:'left', right:'right', unknown:'undetermined side'}, detailUnavailable: 'No interpretable detection detail is available yet.',
         resultReasons: {reported_balance_problem:'The person or caregiver reported sudden loss of balance or coordination.', personal_balance_baseline_calibrating:'The personal quiet-standing baseline is still being collected; no automatic normal result is issued before calibration.', personal_balance_baseline_variability_not_estimable:'Personal-baseline dispersion was zero, so an evidence-based change score could not be calculated; no automatic decision was made.', sustained_trunk_orientation_change:'Sustained trunk orientation changed substantially from the personal baseline.', increased_mediolateral_sway_velocity:'Mean side-to-side sway velocity increased substantially from the personal baseline.', no_sustained_change_from_personal_balance_baseline:'Trunk orientation and side-to-side sway matched the personal baseline in this window.', persistent_lateral_body_offset:'The body center remained displaced toward the {side} side relative to the foot-support center.', large_standing_sway:'Side-to-side standing sway exceeded the legacy engineering threshold.', no_clear_pose_based_balance_asymmetry:'The legacy check found no clear persistent lateral lean or excessive standing sway.', stable_standing_pose_not_visible_long_enough:'The full body, hips, or ankles were not continuously visible, so standing balance could not be assessed.', reduced_visual_target_response:'Both eyes showed insufficient horizontal movement while following the left/right screen targets.', asymmetric_eye_excursion:'The {side} eye had a clearly smaller horizontal movement range than the other eye.', asymmetric_conjugate_gaze:'The two eyes did not move together consistently while following the same target.', no_visible_eye_movement_abnormality:'No obvious reduction, left/right asymmetry, or binocular coordination problem was observed in horizontal eye movement.', face_or_irises_not_visible_long_enough:'The face or irises were not continuously visible, so eye movement could not be assessed.', head_moved_during_eye_test:'Head movement was too large to separate eye movement from head turning.', asymmetric_mouth_corner_movement:'The {side} mouth corner moved less than the other side during the smile.', asymmetric_smile_activation:'MediaPipe expression features showed weaker smile activation on the {side} side.', no_clear_smile_asymmetry:'The neutral-to-smile comparison showed no obvious left/right asymmetry.', face_not_visible_during_neutral_and_smile:'The face was not continuously visible during both neutral and smile phases.', smile_expression_not_detected:'No sufficiently clear smile was detected, so facial symmetry could not be assessed.', persistent_arm_height_asymmetry:'The {side} arm remained lower than the other arm during the hold.', asymmetric_arm_drift:'The {side} arm dropped more during the hold.', no_clear_arm_asymmetry:'No obvious persistent height difference or one-sided arm drift was observed.', arms_not_visible_long_enough:'Both shoulders or wrists were not continuously visible, so arm symmetry could not be assessed.', both_arms_were_not_held_up:'A sustained bilateral forward arm raise was not detected.', reported_speech_problem:'Manual observation found slurred speech, repetition errors, or difficulty understanding speech.', not_reported:'Manual observation did not report an obvious speech problem.', not_checked:'Manual observation has not been completed.', not_fully_checked:'Automated capture and manual confirmation are not both complete.', user_skipped:'The user skipped this check, so it produced no screening conclusion.', checking:'The current action is being captured and analyzed.', not_run:'This item has not been checked.'},
         reasons: {show_face_and_eyes:'Move closer and keep both eyes visible', face_and_eyes_ready:'Face and eyes recognized', show_full_face:'Keep your full face inside the frame', neutral_face_ready:'Neutral expression recognized', relax_face_first:'Relax your face and do not smile yet', smile_now:'Smile naturally now', smile_detected:'Smile recognized', show_shoulders_and_wrists:'Keep both shoulders and wrists visible', raise_both_arms:'Raise both arms forward', arms_detected_hold_still:'Arm action recognized — keep holding', show_full_body_and_stand_safely:'Show your full body and ankles, then stand only with supervision', standing_pose_ready:'Standing pose recognized — hold still', collecting_action:'Starting capture', face_or_irises_not_visible_long_enough:'Eyes were not continuously visible — adjust and retry', head_moved_during_eye_test:'Too much head movement — keep your head still', face_not_visible_during_neutral_and_smile:'Face was not continuously visible — adjust and retry', smile_expression_not_detected:'No smile was detected — try again', arms_not_visible_long_enough:'Shoulders or wrists were not continuously visible — retry', both_arms_were_not_held_up:'The arm-raise action was not detected — retry', stable_standing_pose_not_visible_long_enough:'Full body or ankles were not continuously visible — retry'}
@@ -560,6 +608,34 @@
       eye_response_not_repeatable:'The three trials lacked two consistent responses — follow the target and retry',
       visual_target_following_not_demonstrated:'Target following was not confirmed in either direction — review the instruction and retry'
     });
+    Object.assign(text.zh.resultReasons, {
+      arm_start_pose_not_observed:'没有确认双臂从自然下垂姿势开始，本次动作不参与计算。',
+      both_arms_were_not_raised:'没有完整识别到双臂抬至肩高，本次动作不参与计算。',
+      both_arms_were_not_lowered:'保持结束后没有完整识别到双臂放下，本次动作不参与计算。',
+      arm_action_not_completed:'抬起、保持、放下的完整动作未通过，本次不产生异常结论。'
+    });
+    Object.assign(text.zh.reasons, {
+      show_shoulders_elbows_wrists:'请退后一些，让双肩、双肘和双腕完整入镜',
+      arm_camera_ready:'上肢关键点已识别，可以观看示范并开始',
+      arm_start_pose_not_observed:'请先让双臂自然垂在身体两侧',
+      both_arms_were_not_raised:'请将双臂完整抬到肩膀高度',
+      both_arms_were_not_held_up:'请保持双臂展开，直到五秒结束',
+      both_arms_were_not_lowered:'保持结束后请自然放下双臂'
+    });
+    Object.assign(text.en.resultReasons, {
+      arm_start_pose_not_observed:'Both arms were not confirmed at rest before the raise, so this attempt was not analyzed.',
+      both_arms_were_not_raised:'The complete bilateral raise was not recognized, so this attempt was not analyzed.',
+      both_arms_were_not_lowered:'Both arms were not lowered after the hold, so the full action was not completed.',
+      arm_action_not_completed:'The raise, hold, and lower sequence did not pass completion checks.'
+    });
+    Object.assign(text.en.reasons, {
+      show_shoulders_elbows_wrists:'Move back and keep both shoulders, elbows, and wrists visible',
+      arm_camera_ready:'Upper-body joints recognized — watch the demo and begin when ready',
+      arm_start_pose_not_observed:'Start with both arms resting naturally at your sides',
+      both_arms_were_not_raised:'Raise both arms fully to shoulder height',
+      both_arms_were_not_held_up:'Keep both arms extended until the five-second hold ends',
+      both_arms_were_not_lowered:'Lower both arms naturally after the hold'
+    });
 
     const speechReasonText = {
       zh: {
@@ -592,10 +668,84 @@
       }
     };
 
+    const factorText = {
+      zh: {
+        kicker:'检测数据', title:'采集与判定', waiting:'等待项目', collecting:'采集中', normal:'未触发', alert:'需关注', warning:'需确认', pending:'等待数据',
+        summaryEmpty:'', summaryLive:'', summaryReport:'',
+        factors:'关键指标', raw:'采集数据', noData:'等待数据', valid:'有效样本', captured:'采集样本', progress:'检测进度', phase:'当前阶段', baseline:'个人基线', trial:'当前试次', threshold:'阈值', atLeast:'至少', atMost:'不超过', outside:'范围',
+        names:{
+          valid_fraction:'有效数据比例', minimum_trial_valid_fraction:'最低试次有效比例', max_head_rotation_degrees:'头部转动范围', max_trial_gaze_mad:'眼动定位稳定性', minimum_response_snr:'目标响应信噪比', binocular_directional_asymmetry:'双眼方向响应不对称', max_conjugacy_error:'双眼协同性误差', conjugate_rest_gaze_deviation_degrees:'静息共轭凝视偏向',
+          smile_strength:'微笑动作强度', mouth_corner_delta:'嘴角运动差', smile_score_difference:'左右微笑激活差',
+          action_completion_score:'动作完整度', hold_duration_seconds:'有效保持时长', level_difference:'双臂高度差', drift_difference:'双臂下落差', initial_wrist_height:'初始抬臂高度', shadow_action_invalid_probability_max:'动作质量模型异常概率（影子）',
+          trunk_orientation_change_score:'躯干方向变化分数', mediolateral_sway_change_score:'横向摆动变化分数', trunk_roll_degrees:'实时躯干倾角', trunk_support_offset:'实时支撑偏移',
+          character_error_rate:'复述字符错误率', pause_fraction:'停顿比例', characters_per_second:'说话速度', rms_dbfs:'录音响度', clip_fraction:'削波比例', voiced_seconds:'有效语音时长'
+        }
+      },
+      en: {
+        kicker:'Live decision', title:'Factors & collected data', waiting:'Waiting', collecting:'Collecting', normal:'Not triggered', alert:'Affects result', warning:'Needs attention', pending:'No data',
+        summaryEmpty:'', summaryLive:'', summaryReport:'',
+        factors:'Decision factors', raw:'Collected data', noData:'This stage has not produced displayable data yet.', valid:'Valid samples', captured:'Captured samples', progress:'Progress', phase:'Stage', baseline:'Personal baseline', trial:'Trial', threshold:'threshold', atLeast:'at least', atMost:'at most', outside:'range',
+        names:{
+          valid_fraction:'Valid data fraction', minimum_trial_valid_fraction:'Minimum trial validity', max_head_rotation_degrees:'Head rotation range', max_trial_gaze_mad:'Eye landmark stability', minimum_response_snr:'Target-response SNR', binocular_directional_asymmetry:'Directional response asymmetry', max_conjugacy_error:'Binocular conjugacy error', conjugate_rest_gaze_deviation_degrees:'Resting conjugate deviation',
+          smile_strength:'Smile strength', mouth_corner_delta:'Mouth-corner movement gap', smile_score_difference:'Smile activation gap',
+          action_completion_score:'Action completion', hold_duration_seconds:'Valid hold duration', level_difference:'Arm height difference', drift_difference:'Arm drift difference', initial_wrist_height:'Initial arm height', shadow_action_invalid_probability_max:'Action-quality invalid probability (shadow)',
+          trunk_orientation_change_score:'Trunk orientation change score', mediolateral_sway_change_score:'Lateral sway change score', trunk_roll_degrees:'Live trunk angle', trunk_support_offset:'Live support offset',
+          character_error_rate:'Repetition error rate', pause_fraction:'Pause fraction', characters_per_second:'Speaking rate', rms_dbfs:'Recording level', clip_fraction:'Clipping fraction', voiced_seconds:'Voiced duration'
+        }
+      }
+    };
+
+    const factorDefinitions = {
+      E: [
+        {key:'minimum_trial_valid_fraction', live:'valid_fraction', threshold:'eye_min_valid_fraction_per_trial', mode:'min', format:'percent'},
+        {key:'max_head_rotation_degrees', live:'head_yaw_degrees', threshold:'eye_max_head_rotation_degrees', mode:'maxAbs', unit:'°'},
+        {key:'max_trial_gaze_mad', threshold:'eye_max_gaze_mad', mode:'max'},
+        {key:'minimum_response_snr', threshold:'eye_response_snr_threshold', mode:'min'},
+        {key:'binocular_directional_asymmetry', threshold:'eye_directional_asymmetry_threshold', mode:'max'},
+        {key:'max_conjugacy_error', threshold:'eye_conjugacy_relative_error_threshold', mode:'max'},
+        {key:'conjugate_rest_gaze_deviation_degrees', threshold:'eye_rest_gaze_deviation_degrees_threshold', mode:'max', unit:'°'}
+      ],
+      F: [
+        {key:'valid_fraction', threshold:'face_min_valid_fraction', mode:'min', format:'percent'},
+        {key:'smile_strength', derive:m => Math.max(Number(m.left_smile_score ?? m.left_smile), Number(m.right_smile_score ?? m.right_smile)), threshold:'face_min_smile_score', mode:'min'},
+        {key:'mouth_corner_delta', threshold:'face_corner_delta_threshold', mode:'maxAbs'},
+        {key:'smile_score_difference', derive:m => m.smile_score_difference ?? (Number(m.right_smile) - Number(m.left_smile)), threshold:'face_smile_score_difference_threshold', mode:'maxAbs'}
+      ],
+      A: [
+        {key:'valid_fraction', threshold:'arm_min_valid_fraction', mode:'min', format:'percent'},
+        {key:'action_completion_score', mode:'observe', format:'percent'},
+        {key:'level_difference', threshold:'arm_level_difference_threshold', mode:'maxAbs'},
+        {key:'drift_difference', threshold:'arm_drift_difference_threshold', mode:'maxAbs'},
+        {key:'shadow_action_invalid_probability_max', mode:'observe', format:'percent'},
+        {key:'shadow_lean_forward_probability_median', mode:'observe', format:'percent'},
+        {key:'shadow_shoulder_elevation_probability_median', mode:'observe', format:'percent'},
+        {key:'shadow_trunk_rotation_probability_median', mode:'observe', format:'percent'},
+        {key:'shadow_feature_rms_z_median', mode:'observe'}
+      ],
+      B: [
+        {key:'valid_fraction', threshold:'balance_min_valid_fraction', mode:'min', format:'percent'},
+        {key:'trunk_orientation_change_score', threshold:'balance_robust_z_threshold', mode:'max'},
+        {key:'mediolateral_sway_change_score', threshold:'balance_robust_z_threshold', mode:'max'},
+        {key:'trunk_roll_degrees', live:'trunk_roll_degrees', mode:'observe', unit:'°'},
+        {key:'trunk_support_offset', live:'trunk_support_offset', mode:'observe'}
+      ],
+      S: [
+        {key:'character_error_rate', valueThreshold:.35, mode:'max', format:'percent'},
+        {key:'pause_fraction', valueThreshold:.55, mode:'max', format:'percent'},
+        {key:'characters_per_second', range:[1,8], mode:'range', unit:'/s'},
+        {key:'rms_dbfs', valueThreshold:-42, mode:'min', unit:' dBFS'},
+        {key:'clip_fraction', valueThreshold:.02, mode:'max', format:'percent'},
+        {key:'voiced_seconds', valueThreshold:1, mode:'min', unit:'s'}
+      ]
+    };
+
     let language = localStorage.getItem('pibe-fast-language') || 'zh';
     let latest = {runtime:{}, befast:{mode:'standby',stage:'idle',guidance:{}}, monitoring:{}};
     let readyTicks = 0;
     let transitionBusy = false;
+    let stageCountdownActive = false;
+    let stageCountdownRun = 0;
+    let cameraSwitchBusy = false;
     let balanceSafetyConfirmed = false;
     let clientStream = null;
     let clientUploadTimer = null;
@@ -616,6 +766,39 @@
     const nextStageMap = {retry_eyes:'eyes', ready_face:'face', retry_face:'face', ready_arms:'arms', retry_arms:'arms', ready_balance:'balance', retry_balance:'balance'};
     const activeStages = new Set(['eyes','face','arms','balance']);
     const lockedStages = new Set([...activeStages, 'speech_recording']);
+
+    function setStageCountdown(value) {
+      const overlay = document.getElementById('stageCountdown');
+      const number = document.getElementById('stageCountdownValue');
+      const next = String(value);
+      overlay.hidden = false;
+      if (overlay.dataset.value === next) return;
+      overlay.dataset.value = next;
+      number.textContent = next;
+      number.style.animation = 'none';
+      void number.offsetWidth;
+      number.style.animation = '';
+    }
+
+    function hideStageCountdown() {
+      const overlay = document.getElementById('stageCountdown');
+      overlay.hidden = true;
+      delete overlay.dataset.value;
+    }
+
+    async function playStageCountdown() {
+      const run = ++stageCountdownRun;
+      stageCountdownActive = true;
+      for (const value of [3, 2, 1]) {
+        if (run !== stageCountdownRun) return false;
+        setStageCountdown(value);
+        await new Promise(resolve => window.setTimeout(resolve, 1000));
+      }
+      if (run !== stageCountdownRun) return false;
+      stageCountdownActive = false;
+      hideStageCountdown();
+      return true;
+    }
 
     async function postJson(url, body = {}) {
       const response = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
@@ -674,13 +857,8 @@
     async function switchCameraSource(source) {
       const select = document.getElementById('cameraSourceSelect');
       const t = text[language];
-      const screen = latest.befast || {};
-      const cameraSwitchAllowed = screen.mode !== 'screening' || screen.stage === 'idle';
-      if (!cameraSwitchAllowed) {
-        select.value = (latest.runtime || {}).camera_mode || 'host';
-        showCameraError(t.cameraSwitchIdle);
-        return;
-      }
+      if (cameraSwitchBusy) return;
+      cameraSwitchBusy = true;
       select.disabled = true;
       cameraErrorMessage = '';
       try {
@@ -710,6 +888,7 @@
         await postJson('/api/camera/source', {source:'host'}).catch(() => {});
         showCameraError(error.name === 'NotAllowedError' ? t.cameraPermissionDenied : error.message);
       } finally {
+        cameraSwitchBusy = false;
         select.disabled = false;
       }
     }
@@ -729,9 +908,9 @@
       const t = text[language];
       document.title = t.title;
       for (const [id, value] of Object.entries({
-        brandTitle:t.title, brandSub:t.sub, emergencyText:t.emergency,
+        brandTitle:t.brandName, emergencyText:t.emergency,
         cameraLabel:t.cameraLabel, hostCameraOption:t.hostOption, clientCameraOption:t.clientOption,
-        persistentHistoryButton:t.historyEntry, startTitle:t.title, startText:t.startText, startButton:t.start,
+        persistentHistoryButton:t.historyEntry, standbyHintText:t.standbyHint,
         passiveSpeechTitle:t.passiveMonitorTitle, passiveBaselineButton:t.passiveReset,
         passiveConfirmButton:t.passiveConfirm, passiveBaselineLabel:t.passiveBaseline,
         passiveLevelLabel:t.passiveLevel, passiveVoicedLabel:t.passiveVoiced,
@@ -755,7 +934,7 @@
         componentSTitle:t.componentNames.S, componentBText:t.componentDescriptions.B,
         componentEText:t.componentDescriptions.E, componentFText:t.componentDescriptions.F,
         componentAText:t.componentDescriptions.A, componentSText:t.componentDescriptions.S,
-        historyTitle:t.historyTitle, menuFinishButton:t.menuFinish,
+        historyTitle:t.historyTitle,
         persistentHistoryTitle:t.persistentHistoryTitle, persistentHistoryText:t.persistentHistoryText,
         historyComponentLabel:t.historyComponentLabel, historySideLabel:t.historySideLabel,
         historySuddenLabel:t.historySuddenLabel, historyComponentAll:t.historyAll,
@@ -774,7 +953,8 @@
         speechStartButton:t.speechStart, resultTitle:t.resultTitle, againButton:t.again,
         otherButton:t.other, finishButton:t.finish
       })) {
-        document.getElementById(id).textContent = value;
+        const target = document.getElementById(id);
+        if (target) target.textContent = value;
       }
       document.getElementById('liveVideo').alt = t.cameraAlt;
       document.getElementById('languageSwitch').setAttribute('aria-label', t.languageLabel);
@@ -1062,10 +1242,6 @@
 
     async function startComponent(code) {
       if (transitionBusy) return;
-      if (code === 'S') {
-        openSpeechModeMenu();
-        return;
-      }
       transitionBusy = true;
       readyTicks = 0;
       balanceSafetyConfirmed = false;
@@ -1075,6 +1251,18 @@
       passiveSpeechOpen = false;
       speechCompletionError = '';
       try {
+        if ((latest.befast || {}).mode !== 'screening') {
+          const started = await postJson('/api/monitoring/trigger', {
+            source:'user',
+            reason:'component_selected'
+          });
+          latest = {...latest, befast:started.befast};
+        }
+        if (code === 'S') {
+          speechModeMenuOpen = true;
+          render(latest);
+          return;
+        }
         if ((latest.speech || {}).state && (latest.speech || {}).state !== 'idle') {
           await postJson('/api/speech/cancel');
         }
@@ -1296,6 +1484,177 @@
       document.getElementById('speech_onset_time').disabled = recording;
     }
 
+    function factorNumber(value) {
+      if (value === null || value === undefined || value === '') return null;
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+
+    function factorValue(definition, metrics) {
+      const source = definition.derive
+        ? definition.derive(metrics)
+        : metrics[definition.key] ?? metrics[definition.live];
+      return factorNumber(source);
+    }
+
+    function formatFactorValue(value, definition) {
+      if (value === null) return '—';
+      if (definition.format === 'percent') return `${(value * 100).toFixed(1)}%`;
+      const magnitude = Math.abs(value);
+      const digits = magnitude >= 100 ? 0 : (magnitude >= 10 ? 1 : 3);
+      return `${value.toFixed(digits)}${definition.unit || ''}`;
+    }
+
+    function factorState(value, definition, threshold) {
+      if (value === null) return 'missing';
+      if (definition.mode === 'observe') return 'normal';
+      if (definition.mode === 'range') {
+        const [low, high] = definition.range;
+        if (value < low || value > high) return 'alert';
+        return value < low * 1.15 || value > high * .85 ? 'warning' : 'normal';
+      }
+      if (!Number.isFinite(threshold)) return 'missing';
+      const tested = definition.mode === 'maxAbs' ? Math.abs(value) : value;
+      if (definition.mode === 'min') {
+        if (tested < threshold) return 'alert';
+        return tested < threshold + Math.max(Math.abs(threshold) * .15, .01) ? 'warning' : 'normal';
+      }
+      if (tested >= threshold) return 'alert';
+      return tested >= threshold * .75 ? 'warning' : 'normal';
+    }
+
+    function factorRule(definition, threshold, t) {
+      if (definition.mode === 'observe') return language === 'zh' ? '仅展示实时值' : 'live value only';
+      if (definition.mode === 'range') return `${t.outside} ${definition.range[0]}–${definition.range[1]}${definition.unit || ''}`;
+      if (!Number.isFinite(threshold)) return '';
+      const label = definition.mode === 'min' ? t.atLeast : t.atMost;
+      return `${label} ${formatFactorValue(threshold, definition)} · ${t.threshold}`;
+    }
+
+    function appendCollectionStat(target, label, value) {
+      const item = document.createElement('div');
+      item.className = 'collection-stat';
+      const name = document.createElement('span');
+      const data = document.createElement('strong');
+      name.textContent = label;
+      data.textContent = value;
+      item.append(name, data);
+      target.appendChild(item);
+    }
+
+    function rawMetricName(key, t) {
+      return t.names[key] || key.replaceAll('_', ' ');
+    }
+
+    function renderFactorPanel(befast, status, report, code) {
+      const t = factorText[language];
+      const collection = befast.live_collection || {};
+      const finalMetrics = report?.item?.metrics || {};
+      const liveMetrics = {
+        ...((befast.guidance || {}).metrics || {}),
+        ...(collection.metrics || {})
+      };
+      const metrics = report ? finalMetrics : liveMetrics;
+      if (!report && Number(collection.captured_samples || 0) > 0) {
+        metrics.valid_fraction = Number(collection.valid_fraction || 0);
+      }
+      const thresholds = befast.factor_thresholds || {};
+      document.getElementById('factorKicker').textContent = t.kicker;
+      document.getElementById('factorTitle').textContent = code
+        ? `${code} · ${text[language].itemNames[code]}` : t.title;
+      document.getElementById('factorSectionTitle').textContent = t.factors;
+      document.getElementById('rawDataSectionTitle').textContent = t.raw;
+
+      const verdict = document.getElementById('factorVerdict');
+      let verdictState = 'pending';
+      let verdictText = t.waiting;
+      if (report) {
+        const reportStatus = report.item?.status;
+        verdictState = reportStatus === 'positive' ? 'alert' : (reportStatus === 'negative' ? 'normal' : 'warning');
+        verdictText = reportStatus === 'positive' ? t.alert : (reportStatus === 'negative' ? t.normal : t.warning);
+      } else if (code) {
+        verdictText = activeStages.has(befast.stage) || befast.stage === 'speech_recording' ? t.collecting : t.pending;
+      }
+      verdict.className = `factor-verdict ${verdictState}`;
+      verdict.textContent = verdictText;
+      document.getElementById('factorSummary').textContent = !code
+        ? t.summaryEmpty : (report ? t.summaryReport : t.summaryLive);
+
+      const strip = document.getElementById('collectionStrip');
+      strip.replaceChildren();
+      if (code) {
+        const valid = Number(collection.valid_samples || 0);
+        const captured = Number(collection.captured_samples || 0);
+        const reportValid = finalMetrics.total_valid_samples
+          ?? finalMetrics.valid_samples
+          ?? (factorNumber(finalMetrics.neutral_samples) !== null && factorNumber(finalMetrics.smile_samples) !== null
+            ? Number(finalMetrics.neutral_samples) + Number(finalMetrics.smile_samples) : '—');
+        appendCollectionStat(strip, t.valid, report ? String(reportValid) : String(valid));
+        appendCollectionStat(strip, t.captured, report ? '—' : String(captured));
+        appendCollectionStat(strip, t.progress, `${Math.round(Number(befast.progress || 0) * 100)}%`);
+        if (code === 'E' && befast.eye_trial) appendCollectionStat(strip, t.trial, `${befast.eye_trial}/${befast.eye_trial_total}`);
+        else if (code === 'F') appendCollectionStat(strip, t.phase, befast.face_phase || '—');
+        else if (code === 'B') appendCollectionStat(strip, t.baseline, `${collection.baseline_windows ?? '—'} / ${collection.baseline_target ?? '—'}`);
+        else appendCollectionStat(strip, t.phase, befast.stage || '—');
+      }
+
+      const list = document.getElementById('factorList');
+      list.replaceChildren();
+      const definitions = factorDefinitions[code] || [];
+      if (!definitions.length) {
+        const empty = document.createElement('div');
+        empty.className = 'factor-empty';
+        empty.textContent = t.noData;
+        list.appendChild(empty);
+      } else {
+        for (const definition of definitions) {
+          const activeDefinition = code === 'F' && definition.key === 'smile_strength'
+            && !report && befast.face_phase !== 'smile'
+            ? {...definition, mode:'max'} : definition;
+          const value = factorValue(activeDefinition, metrics);
+          const threshold = activeDefinition.valueThreshold ?? factorNumber(thresholds[activeDefinition.threshold]);
+          const state = factorState(value, activeDefinition, threshold);
+          const row = document.createElement('div');
+          row.className = `factor-row ${state}`;
+          const head = document.createElement('div');
+          head.className = 'factor-row-head';
+          const name = document.createElement('span');
+          name.className = 'factor-row-name';
+          name.textContent = rawMetricName(definition.key, t);
+          const data = document.createElement('span');
+          data.className = 'factor-row-value';
+          data.textContent = formatFactorValue(value, activeDefinition);
+          const rule = document.createElement('small');
+          rule.className = 'factor-row-rule';
+          rule.textContent = factorRule(activeDefinition, threshold, t);
+          head.append(name, data);
+          row.append(head);
+          list.appendChild(row);
+        }
+      }
+
+      const raw = document.getElementById('rawDataList');
+      raw.replaceChildren();
+      const rawEntries = Object.entries(metrics).filter(([, value]) => factorNumber(value) !== null);
+      if (!rawEntries.length) {
+        const empty = document.createElement('div');
+        empty.className = 'factor-empty';
+        empty.textContent = t.noData;
+        raw.appendChild(empty);
+      } else {
+        for (const [key, value] of rawEntries) {
+          const row = document.createElement('div');
+          row.className = 'raw-data-row';
+          const name = document.createElement('span');
+          const data = document.createElement('span');
+          name.textContent = rawMetricName(key, t);
+          data.textContent = Number(value).toFixed(Math.abs(Number(value)) >= 100 ? 1 : 4);
+          row.append(name, data);
+          raw.appendChild(row);
+        }
+      }
+    }
+
     function stageCopy(befast) {
       const t = text[language];
       const stage = befast.stage || 'idle';
@@ -1316,7 +1675,39 @@
         ];
       }
       if (stage === 'face') return befast.face_phase === 'smile' ? t.face_smile : t.face_neutral;
-      if (stage === 'arms') return t.arms;
+      if (stage === 'arms') {
+        const armCopy = t[`arms_${befast.arm_phase || ''}`] || t.arms;
+        const state = befast.arm_phase_state || 'preview';
+        const remaining = Number(befast.arm_phase_remaining);
+        const step = t.armStep
+          .replace('{current}', Number(befast.arm_phase_index || 1))
+          .replace('{total}', Number(befast.arm_phase_total || 4));
+        if (state === 'preview') {
+          const autoHint = befast.arm_auto_ready_active
+            ? t.armAutoReady.replace(
+                '{seconds}',
+                Math.max(0.1, Number(befast.arm_auto_ready_remaining || 0)).toFixed(1)
+              )
+            : t.armPreviewHint;
+          return [armCopy[0], `${armCopy[1]} · ${autoHint}`];
+        }
+        if (state === 'retry') {
+          const reason = t.armFailureReasons[befast.arm_phase_failure_reason] || '';
+          const retryHint = befast.arm_auto_ready_active
+            ? t.armAutoReady.replace(
+                '{seconds}',
+                Math.max(0.1, Number(befast.arm_auto_ready_remaining || 0)).toFixed(1)
+              )
+            : t.armRetryHint;
+          return [armCopy[0], [reason, retryHint].filter(Boolean).join(' ')];
+        }
+        if (state === 'countdown') {
+          return [armCopy[0], `${step} · ${t.armCountdown} ${Math.max(1, Math.ceil(remaining || 0))}`];
+        }
+        const countdown = Number.isFinite(remaining)
+          ? `${remaining.toFixed(1)} ${t.armSeconds}` : '';
+        return [armCopy[0], [armCopy[1], step, countdown].filter(Boolean).join(' · ')];
+      }
       if (stage === 'balance') return t.balance;
       if (stage === 'review') return t.review;
       if (stage === 'ready_face' || stage === 'retry_face') return t.ready_face;
@@ -1344,6 +1735,9 @@
       transitionBusy = true;
       readyTicks = 0;
       try {
+        // A starts only after its hands-free arms-down gate; its own server-side
+        // countdown is rendered in the same central overlay below.
+        if (target !== 'arms' && !await playStageCountdown()) return;
         await postJson('/api/befast/stage', {stage:target});
         await refresh();
       } catch (error) {
@@ -1377,21 +1771,45 @@
       if (readyTicks >= 2) advanceCurrentStage();
     }
 
+    const conciseNegativeReasons = {
+      zh: {
+        no_sustained_change_from_personal_balance_baseline:'躯干方向及横向摆动与个人基线一致。',
+        no_clear_pose_based_balance_asymmetry:'站立期间未观察到持续侧偏或过大摆动。',
+        no_visible_eye_movement_abnormality:'双眼水平移动范围接近，跟随基本同步。',
+        no_clear_smile_asymmetry:'微笑时两侧嘴角运动接近。',
+        no_clear_arm_asymmetry:'双臂高度接近，保持期间未观察到单侧下落。',
+        not_reported:'人工观察中言语清晰。',
+        no_clear_speech_abnormality:'复述内容、语速和停顿保持稳定。'
+      },
+      en: {
+        no_sustained_change_from_personal_balance_baseline:'Trunk orientation and lateral sway matched the personal baseline.',
+        no_clear_pose_based_balance_asymmetry:'No sustained lateral lean or excessive sway was observed.',
+        no_visible_eye_movement_abnormality:'Horizontal eye ranges were similar and tracking was coordinated.',
+        no_clear_smile_asymmetry:'Both mouth corners moved similarly during the smile.',
+        no_clear_arm_asymmetry:'Arm heights were similar with no one-sided drift during the hold.',
+        not_reported:'Speech was clear during manual observation.',
+        no_clear_speech_abnormality:'Repetition, speaking rate, and pauses remained stable.'
+      }
+    };
+
     function resultDetail(item, t) {
       const side = t.sides[item.affected_side] || t.sides.unknown;
-      const template = speechReasonText[language][item.reason] || t.resultReasons[item.reason] || t.detailUnavailable;
+      const concise = item.status === 'negative'
+        ? conciseNegativeReasons[language][item.reason]
+        : null;
+      const template = concise || speechReasonText[language][item.reason]
+        || t.resultReasons[item.reason] || t.detailUnavailable;
       return template.replaceAll('{side}', side);
     }
 
     function renderHistory(befast, t) {
       const history = document.getElementById('reportHistory');
+      const historyTitle = document.getElementById('historyTitle');
       history.replaceChildren();
       const reports = befast.reports || [];
+      history.hidden = !reports.length;
+      historyTitle.hidden = !reports.length;
       if (!reports.length) {
-        const empty = document.createElement('span');
-        empty.className = 'history-empty';
-        empty.textContent = t.historyEmpty;
-        history.appendChild(empty);
         return;
       }
       for (const report of [...reports].reverse()) {
@@ -1564,17 +1982,11 @@
         .replace('{name}', `${itemCode} · ${t.itemNames[itemCode]}`)
         .replace('{attempt}', report.attempt);
       const node = document.createElement('div');
-      node.className = `result ${item.status}`;
-      const mark = item.status === 'positive' ? '+' : item.status === 'negative' ? '−' : item.status === 'skipped' ? '↷' : '?';
-      const codeNode = document.createElement('strong');
-      codeNode.textContent = `${itemCode} ${mark}`;
-      const statusNode = document.createElement('span');
-      statusNode.className = 'result-status';
-      statusNode.textContent = `${t.itemNames[itemCode]} · ${t.statuses[item.status] || item.status}`;
+      node.className = `result concise ${item.status}`;
       const detailNode = document.createElement('span');
       detailNode.className = 'result-detail';
       detailNode.textContent = resultDetail(item, t);
-      node.append(codeNode, statusNode, detailNode);
+      node.appendChild(detailNode);
       if (item.details?.transcript) {
         const transcript = document.createElement('span');
         transcript.className = 'speech-transcript';
@@ -1595,11 +2007,15 @@
       const manual = manualBalance || manualEyes;
       const speech = ['speech_ready','speech_recording'].includes(befast.stage);
       const report = selectedReport || befast.current_report;
-      const menu = !standby && befast.stage === 'idle' && !report;
+      const menu = befast.stage === 'idle' && !report;
       const speechChooser = speechModeMenuOpen;
       const passiveMonitorView = passiveSpeechOpen;
-      document.getElementById('startOverlay').hidden = !standby
-        || persistentHistoryOpen || speechChooser || passiveMonitorView;
+      const showSteps = !standby;
+      document.getElementById('standbyHint').hidden = true;
+      const stepsSlot = document.getElementById('reactSteps');
+      stepsSlot.setAttribute('aria-hidden', String(!showSteps));
+      stepsSlot.inert = !showSteps;
+      document.getElementById('workspace').classList.toggle('steps-hidden', !showSteps);
       document.getElementById('componentSheet').hidden = !menu
         || persistentHistoryOpen || speechChooser || passiveMonitorView;
       document.getElementById('speechModeSheet').hidden = !speechChooser
@@ -1647,10 +2063,9 @@
       document.getElementById('runtimeText').textContent = cameraErrorMessage || `${runtimeMessage} · ${captureMessage}`;
       const cameraSelect = document.getElementById('cameraSourceSelect');
       document.getElementById('hostCameraOption').textContent = runtime.auto_camera_switch ? t.autoHostOption : t.hostOption;
-      cameraSelect.value = runtime.camera_mode || 'host';
-      const cameraSwitchAllowed = standby || befast.stage === 'idle';
-      cameraSelect.disabled = !cameraSwitchAllowed || transitionBusy;
-      cameraSelect.title = cameraSwitchAllowed ? '' : t.cameraSwitchIdle;
+      if (!cameraSwitchBusy) cameraSelect.value = runtime.camera_mode || 'host';
+      cameraSelect.disabled = cameraSwitchBusy;
+      cameraSelect.title = '';
       const historyButton = document.getElementById('persistentHistoryButton');
       historyButton.disabled = transitionBusy || lockedStages.has(befast.stage);
       const localClientVisible = clientCaptureActive && runtime.camera_mode === 'client';
@@ -1659,13 +2074,22 @@
       const guidance = befast.guidance || {};
       const copy = stageCopy(befast);
       const ready = Boolean(guidance.ready);
+      const armState = befast.stage === 'arms' ? (befast.arm_phase_state || 'preview') : null;
       const signal = document.getElementById('actionSignal');
-      signal.className = `signal ${ready ? 'correct' : 'adjust'}`;
-      document.getElementById('signalIcon').textContent = ready ? '✓' : '!';
+      const armWaiting = ['preview', 'countdown'].includes(armState);
+      signal.className = `signal ${armWaiting ? 'neutral' : (ready ? 'correct' : 'adjust')}`;
+      document.getElementById('signalIcon').textContent = armWaiting ? '→' : (ready ? '✓' : '!');
       document.getElementById('guideTitle').textContent = copy[0];
-      document.getElementById('guideText').textContent = befast.stage === 'eyes'
+      document.getElementById('guideText').textContent = ['eyes', 'arms'].includes(befast.stage)
         ? copy[1]
         : (t.reasons[guidance.reason] || copy[1]);
+      const armActive = befast.stage === 'arms';
+      const armCountingDown = armActive && armState === 'countdown';
+      if (armCountingDown) {
+        setStageCountdown(Math.max(1, Math.ceil(Number(befast.arm_phase_remaining || 0))));
+      } else if (!stageCountdownActive) {
+        hideStageCountdown();
+      }
       document.getElementById('progressBar').style.width = `${Math.round(Number(befast.progress || 0) * 100)}%`;
 
       const eyeTarget = document.getElementById('eyeTarget');
@@ -1685,7 +2109,9 @@
 
       const code = report
         ? report.component
-        : (befast.active_component || (menu ? null : activeCode(befast.stage)));
+        : (befast.active_component || (standby || menu ? null : activeCode(befast.stage)));
+      renderFactorPanel(befast, status, report, code);
+      document.getElementById('steps').classList.toggle('awaiting', standby);
       for (const step of document.querySelectorAll('.step')) {
         const item = (befast.items || {})[step.dataset.code] || {};
         const skipped = item.status === 'skipped';
@@ -1741,10 +2167,17 @@
       } catch (error) { showError(error); }
     }
 
-    renderStatic();
-    setLanguage(language);
-    setInterval(refresh, 500);
-    refresh();
+    Object.assign(window, {
+      switchCameraSource, openPersistentHistory, setLanguage, startScreening,
+      startComponent
+    });
+    window.addEventListener('pibe-react-ready', () => {
+      renderStatic();
+      setLanguage(language);
+      setInterval(refresh, 500);
+      refresh();
+    }, {once:true});
   </script>
+  <script type="module" src="{{ url_for('static', filename='react/app.js') }}"></script>
 </body>
 </html>
