@@ -432,30 +432,32 @@ def create_app(
     def api_camera_source() -> Response:
         payload = request.get_json(silent=True) or {}
         requested_source = str(payload.get("source", ""))
-        if befast_session is not None:
-            screen = befast_session.snapshot()
-            _, current_status = state.snapshot()
-            current_source = current_status.get("runtime", {}).get(
-                "camera_mode", "host"
-            )
-            camera_switch_locked = (
-                screen.get("mode") == "screening"
-                and screen.get("stage") != "idle"
-            )
-            if camera_switch_locked and requested_source != current_source:
-                return jsonify(
-                    {
-                        "error": (
-                            "camera source can only change from standby "
-                            "or the component menu"
-                        )
-                    }
-                ), 409
+        screen = befast_session.snapshot() if befast_session is not None else {}
+        _, current_status = state.snapshot()
+        current_source = current_status.get("runtime", {}).get(
+            "camera_mode", "host"
+        )
         try:
             runtime = state.set_camera_mode(requested_source)
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
-        return jsonify({"runtime": runtime})
+        stage = str(screen.get("stage", ""))
+        stage_restarted = bool(
+            befast_session is not None
+            and requested_source != current_source
+            and stage in {"eyes", "face", "arms", "balance"}
+        )
+        if stage_restarted:
+            # Never mix samples captured by two cameras in one assessment.
+            # Restart only the active automatic stage; manual forms and reports stay intact.
+            befast_session.start_stage(stage)
+        response: dict[str, Any] = {
+            "runtime": runtime,
+            "stage_restarted": stage_restarted,
+        }
+        if befast_session is not None:
+            response["befast"] = befast_session.snapshot()
+        return jsonify(response)
 
     @app.post("/api/camera/frame")
     def api_camera_frame() -> Response:
@@ -499,6 +501,16 @@ def create_app(
         payload = request.get_json(silent=True) or {}
         try:
             befast_session.start_stage(str(payload.get("stage", "")))
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        return jsonify({"befast": befast_session.snapshot()})
+
+    @app.post("/api/befast/arm-ready")
+    def api_befast_arm_ready() -> Response:
+        if befast_session is None:
+            return jsonify({"error": "BE-FAST session is unavailable"}), 503
+        try:
+            befast_session.ready_arm_phase()
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
         return jsonify({"befast": befast_session.snapshot()})
