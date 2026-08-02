@@ -2,6 +2,7 @@
 .env
 .venv/
 .idea/
+node_modules/
 __pycache__/
 *.py[cod]
 
@@ -19,6 +20,11 @@ data/keypoints/*
 data/cache/
 data/history/
 data/speech/
+data/training/
+
+training/processed/
+training/reports/
+training/manifests/*.local.csv
 
 *.mp4
 *.mov
