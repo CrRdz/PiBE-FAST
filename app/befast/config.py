@@ -107,3 +107,12 @@ class BefastConfig:
     # 3.5 是 median/MAD 稳健异常分数的常用统计界值；它只表示相对个人
     # 基线的显著变化，不是卒中诊断阈值。
     balance_robust_z_threshold: float = 3.5
+
+    # Feature-level BE-FAST fusion remains a research-only observation layer.
+    # These references mirror the default guided-speech assessment thresholds
+    # and only normalize a feature vector; they never alter the final decision.
+    feature_fusion_severity_clip: float = 5.0
+    fusion_speech_character_error_rate_reference: float = 0.35
+    fusion_speech_pause_fraction_reference: float = 0.55
+    fusion_speech_min_characters_per_second: float = 1.0
+    fusion_speech_max_characters_per_second: float = 8.0

@@ -30,6 +30,7 @@ from app.speech_audio import (
     WhisperCppRecognizer,
     default_microphone_capture,
 )
+from app.speech_representation import DysarthriaRepresentationModel
 from app.web import PreviewState, create_app
 
 
@@ -171,6 +172,14 @@ def parse_args() -> argparse.Namespace:
         "--speech-model",
         default="models/ggml-base.bin",
         help="Local whisper.cpp GGML/GGUF model used to transcribe S",
+    )
+    parser.add_argument(
+        "--speech-representation-model",
+        default="models/mdsc_dysarthria_v1.json",
+        help=(
+            "MDSC Mandarin dysarthria representation model; predictions are "
+            "reported in shadow mode and never change the S decision"
+        ),
     )
     parser.add_argument(
         "--whisper-cli",
@@ -942,6 +951,9 @@ def main() -> None:
             recognizer=WhisperCppRecognizer(
                 model_path=args.speech_model,
                 executable=args.whisper_cli,
+            ),
+            representation_model=DysarthriaRepresentationModel(
+                args.speech_representation_model
             ),
             config=SpeechAudioConfig(
                 capture_seconds=max(2.0, float(args.speech_capture_seconds))

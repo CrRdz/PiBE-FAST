@@ -74,6 +74,16 @@ class SpeechRecognizer(Protocol):
         """Transcribe one WAV file locally."""
 
 
+class SpeechRepresentationModel(Protocol):
+    """Research-only shadow model; it must not control the S decision."""
+
+    model_version: str
+
+    def availability(self) -> tuple[bool, str | None]: ...
+
+    def predict_wav(self, wav_path: str | Path) -> Any: ...
+
+
 class AlsaMicrophoneCapture:
     """Capture a fixed-duration WAV with ALSA's arecord on Raspberry Pi OS."""
 
@@ -452,12 +462,14 @@ class SpeechCaptureService:
         *,
         capture_backend: SpeechCaptureBackend | None = None,
         recognizer: SpeechRecognizer | None = None,
+        representation_model: SpeechRepresentationModel | None = None,
         config: SpeechAudioConfig | None = None,
     ) -> None:
         self.root_dir = Path(root_dir)
         self.root_dir.mkdir(parents=True, exist_ok=True)
         self.capture_backend = capture_backend or AlsaMicrophoneCapture()
         self.recognizer = recognizer
+        self.representation_model = representation_model
         self.config = config or SpeechAudioConfig()
         self.lock = threading.RLock()
         self.cancel_event = threading.Event()
@@ -557,6 +569,17 @@ class SpeechCaptureService:
                     )
                 except Exception as exc:
                     recognizer_reason = str(exc)
+            representation_ready = False
+            representation_reason: str | None = None
+            representation_version: str | None = None
+            if self.representation_model is not None:
+                representation_version = self.representation_model.model_version
+                try:
+                    representation_ready, representation_reason = (
+                        self.representation_model.availability()
+                    )
+                except Exception as exc:
+                    representation_reason = str(exc)
             return {
                 "state": self.state,
                 "language": self.language,
@@ -571,6 +594,10 @@ class SpeechCaptureService:
                 "recognizer": recognizer_name,
                 "recognizer_ready": recognizer_ready,
                 "recognizer_reason": recognizer_reason,
+                "representation_model": representation_version,
+                "representation_ready": representation_ready,
+                "representation_reason": representation_reason,
+                "representation_mode": "shadow_only",
                 "result": self.result.as_dict() if self.result is not None else None,
             }
 
@@ -622,6 +649,47 @@ class SpeechCaptureService:
                 expected_text=expected_text,
                 config=self.config,
             )
+            # MDSC predicts a chronic dysarthria phenotype, not acute stroke.
+            # Keep it auditable in shadow fields without changing status/reason.
+            if self.representation_model is not None:
+                model_ready, _ = self.representation_model.availability()
+                if model_ready:
+                    try:
+                        prediction = self.representation_model.predict_wav(path)
+                    except Exception as exc:
+                        result = MotionResult(
+                            status=result.status,
+                            reason=result.reason,
+                            affected_side=result.affected_side,
+                            quality=result.quality,
+                            metrics=result.metrics,
+                            details={
+                                **result.details,
+                                "shadow_dysarthria_error": str(exc),
+                            },
+                        )
+                    else:
+                        result = MotionResult(
+                            status=result.status,
+                            reason=result.reason,
+                            affected_side=result.affected_side,
+                            quality=result.quality,
+                            metrics={
+                                **result.metrics,
+                                "shadow_dysarthria_probability": prediction.probability,
+                                "shadow_dysarthria_threshold": prediction.threshold,
+                            },
+                            details={
+                                **result.details,
+                                "shadow_dysarthria_model": prediction.model_version,
+                                "shadow_dysarthria_prediction": str(
+                                    prediction.predicted_dysarthria
+                                ).lower(),
+                                "shadow_medical_role": (
+                                    "dysarthria_representation_not_acute_stroke"
+                                ),
+                            },
+                        )
         except SpeechBackendUnavailable as exc:
             result = MotionResult(
                 status="insufficient",

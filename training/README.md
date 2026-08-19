@@ -1,5 +1,22 @@
 # PiBE-FAST 离线训练
 
+普通话构音障碍语音表征、AISHELL-6B/MDSC 说话人分组训练、运行时 shadow 接入和
+M5 目标麦克风验证见
+[`docs/mdsc-speech-training.md`](../docs/mdsc-speech-training.md)。该模型识别 MDSC
+构音障碍表型，不训练或声称急性卒中诊断能力。
+
+MDSC v1 真实训练已完成：18,630 条官方录音、46 名说话人，按说话人固定分为
+33/7/6 名训练/验证/独立测试说话人。独立测试样本级 ROC-AUC 为 `0.9573`，
+敏感度为 `0.6444`，特异度为 `0.9926`。说话人级测试仅 6 人，区间很宽，
+这些数值是内部研究结果，不是临床性能。运行端默认加载：
+
+```text
+models/mdsc_dysarthria_v1.json
+```
+
+原始 MDSC 数据、`training/manifests/mdsc.local.csv`、
+`training/processed/mdsc_features.npz` 和 `training/reports/` 均是本地产物，不提交到 Git。
+
 当前管线实现 A（Arm weakness）模型的完整流程：
 
 ```text
