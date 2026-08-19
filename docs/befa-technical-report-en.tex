@@ -1,0 +1,647 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[margin=2.4cm]{geometry}
+\usepackage{fontspec}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs,longtable,array}
+\usepackage{xcolor}
+\usepackage{hyperref}
+
+\newfontfamily\zhfont{STSong}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!55!black,
+  citecolor=blue!55!black,
+  urlcolor=blue!55!black,
+  pdftitle={PiBE-FAST BEFA Technical Report}
+}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.55em}
+\renewcommand{\arraystretch}{1.18}
+
+\title{\textbf{PiBE-FAST: Technical Design of the Balance, Eyes, Face, Arms, and Speech Modules and the Research Fusion Layer}}
+\author{Project Technical Report}
+\date{Implementation snapshot: August 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+PiBE-FAST is a Raspberry Pi--oriented research prototype for multimodal early screening of acute stroke warning signs. This report describes the Balance (B), Eyes (E), Face (F), Arms (A), and Speech (S) components and the quality-gated feature-fusion layer. The implementation combines MoveNet body keypoints, MediaPipe Face Landmarker facial and iris landmarks, local microphone audio, offline whisper.cpp transcription, standardized short tasks, temporal aggregation, explicit quality gates, and conservative rule-based decisions. Speech has two layers: natural-speech change monitoring against a personal acoustic baseline and a guided fixed-phrase confirmation. The guided layer also records a shadow-only 90-dimensional log-Mel representation trained on the official Mandarin Dysarthria Speech Corpus (MDSC), without changing the S or urgency decision. Inference runs on a local edge host and guidance and reports are exposed through a Flask/React web interface. The fusion layer converts completed B/E/F/A/S measurements into a fixed 28-dimensional research vector while preserving quality and missingness. It produces no diagnosis and does not replace the established component or urgency decisions. The design gives priority to sudden symptoms reported by the user or caregiver, separates a valid negative result from insufficient data, and does not convert engineering thresholds into a stroke probability. The current software demonstrates a reproducible measurement workflow and testable feature definitions; it has not yet established clinical diagnostic validity. It must not delay emergency assessment when sudden neurological symptoms are present.
+\end{abstract}
+
+\textbf{Keywords:} BE-FAST; stroke warning signs; Raspberry Pi; pose estimation; facial landmarks; eye movement; speech analysis; edge computing; multimodal fusion.
+
+\tableofcontents
+\newpage
+
+\section{Background and Objectives}
+
+\subsection{Clinical motivation}
+
+The BE-FAST mnemonic extends FAST with balance and visual warning signs and was proposed to reduce the proportion of strokes missed by the traditional mnemonic \cite{aroor2017befast}. PiBE-FAST translates part of this public-facing screening concept into a standardized, camera-assisted workflow suitable for a local edge device. The system is intended for homes, community settings, demonstrations, and research prototyping where a low-cost device may help users perform a short, structured check.
+
+The project does not diagnose stroke. A camera cannot observe many clinically important findings, and a normal camera-assisted task cannot exclude acute stroke. If facial droop, unilateral weakness, speech difficulty, sudden visual disturbance, or sudden loss of balance occurs, emergency services should be contacted without waiting for the system.
+
+\subsection{Technical objectives}
+
+The BEFA implementation has five objectives:
+
+\begin{enumerate}
+  \item acquire useful measurements from ordinary RGB cameras without cloud inference;
+  \item standardize each task so that temporal and bilateral comparisons are interpretable;
+  \item reject poor-quality or incomplete measurements instead of treating them as normal;
+  \item provide transparent features and reasons for each result; and
+  \item remain computationally practical on a Raspberry Pi through stage-based scheduling.
+\end{enumerate}
+
+\subsection{Scope of this report}
+
+This report covers B, E, F, A, S, and their feature-level fusion. Onset time (T) is described only where it controls urgency. Thresholds reported below are the defaults in \texttt{app/befast/config.py}, \texttt{app/speech\_audio.py}, and \texttt{app/passive\_speech.py} at the implementation snapshot date. Unless explicitly stated otherwise, they are engineering parameters awaiting validation on the target hardware and population.
+
+\section{Requirements and System Architecture}
+
+\subsection{Functional requirements}
+
+The system shall allow each BEFA item to be selected and repeated independently. It shall display preparation instructions, verify whether the subject is visible and in the required pose, run a countdown before active acquisition, and preserve each attempt in the report history. A user may skip an automated item; a skipped result is not a negative result. B and E first accept symptom observations because reported sudden loss of balance or visual disturbance cannot be overruled by a camera measurement.
+
+\subsection{Non-functional requirements}
+
+The implementation targets local operation, modest compute demand, graceful degradation, and data minimization. A missing model or unusable frame must leave the preview available while the relevant component returns insufficient data. The browser acts as a display and control surface; inference remains on the Python service host. The design supports a host-connected CSI/USB camera and frames uploaded from the current browser device.
+
+\subsection{Processing architecture}
+
+\begin{center}
+\begin{tabular}{c}
+\toprule
+Host CSI/USB camera, browser front camera, and local microphone \\
+$\downarrow$ \\
+Frame acquisition, resizing, orientation, and selected-input routing \\
+$\downarrow$ \\
+\begin{tabular}{ccc}
+MoveNet & MediaPipe Face & Local audio / whisper.cpp \\
+B and A & E and F & S
+\end{tabular} \\
+$\downarrow$ \\
+Temporal features, task-completion checks, and quality gates \\
+$\downarrow$ \\
+BEFA rule engine and structured result \\
+$\downarrow$ \\
+Flask API, React guidance, report history, and research logs \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The Python backend uses Flask, OpenCV or Picamera2, NumPy, MediaPipe, a TensorFlow Lite interpreter for MoveNet, ALSA \texttt{arecord} on Raspberry Pi, and local whisper.cpp. The user interface is implemented with React and Vite. Baseline and research data are stored locally in structured files.
+
+\subsection{Stage-based inference scheduling}
+
+Running pose and face models continuously would waste compute and increase device temperature. PiBE-FAST therefore activates only the model relevant to the current stage. Standby monitoring uses MoveNet at approximately 2 frames/s by default. E and F use Face Landmarker at approximately 5 frames/s while MoveNet is paused. A and active B use MoveNet while the face model is paused. Both visual models are paused during guided S recording and analysis. The passive natural-speech monitor is itself paused before guided S acquires the microphone, preventing two capture processes from competing, and is resumed afterwards. The preview remains available independently of the active inference rate.
+
+\section{Common Measurement and Safety Methods}
+
+\subsection{Landmarks and confidence filtering}
+
+MoveNet supplies body keypoints for B and A. The default minimum keypoint score is 0.35. MediaPipe Face Landmarker supplies a 478-point mesh, iris centres, expression blendshapes, and a canonical-face transformation used by E and F. A frame is usable only if all landmarks required by the current feature are present and pass its geometric quality checks.
+
+\subsection{Scale and orientation normalization}
+
+Body distances are divided by shoulder width to reduce sensitivity to camera distance. Facial geometry is aligned to the line between the outer eye corners and divided by interocular distance. Eye position is expressed within the current eye aperture. These operations improve comparability but cannot remove all perspective, lens, or out-of-plane head-motion effects.
+
+\subsection{Temporal aggregation}
+
+The implementation avoids single-frame clinical interpretations. It uses phase-specific sample sets, medians, median absolute deviation (MAD), interquartile range (IQR), root-mean-square variation, percentile ranges, and repeated trials. This reduces sensitivity to isolated landmark errors and gives explicit evidence that the requested action was sustained.
+
+\subsection{Result semantics}
+
+\begin{table}[htbp]
+\centering
+\caption{Common component result states.}
+\begin{tabular}{p{0.20\linewidth}p{0.70\linewidth}}
+\toprule
+State & Meaning \\
+\midrule
+\texttt{checking} & Acquisition or processing is in progress. \\
+\texttt{positive} & A reported symptom or a predefined visible phenotype met the current engineering rule. \\
+\texttt{negative} & The task and quality gates were satisfied and the target visible phenotype was not detected. \\
+\texttt{insufficient} & Visibility, stability, action completion, baseline, or model availability was inadequate. \\
+\texttt{skipped} & The user deliberately skipped the item; no negative inference is made. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The distinction between \texttt{negative} and \texttt{insufficient} is a central safety property. A missing wrist, an untracked iris, or an unperformed smile must not silently become evidence of normality.
+
+\section{B---Balance Module}
+
+\subsection{Purpose and workflow}
+
+B first asks whether the user or caregiver has observed sudden loss of balance, coordination difficulty, or gait abnormality. A reported new problem produces a warning without requiring the user to stand. If no problem is reported and standing is considered safe with support nearby, the automatic module measures quiet standing relative to a personal baseline.
+
+The automatic output is a camera trunk-kinematic proxy. It is not force-plate centre of pressure (COP), whole-body centre of mass, a clinical lateropulsion scale, or a diagnosis. Lateropulsion involves body orientation relative to gravity and clinically meaningful behaviours that cannot be fully inferred from a frontal monocular video \cite{dai2021lateropulsion,dai2022lateropulsion}.
+
+\subsection{Input landmarks and frame features}
+
+The required MoveNet points are the left and right shoulders, hips, and ankles. Let $(x_s,y_s)$ be the shoulder midpoint, $(x_h,y_h)$ the hip midpoint, $x_a$ the ankle midpoint, $x_t$ the midpoint between shoulder and hip centres, and $w_s$ the Euclidean shoulder width. The frame features include
+
+\begin{align}
+\theta_{\mathrm{trunk}} & = \operatorname{atan2}(x_s-x_h,\,y_h-y_s), \\
+p_{\mathrm{support}} & = \frac{x_t-x_a}{w_s}.
+\end{align}
+
+The first quantity is converted to degrees. The second is a shoulder-width-normalized lateral displacement of the trunk relative to the ankle midpoint. It is deliberately not named COP. Stroke studies report associations among weight-bearing asymmetry, postural instability, and sway, but those findings do not make a two-dimensional ankle reference equivalent to a force plate \cite{kamphuis2013asymmetry,yeung2014kinect}.
+
+\subsection{Window-level features}
+
+After a 1.5-s warm-up, the system acquires a nominal 30-s quiet-standing window. For the valid frame sequence it computes:
+
+\begin{itemize}
+  \item median trunk roll angle;
+  \item median normalized trunk-support offset;
+  \item mediolateral sway RMS about the window median;
+  \item 5th--95th percentile sway range;
+  \item total lateral path length and mean velocity; and
+  \item trunk-roll RMS about the median.
+\end{itemize}
+
+Thirty-second repeated trials are consistent with common static-balance reliability designs, although this camera proxy and its low sampling rate are not interchangeable with force-plate measurements \cite{aryan2023forceplate,ruhe2010cop}.
+
+\subsection{Personal baseline and robust comparison}
+
+Five valid windows form the default personal baseline. For baseline feature $x$, the implementation computes
+
+\begin{align}
+c_x &= \operatorname{median}(x_1,\ldots,x_n), \\
+s_x &= \max\left(1.4826\,\operatorname{MAD}(x),\frac{\operatorname{IQR}(x)}{1.349}\right), \\
+z_x &= \frac{|x_{\mathrm{current}}-c_x|}{s_x}.
+\end{align}
+
+Trunk orientation is evaluated in both directions. Sway mean velocity is abnormal only when it increases. A score of 3.5 or greater marks a statistical process change \cite{iglewicz1993outliers}; it is not a clinical stroke cutoff. If both MAD and IQR are zero and the later value changes, the score is undefined and the result is \texttt{insufficient}, rather than being forced by an arbitrary noise floor.
+
+\subsection{Quality gates and decisions}
+
+A window requires at least 30 valid samples and a valid-frame fraction of at least 0.75. Before five baseline windows have been collected, the result is \texttt{personal\_balance\_baseline\_calibrating}. Once the baseline is usable, the module reports sustained trunk-orientation change, increased mediolateral sway velocity, or no sustained change from the personal baseline. The direction of visible lean is reported only as a screen direction and is not translated into the side of a brain lesion.
+
+\subsection{Limitations}
+
+Monocular pose estimation cannot measure vestibular symptoms, ataxia, depth-direction sway, active pushing, resistance to correction, or true load distribution. Camera placement, floor geometry, mobility aids, orthopaedic disease, and pre-existing disability may alter the features. Agreement with a personal baseline cannot exclude stroke.
+
+\section{E---Eyes Module}
+
+\subsection{Purpose and symptom priority}
+
+E first records sudden visual loss, blackout, field loss, diplopia, or persistent gaze deviation. A new reported visual problem directly raises the E warning; a camera result cannot override it. When no problem is reported, the camera task looks for a large resting conjugate deviation, repeatable binocular directional endpoint reduction, and conspicuous disconjugate response. It does not test acuity, visual fields, fundus, or all ocular-motor disorders.
+
+Conjugate gaze deviation and quantitative eye movement abnormalities have been studied in acute stroke \cite{singer2006gaze,kudo2021eyemovement}. However, measurements made by imaging or research oculography cannot be transferred directly to a low-frame-rate webcam implementation.
+
+\subsection{Landmarks and standardized target sequence}
+
+The implementation uses right iris centre 468, left iris centre 473, right eye corners 33/133, left eye corners 362/263, and outer corners 33/263 for scale and roll alignment. MediaPipe iris tracking provides the underlying landmark representation \cite{bazarevsky2020mediapipeiris}.
+
+The user first looks naturally ahead. The displayed sequence then alternates centre and lateral targets so that every lateral endpoint has an immediately preceding centre endpoint. Left and right targets are each repeated three times. Every target lasts 2.0 s; the first 0.5 s after a transition is excluded. The interface uses physical screen width and viewing distance to place lateral targets near $\pm15^{\circ}$ and records the achieved, viewport-limited angle.
+
+\subsection{Eye-position and response features}
+
+For one eye, horizontal iris position within the eye aperture is
+
+\begin{equation}
+g_x=\frac{x_{\mathrm{iris}}-x_{\mathrm{corner,min}}}{w_{\mathrm{eye}}}.
+\end{equation}
+
+The paired lateral response is the signed difference between the lateral endpoint and its preceding centre endpoint. Its robust signal-to-noise ratio is
+
+\begin{equation}
+\mathrm{SNR}=\frac{r}{1.4826\left(\mathrm{MAD}_{\mathrm{centre}}+\mathrm{MAD}_{\mathrm{lateral}}\right)}.
+\end{equation}
+
+Camera mirroring is inferred from the overall ordering of left and right endpoints. For each eye and direction, the median of three responses is used, and one outlying trial is tolerated. At least two of the three trials must move in the expected direction and meet the SNR rule.
+
+After response gating, the implementation derives binocular directional asymmetry, each eye's direction fraction, inter-eye conjugacy error, and resting gaze bias expressed relative to the achieved target angle. It intentionally does not report saccade latency, peak velocity, smooth-pursuit gain, or nystagmus because approximately 5 frames/s is unsuitable for those dynamic measurements; sampling frequency strongly affects saccade analysis \cite{bahill1975mainsequence}.
+
+\subsection{Quality gates}
+
+Each trial requires at least five valid endpoint samples and a valid fraction of at least 0.60. Each visible eye must be at least 24 pixels wide. Endpoint MAD must not exceed 0.08. At least 80\% of valid frames must contain head-pose estimates, and pitch, yaw, and roll variation within a trial must each remain within $8^{\circ}$. The closest repeat to the median must have relative error no greater than 1.00. Failure of any of these conditions produces \texttt{insufficient}.
+
+\subsection{Decision sequence}
+
+The order matters:
+
+\begin{enumerate}
+  \item If all four eye--direction responses fail, target following was not demonstrated and the result is insufficient.
+  \item Persistent failure of both eyes in the same direction produces \path{bilateral_directional_gaze_restriction}.
+  \item Persistent failure of one eye/direction produces \path{possible_disconjugate_gaze_restriction}.
+  \item Same-direction resting bias of both eyes reaching $12^{\circ}$ produces a conjugate-rest-deviation warning.
+  \item Binocular directional asymmetry reaching 0.45 produces a directional hypometria warning.
+  \item Maximum normalized conjugacy error reaching 0.35 produces a possible internuclear dysconjugacy warning.
+  \item Otherwise the result states that no repeatable visible endpoint abnormality was found.
+\end{enumerate}
+
+The SNR threshold is 3.5. The $12^{\circ}$, 0.45, and 0.35 values are research candidates requiring device- and population-specific calibration. They must not be presented as validated clinical limits.
+
+\subsection{Limitations}
+
+Glasses, glare, eyelid occlusion, eye anatomy, small faces, head compensation, and camera angle affect tracking. The task cannot identify visual-field defects, retinal disease, transient visual loss, or many causes of diplopia. A negative endpoint result applies only to the visible phenotypes and acquisition conditions tested.
+
+\section{F---Face Module}
+
+\subsection{Purpose and protocol}
+
+F measures lower-face movement asymmetry from a neutral expression to a smile. A dynamic baseline is preferable to a single still image because it reduces, but does not eliminate, the effect of natural facial asymmetry and fixed camera roll. The subject holds a neutral face for approximately 2 s and then smiles naturally for approximately 3 s.
+
+\subsection{Features}
+
+Landmarks 61 and 291 represent the right and left mouth corners; outer eye corners 33 and 263 define the roll-corrected facial coordinate system and interocular scale. MediaPipe blendshapes \texttt{mouthSmileLeft} and \texttt{mouthSmileRight} provide a second representation.
+
+For each phase, medians are used. Let $d_n$ and $d_s$ be the normalized mouth-corner vertical difference during neutral and smile phases. The baseline-corrected geometry is
+
+\begin{equation}
+\Delta d=d_s-d_n.
+\end{equation}
+
+The expression feature is the median difference between right and left smile activation. Geometry and blendshape evidence are kept interpretable and are not fused into an opaque probability.
+
+\subsection{Quality gates and decisions}
+
+Neutral and smile phases each require at least five valid samples, and the total valid-frame fraction must be at least 0.50. If the maximum left/right smile activation is below 0.22, an adequate smile was not demonstrated and the result is insufficient. A positive result is produced when $|\Delta d|\geq0.075$ interocular units or when the absolute blendshape difference is at least 0.24. The dominant signed feature supplies a possible affected side. Otherwise the module reports no clear smile asymmetry.
+
+\subsection{Limitations}
+
+Pre-existing facial palsy, natural asymmetry, dental or maxillofacial conditions, facial hair, masks, illumination, and large head rotations can change the measurement. The affected-side label describes the visible feature and does not localize a cerebral lesion. Current thresholds require external validation.
+
+\section{A---Arms Module}
+
+\subsection{Purpose and standardized action}
+
+A verifies completion of a bilateral raise--hold--lower action and then evaluates persistent height asymmetry and unilateral drift during the hold. The user first views the full action, sits facing the camera, and keeps both shoulders, elbows, wrists, and hips visible. After both arms remain naturally down for about 1.2 s following a minimum 2-s preview, an automatic solid 3--2--1 countdown begins. Acquisition then requires:
+
+\begin{enumerate}
+  \item both arms initially down;
+  \item both arms raised laterally to shoulder level within 8 s;
+  \item a valid 5-s bilateral hold; and
+  \item both arms lowered within 5 s.
+\end{enumerate}
+
+Each required pose must persist for approximately 0.45 s. If a phase fails, the partial attempt is cleared and the user is asked to retry. Only hold-phase samples enter the asymmetry calculation.
+
+\subsection{Completion features}
+
+MoveNet shoulders, elbows, wrists, and hips are mapped into shoulder-width-normalized features. The readiness and raised-pose gates use wrist height relative to the shoulder, elbow angle, and lateral reach. Default raised-pose requirements are wrist-height tolerance 0.42, elbow angle at least $125^{\circ}$, and lateral reach at least 0.45 in normalized units.
+
+\subsection{Asymmetry features}
+
+Let $y_L(t)$ and $y_R(t)$ be normalized downward-positive wrist heights relative to their shoulders. The module computes the median bilateral level difference over the hold. It also divides the samples into thirds and compares the median first and final thirds:
+
+\begin{align}
+\delta_L &= \operatorname{median}(y_L^{\mathrm{final}})-\operatorname{median}(y_L^{\mathrm{initial}}),\\
+\delta_R &= \operatorname{median}(y_R^{\mathrm{final}})-\operatorname{median}(y_R^{\mathrm{initial}}),\\
+\Delta_{\mathrm{drift}} &= \delta_L-\delta_R.
+\end{align}
+
+Positive values correspond to greater downward displacement on the left in the internal coordinate convention.
+
+\subsection{Quality gates and decisions}
+
+The complete action must pass before classification. The hold requires at least 20 valid samples; the implementation also records the valid fraction, with 0.55 configured as the nominal quality target. Persistent height asymmetry is positive at an absolute normalized level difference of 0.30. Asymmetric drift is positive at $|\Delta_{\mathrm{drift}}|\geq0.22$. When both are positive, the feature with the larger threshold-normalized magnitude determines the reported side. If neither is positive, the result is \texttt{no\_clear\_arm\_asymmetry}.
+
+The repository also contains Toronto compensation and IntelliRehab action-quality models. Their outputs are explicitly prefixed \texttt{shadow\_}; they are research observations and do not alter the user-visible A decision because their source tasks and sensors do not match this acute bilateral screening protocol.
+
+\subsection{Limitations}
+
+Pain, shoulder disease, prior weakness, limited range of motion, clothing, wheelchair posture, and occlusion may affect task completion. Monocular 2-D pose cannot fully describe forward depth, pronation, tone, or fine distal weakness. The current task and thresholds must be validated against clinician-labelled performance using the target camera setup.
+
+\section{S---Speech Module}
+
+\subsection{Two-layer design and medical role}
+
+Speech uses two deliberately separate layers. The passive layer monitors windows of natural speech for sustained change relative to the same person's acoustic baseline. It does not run speech recognition and can only recommend the guided check. The active layer records a displayed fixed phrase, performs local offline transcription, and evaluates recording quality, repetition difference, delivery rate, and pauses. Neither layer diagnoses dysarthria or stroke. Sudden speech difficulty remains an emergency warning regardless of the automated result.
+
+This design reflects evidence that post-stroke dysarthria may alter timing, phonation, and articulation/resonance \cite{decock2021acute,kim2011acoustic,mou2018mandarin,ge2021vowels,wong2022tdcs,sanguedolce2025stroke,jyothi2026stroke}. The cited studies used clinical assessment, controlled vowels, reading, picture description, or labelled connected speech. They do not directly validate continuous home monitoring, the present fixed phrase, or the thresholds below.
+
+\subsection{Passive natural-speech monitoring}
+
+The passive monitor captures nominal 8-s, 16-kHz mono windows with a default 1-s interval between completed captures. Each window first passes audio-quality gates: duration at least 2.0 s, RMS level at least $-42$ dBFS, clipping fraction no greater than 0.02, and voiced duration at least 1.5 s. Invalid or silent windows do not enter the baseline.
+
+The lightweight local features are organized into three evidence domains:
+
+\begin{longtable}{p{0.22\linewidth}p{0.68\linewidth}}
+\toprule
+Domain & Features \\
+\midrule
+Timing & pause fraction; mean pause duration; energy-peak syllable-nuclei-rate proxy \\
+Phonation & intensity range; median F0; F0 variation in semitones; local jitter; local shimmer; harmonic-to-noise ratio \\
+Articulation/resonance & F1 and F2 interquartile ranges estimated from free-speech LPC frames \\
+\bottomrule
+\end{longtable}
+
+These are edge-computing approximations. The syllable-nuclei rate is not forced-alignment articulation rate; the pitch and voice-quality estimators are not equivalent to Praat or eGeMAPS; and free-speech formant IQR is not vowel-space area, VAI, or FCR.
+
+Six valid windows form the default personal baseline, with up to 48 baseline history windows retained. A feature needs at least three baseline observations. For feature $f$, the change score is
+
+\begin{equation}
+z_f=\frac{|f_{\mathrm{current}}-\operatorname{median}(f_{\mathrm{baseline}})|}
+{\max\left(1.4826\operatorname{MAD}(f_{\mathrm{baseline}}),s_{f,\min}\right)},
+\end{equation}
+
+where $s_{f,\min}$ is a feature-specific engineering scale floor. A domain changes when at least one available feature has $z_f\geq3.5$. A window casts an anomaly vote only when at least two domains change. The interface recommends the guided S check only after at least three anomalous votes among the five most recent valid windows. A single feature, domain, or window cannot trigger the recommendation.
+
+The API labels the passive output \path{change_detection_trigger_only}. It also reports that clinical validation is false and publishes the evidence version, changed domains, domain scores, and vote history. The monitor does not verify speaker identity; television, another speaker, respiratory illness, microphone movement, and ordinary within-person variation may therefore affect it.
+
+\subsection{Guided fixed-phrase capture}
+
+When the user starts S, passive capture is paused and the service records approximately 7 s of 16-bit, 16-kHz mono PCM. Raspberry Pi uses ALSA \texttt{arecord}; macOS development uses FFmpeg/AVFoundation. The displayed default prompts are:
+
+\begin{quote}
+Chinese: {\zhfont 今天天气很好，我们一起去公园散步}\\
+English: The sky is blue and we are walking in the park
+\end{quote}
+
+The asynchronous service moves through recording, analysis, and ready states. Local whisper.cpp transcribes the WAV with the selected language. Missing microphone software, a missing model or executable, a recognizer failure, or an empty transcript produces \texttt{insufficient}; unavailable recognition is never treated as normal.
+
+\subsection{Audio quality and guided features}
+
+The WAV is split into 20-ms frames. RMS level and clipping are computed over the waveform. Voice activity uses an adaptive threshold based on the 20th-percentile frame RMS, the $-42$ dBFS floor, and a cap relative to whole-recording RMS. Voiced duration is the number of active frames. Pause fraction is measured inside the span from the first to the last active frame.
+
+The quality gates require recording duration at least 2.0 s, voiced duration at least 1.0 s, RMS at least $-42$ dBFS, and clipping fraction no greater than 0.02. After transcript normalization, the character error rate is
+
+\begin{equation}
+\mathrm{CER}=\frac{D_{\mathrm{Lev}}(t_{\mathrm{expected}},t_{\mathrm{recognized}})}
+{|t_{\mathrm{expected}}|},
+\end{equation}
+
+and delivery rate is the number of recognized normalized characters divided by voiced seconds.
+
+\subsection{Guided decision sequence}
+
+The current rules are applied in order:
+
+\begin{enumerate}
+  \item short, quiet, clipped, or effectively unvoiced audio produces \texttt{insufficient};
+  \item unavailable recognition or an empty transcript produces \texttt{insufficient};
+  \item $\mathrm{CER}\geq0.35$ produces \path{speech_content_mismatch};
+  \item pause fraction $\geq0.55$, rate below 1.0 characters/s, or rate above 8.0 characters/s produces \path{speech_delivery_irregular};
+  \item otherwise the result is \path{no_clear_speech_abnormality}.
+\end{enumerate}
+
+These rules test whether the phrase was repeated recognizably and continuously. ASR disagreement is not equivalent to dysarthria: dialect, accent, hearing, language proficiency, background noise, cognition, aphasia, and recognizer error can all contribute. Conversely, a person may repeat the phrase successfully despite clinically important speech or language symptoms.
+
+\subsection{MDSC shadow dysarthria representation}
+
+The guided layer additionally loads \texttt{models/mdsc\_dysarthria\_v1.json}. MDSC contains 18,630 16-kHz recordings from 21 dysarthric and 25 control Mandarin speakers \cite{gao2024mdsc}. The local audit matched every transcript to a WAV and retained all recordings. It found 18,616 mono and 14 stereo files; the shared runtime reader averages channels for the latter. This dataset represents a chronic dysarthria phenotype and a controlled mobile-microphone collection, not acute stroke or within-person acute change.
+
+The representation uses 40-bin log-Mel energies from 25-ms frames with a 10-ms shift. Per-bin means and standard deviations contribute 80 values; duration, RMS level, voiced and pause fractions, mean pause duration, energy variability, spectral flux, zero-crossing rate, and spectral-centroid mean and standard deviation contribute 10 more. A standardized logistic-regression model therefore operates on 90 features and is exported as a compact JSON artifact requiring only NumPy at runtime.
+
+Speakers were assigned with a fixed seed to 33 training, 7 validation, and 6 completely held-out test participants, separately by class. No speaker occurs in more than one split. Five-fold speaker-grouped predictions on the 40 development speakers provide an out-of-fold audit. The deployable coefficients are fitted only on the 33 training speakers; the decision threshold, 0.807859, is selected only from mean probabilities for the 7 validation speakers. The test speakers are used once for the final report. Table~\ref{tab:mdsc-results} reports both recording- and speaker-level results.
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Internal MDSC v1 evaluation. Test-speaker results contain three positive and three negative speakers.}
+\label{tab:mdsc-results}
+\begin{tabular}{lccccc}
+\toprule
+Evaluation unit & ROC-AUC & Sens. & Spec. & Bal. acc. & Brier \\
+\midrule
+Development OOF recordings ($n=16{,}200$) & 0.8241 & 0.7956 & 0.6655 & 0.7306 & 0.1942 \\
+Development OOF speakers ($n=40$) & 0.9015 & 0.9444 & 0.5909 & 0.7677 & 0.1272 \\
+Held-out recordings ($n=2{,}430$) & 0.9573 & 0.6444 & 0.9926 & 0.8185 & 0.0983 \\
+Held-out speakers ($n=6$) & 1.0000 & 0.6667 & 1.0000 & 0.8333 & 0.0577 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Speaker-level bootstrap intervals resample speakers rather than recordings. With only six test speakers, the held-out sensitivity interval is 0.0--1.0; the apparent speaker-level ROC-AUC of 1.0 is correspondingly unstable. These values are an internal research baseline, not clinical performance. On the development Mac, 100 real-WAV inference calls had a median of 0.96 ms and a 95th percentile of 1.33 ms; these are not Raspberry Pi M5 measurements.
+
+At runtime the model adds \path{shadow_dysarthria_probability}, its frozen threshold, model version, and an explicit \path{dysarthria_representation_not_acute_stroke} role to the guided S report. Model absence, validation failure, or inference failure leaves Whisper, quality gates, the existing S result, fusion, and emergency logic unchanged. The representation does not vote in passive natural-speech monitoring. Target-microphone M5 work remains outstanding: the frozen model must be tested prospectively across quiet 20-cm, quiet 1-m, and household-noise conditions, with a 30-minute stability run, latency and memory reporting, and no threshold adjustment from shadow participants.
+
+\subsection{Onset, storage, and fusion interface}
+
+The guided request records whether the observed speech problem is new or sudden and may store an onset time. A positive S result combined with sudden onset is handled by the existing T logic as an emergency result. The speech report source is \path{microphone+offline_asr}.
+
+Routine passive WAV files are deleted after feature extraction; the passive baseline stores numeric features rather than daily raw speech. Guided temporary audio is deleted after report handling. If configured event history preserves a positive event, it must do so under the project's explicit retention and consent policy. The 28-dimensional fusion layer uses only three metrics from a completed guided S report---CER, characters per second, and pause fraction. Passive trigger votes are not inserted into the model vector.
+
+\subsection{Limitations and validation requirements}
+
+The passive monitor has no speaker verification and has not been validated for open-microphone household conditions. The guided layer depends partly on ASR and evaluates a fixed phrase rather than a speech-language pathologist's examination. MDSC validation does not close this gap because its positive label is chronic dysarthria rather than acute stroke and its acquisition protocol does not match the target microphone. Validation must include acute stroke, stroke mimics, pre-existing dysarthria or aphasia, healthy controls, dialects, ages, sexes, microphone distances, competing speakers, television, and respiratory illness. Data must be split by participant, and reference standards should include blinded speech-language assessment, neurological diagnosis, and onset time. Sensitivity, specificity, PPV, NPV, calibration, confidence intervals, insufficient-data rates, and baseline drift should be reported.
+
+\section{Quality-Gated Feature Fusion}
+
+\subsection{Purpose and safety boundary}
+
+The new \texttt{befast-feature-fusion-v1} layer constructs an inspectable, fixed-length early-fusion payload from completed component reports. It is designed for logging, exploratory analysis, and future subject-level model training. Its declared mode is \path{research_only_no_decision}. It does not change B/E/F/A/S component results, does not output a stroke probability, and does not replace the existing onset-time safety rule or \path{screening_decision}.
+
+This separation is intentional. A mathematically convenient aggregate is not clinically meaningful until its target, dataset, calibration, operating point, and external validity have been established. Manual-only positive reports also remain safety-relevant in the ordinary report while being marked missing in the sensor fusion vector; they are not misrepresented as a measured zero.
+
+\subsection{Availability, raw features, and fixed dimension}
+
+A component is considered available to fusion only when its report status is \texttt{positive} or \texttt{negative}, its metric mapping is non-empty, and its result quality is greater than zero. \texttt{insufficient}, \texttt{skipped}, pending, and manual-only reports are unavailable sensor measurements.
+
+The raw vector contains 18 continuous features in a fixed order:
+
+\begin{longtable}{p{0.10\linewidth}p{0.80\linewidth}}
+\toprule
+Domain & Continuous features \\
+\midrule
+B & trunk-orientation change score; mediolateral-sway change score \\
+E & left and right gaze range; inter-eye range asymmetry; binocular directional asymmetry; maximum conjugacy error; conjugate rest-gaze deviation in degrees \\
+F & mouth-corner delta; smile-score difference; smile strength \\
+A & bilateral level difference; left drop; right drop; drift difference \\
+S & character error rate; characters per second; pause fraction \\
+\bottomrule
+\end{longtable}
+
+Absent or non-finite feature values are represented as zero only after explicit quality and missingness fields are retained. The final model vector is
+
+\begin{equation}
+\mathbf{x}_{\mathrm{model}}=
+\left[
+\mathbf{x}_{\mathrm{gated}}^{(18)},
+q_B,q_E,q_F,q_A,q_S,
+m_B,m_E,m_F,m_A,m_S
+\right],
+\end{equation}
+
+where $q_c\in[0,1]$ is component quality and $m_c\in\{0,1\}$ is the missing mask. The resulting dimension is $18+5+5=28$. A numeric zero can therefore be distinguished from an unavailable measurement.
+
+\subsection{Quality gating}
+
+Every feature belongs to one component $c(j)$ and is gated by
+
+\begin{equation}
+x_{j,\mathrm{gated}}=q_{c(j)}x_{j,\mathrm{raw}}.
+\end{equation}
+
+For B and S, $q_c$ is the bounded component result quality. The visually guided domains apply additional conservative terms:
+
+\begin{align}
+q_E &= \min\left(q_{\mathrm{result}},q_{\mathrm{trial}},
+\operatorname{clip}\left(\frac{\mathrm{SNR}_{\min}}{3.5}\right),
+\operatorname{clip}\left(1-\frac{e_{\mathrm{repeat}}}{1.0}\right)\right),\\
+q_F &= \min\left(q_{\mathrm{result}},
+\operatorname{clip}\left(\frac{s_{\mathrm{smile}}}{0.22}\right)\right),\\
+q_A &= \min\left(q_{\mathrm{result}},q_{\mathrm{completion}}\right).
+\end{align}
+
+Here \texttt{clip} bounds a value to $[0,1]$. This design reduces the magnitude of features obtained under marginal acquisition conditions without discarding the matching quality and missingness metadata.
+
+\subsection{Explainable domain severity}
+
+In addition to the vectors, the layer computes a threshold-normalized severity for each available domain. For B, E, F, and A the relevant feature magnitudes are divided by the same research references used by their component rules:
+
+\begin{align}
+r_B &= \max\left(\frac{z_{\mathrm{trunk}}}{3.5},\frac{z_{\mathrm{sway}}}{3.5}\right),\\
+r_E &= \max\left(\frac{a_{\mathrm{direction}}}{0.45},
+\frac{e_{\mathrm{conjugacy}}}{0.35},\frac{d_{\mathrm{rest}}}{12}\right),\\
+r_F &= \max\left(\frac{|\Delta d_{\mathrm{mouth}}|}{0.075},
+\frac{|\Delta s_{\mathrm{smile}}|}{0.24}\right),\\
+r_A &= \max\left(\frac{|\Delta h|}{0.30},
+\frac{|\Delta_{\mathrm{drift}}|}{0.22}\right).
+\end{align}
+
+S uses character error rate relative to 0.35, pause fraction relative to 0.55, and deviation outside the reference speech-rate interval 1--8 characters/s. The published domain value is
+
+\begin{equation}
+d_c=q_c\min(5,r_c),
+\end{equation}
+
+where 5 is a configurable clipping value that prevents extreme ratios from dominating exploratory summaries. These scores express threshold-relative engineering magnitude, not calibrated probability or clinical severity.
+
+\subsection{Aggregate descriptors}
+
+The fusion payload reports the number of domains with non-zero quality, maximum domain severity, and the mean of the two largest available domain severities. It also reports an A/F laterality agreement descriptor. If both A and F have non-zero severity and signed primary features, equal signs produce $+1$, opposite signs produce $-1$, and unavailable or zero evidence produces 0. B and E are intentionally excluded because their screen directions are not valid lesion-side inferences.
+
+These aggregates are descriptors only. No cutoff on their values is connected to the user-visible screening decision.
+
+\subsection{Testing and future model use}
+
+Dedicated tests verify feature order and vector length, quality multiplication, component-specific quality rules, missing masks, normalized severity, A/F agreement, and the treatment of manual-only reports as missing sensor data. Before the 28-dimensional vector is used to train a predictive model, data must be split by subject, preprocessing and feature order must be versioned, missing-data mechanisms must be studied, and calibration plus independent external validation must be completed. The fusion version must be stored with every training example and inference output.
+
+\section{Integration, Reporting, and Privacy}
+
+\subsection{Session state and independent attempts}
+
+The thread-safe session controller owns one detector per component and separates standby, preparation, acquisition, retry, and report states. Components can be selected in any order. Repeating an item creates a new numbered report rather than overwriting the prior attempt. Changing camera source during acquisition restarts the current item to prevent coordinates from different viewpoints being mixed. Every session snapshot builds and exposes the current fusion payload alongside the ordinary report items.
+
+\subsection{Manual and automatic evidence}
+
+For B and E, a completed manual observation indicating a problem takes precedence in the report. F and A are derived from their visual modules, and S is derived from the microphone and offline recognizer. Every report includes status, reason, source, quality, metrics, and optional side or detail fields. The system should present a plain-language explanation such as ``left arm remained lower,'' ``eye response was not repeatable,'' or ``recording was too quiet,'' rather than an unexplained score.
+
+\subsection{Privacy and failure behaviour}
+
+Inference is performed on the local service host. The browser need not send data to a third-party cloud. Personal balance and passive-speech baselines are stored locally. Routine passive speech WAV files are deleted after analysis. Logging and positive-event recording are configurable. If a model, recognizer, or microphone is unavailable, the corresponding item reports insufficient capability; the system must never fabricate a negative result.
+
+\section{Verification and Validation Plan}
+
+\subsection{Software verification}
+
+The repository contains automated tests for BE-FAST geometry and decisions, session history, monitoring, web APIs, preview behaviour, model training utilities, and failure paths. Software verification should cover:
+
+\begin{itemize}
+  \item exact landmark geometry and coordinate signs;
+  \item threshold boundary conditions;
+  \item missing, low-confidence, and occluded landmarks;
+  \item speech quality gates, transcript normalization, CER, pause and rate boundaries;
+  \item passive speech baseline persistence, multi-domain voting, pause/resume, and WAV deletion;
+  \item phase transitions, retries, skips, and camera changes;
+  \item serialization of metrics and reason codes; and
+  \item fusion vector order, quality gating, masks, severity, and laterality descriptors; and
+  \item absence or failure of optional models and hardware.
+\end{itemize}
+
+At the August 2026 implementation snapshot, all 128 automated repository tests pass, including shared speech-representation extraction, model loading, speaker-safe manifest generation, and shadow-only failure isolation. Passing these tests demonstrates consistency with the coded specification, not clinical accuracy.
+
+\subsection{Engineering evaluation}
+
+The target Raspberry Pi configuration should be evaluated for effective inference rate, end-to-end latency, CPU load, memory, temperature, dropped frames, and recovery from camera failure. Repeatability should be measured across camera types, distances, resolutions, illumination, glasses, clothing, and body sizes. Every component should report its insufficient-data rate and successful-retest rate.
+
+\subsection{Clinical research validation}
+
+Before automated positives are used as research endpoints, a prospective protocol should include acute stroke, stroke mimics, relevant pre-existing impairments, and healthy controls. Participants, not frames or audio windows, must define train/development/test separation. E should be compared with synchronized clinical or research eye tracking; B with appropriate balance instrumentation and clinical lateropulsion assessment; F and A with blinded clinician ratings and standardized video labels; and S with blinded speech-language assessment under realistic acoustic conditions. Development thresholds should be frozen before independent validation. Sensitivity, specificity, ROC and precision--recall results, confidence intervals, calibration, inter-rater agreement, repeatability, and the frequency of insufficient measurements should all be reported.
+
+The intended screening role favours sensitivity, but this does not justify selecting thresholds without representative data. An explicit uncertainty region and a policy for immediate escalation based on reported sudden symptoms are required.
+
+\section{Risks, Limitations, and Safety Controls}
+
+The principal risks are false reassurance, false alarms, non-representative baseline data, task misunderstanding, and performance variation across hardware and users. The current controls are symptom priority, standardized actions, visible guidance, repeated measurements, explicit quality gates, conservative insufficient states, local processing, and clear emergency language. These controls reduce foreseeable engineering failure modes but do not establish medical safety or regulatory compliance.
+
+The most important interpretation boundary is: \emph{negative means no target visible phenotype was detected in a quality-qualified task; it does not mean no stroke}. A positive result likewise indicates a warning sign or engineered phenotype, not a confirmed cause.
+
+\section{Conclusion and Future Work}
+
+PiBE-FAST implements B, E, F, A, and S as transparent temporal measurements rather than single-frame or single-score diagnosis. B compares trunk orientation and mediolateral motion with a personal robust baseline; E combines repeated paired endpoints with head-motion and noise gates; F compares smile motion against a neutral facial baseline; A requires a complete bilateral action before evaluating level and drift; and S separates sustained personal acoustic change from a locally transcribed fixed-phrase confirmation. The guided S report now also carries a speaker-safe, internally evaluated MDSC dysarthria representation in shadow mode. The fusion layer preserves completed continuous measurements in a quality-gated 28-dimensional research representation without changing the safety decision. Stage-based scheduling makes the design suitable for further Raspberry Pi evaluation, while structured result states and explicit missing masks preserve uncertainty.
+
+Future work should establish a device-specific acquisition protocol, collect ethically governed and clinically labelled data, quantify subgroup and hardware performance, recalibrate every research threshold, and validate the complete workflow prospectively. Until then, the system remains a research and demonstration prototype that supports---but never replaces---urgent professional assessment.
+
+\bibliographystyle{unsrt}
+\bibliography{references}
+
+\appendix
+\section{Default BEFA Parameters}
+
+\begin{longtable}{p{0.24\linewidth}p{0.31\linewidth}p{0.35\linewidth}}
+\caption{Implementation defaults at the report snapshot.}\\
+\toprule
+Module & Parameter & Default and role \\
+\midrule
+\endfirsthead
+\toprule
+Module & Parameter & Default and role \\
+\midrule
+\endhead
+Common & minimum MoveNet score & 0.35; visibility gate \\
+B & warm-up / capture & 1.5 s / 30 s \\
+B & valid data & at least 30 samples and 0.75 valid fraction \\
+B & personal baseline & 5 valid windows \\
+B & robust change score & 3.5; monitoring threshold only \\
+E & target / settle duration & 2.0 s / 0.5 s \\
+E & repetitions & three per lateral direction \\
+E & valid data & at least 5 samples and 0.60 per trial \\
+E & eye width / gaze MAD & 24 px minimum / 0.08 maximum \\
+E & head-pose coverage / motion & 0.80 minimum / $8^{\circ}$ maximum variation \\
+E & response SNR & 3.5 \\
+E & rest / direction / conjugacy & $12^{\circ}$ / 0.45 / 0.35 research thresholds \\
+F & neutral / smile & 2 s / 3 s \\
+F & valid data & at least 5 samples per phase and 0.50 overall \\
+F & smile strength & 0.22 minimum \\
+F & geometry / blendshape difference & 0.075 / 0.24 \\
+A & preview / auto-ready / countdown & 2.0 s / 1.2 s / 3.0 s \\
+A & raise / hold / lower & 8 s / 5 s / 5 s \\
+A & raised pose & wrist tolerance 0.42, elbow $\geq125^{\circ}$, reach $\geq0.45$ \\
+A & valid hold samples & at least 20; nominal valid fraction 0.55 \\
+A & level / drift asymmetry & 0.30 / 0.22 shoulder-width-normalized units \\
+S passive & window / interval & 8 s / 1 s \\
+S passive & audio quality & duration $\geq2$ s, voiced $\geq1.5$ s, RMS $\geq-42$ dBFS, clipping $\leq0.02$ \\
+S passive & baseline / change rule & 6 windows; $z\geq3.5$ in at least 2 domains \\
+S passive & persistent vote & at least 3 anomalous windows among the latest 5 \\
+S guided & capture format & about 7 s, 16 kHz, 16-bit mono PCM \\
+S guided & audio quality & duration $\geq2$ s, voiced $\geq1$ s, RMS $\geq-42$ dBFS, clipping $\leq0.02$ \\
+S guided & CER / pause & 0.35 / 0.55 \\
+S guided & speech-rate range & 1--8 recognized characters/s \\
+Fusion & continuous / model dimensions & 18 / 28 \\
+Fusion & component order & B, E, F, A, S \\
+Fusion & severity clip & 5.0; research descriptor only \\
+Fusion & S reference values & CER 0.35; pause 0.55; rate 1--8 characters/s \\
+\bottomrule
+\end{longtable}
+
+\section{Key Source Files}
+
+\begin{verbatim}
+app/befast/config.py     Default durations and thresholds
+app/befast/balance.py    B features, baseline, and decisions
+app/befast/eyes.py       E trials, quality gates, and decisions
+app/befast/face.py       F neutral-to-smile comparison
+app/befast/arms.py       A action phases and temporal features
+app/befast/speech.py     S report mapping
+app/speech_audio.py      Guided capture, ASR, and assessment
+app/passive_speech.py    Natural-speech baseline monitoring
+app/befast/fusion.py     Quality-gated fixed research vector
+app/befast/session.py    Thread-safe workflow orchestration
+app/befast/report.py     Manual/automatic report assembly
+tests/test_befast.py     Component and session verification
+tests/test_fusion.py     Fusion vector and missingness verification
+tests/test_speech_audio.py Guided S audio and ASR verification
+tests/test_passive_speech.py Passive S features and monitor verification
+\end{verbatim}
+
+\end{document}

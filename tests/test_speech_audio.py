@@ -19,6 +19,7 @@ from app.speech_audio import (
     analyze_speech_wav,
     default_microphone_capture,
 )
+from app.speech_representation import DysarthriaPrediction
 
 
 PROMPT = "今天天气很好，我们一起去公园散步"
@@ -56,6 +57,18 @@ class _Recognizer:
 
     def recognize(self, wav_path, language):
         return Transcript(self.text, self.name)
+
+
+class _RepresentationModel:
+    model_version = "test-mdsc"
+
+    def availability(self):
+        return True, None
+
+    def predict_wav(self, wav_path):
+        return DysarthriaPrediction(
+            0.8, 0.7, self.model_version, "mdsc-logmel-v1", ()
+        )
 
 
 class SpeechAudioTest(unittest.TestCase):
@@ -219,6 +232,27 @@ class SpeechAudioTest(unittest.TestCase):
             self.assertTrue(audio_path.is_file())
             service.discard_consumed_audio(audio_path)
             self.assertFalse(audio_path.exists())
+
+    def test_representation_model_is_shadow_only(self):
+        with tempfile.TemporaryDirectory() as directory:
+            service = SpeechCaptureService(
+                directory,
+                capture_backend=_Capture(),
+                recognizer=_Recognizer(),
+                representation_model=_RepresentationModel(),
+                config=SpeechAudioConfig(capture_seconds=3.0),
+            )
+            service.start(language="zh")
+            self.assertTrue(service.wait(timeout=2.0))
+            result, audio_path, _, _ = service.consume_result()
+            self.assertEqual(result.status, "negative")
+            self.assertEqual(result.reason, "no_clear_speech_abnormality")
+            self.assertEqual(result.metrics["shadow_dysarthria_probability"], 0.8)
+            self.assertEqual(
+                result.details["shadow_medical_role"],
+                "dysarthria_representation_not_acute_stroke",
+            )
+            service.discard_consumed_audio(audio_path)
 
 
 if __name__ == "__main__":

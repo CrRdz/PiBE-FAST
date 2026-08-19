@@ -673,6 +673,7 @@
         kicker:'检测数据', title:'采集与判定', waiting:'等待项目', collecting:'采集中', normal:'未触发', alert:'需关注', warning:'需确认', pending:'等待数据',
         summaryEmpty:'', summaryLive:'', summaryReport:'',
         factors:'关键指标', raw:'采集数据', noData:'等待数据', valid:'有效样本', captured:'采集样本', progress:'检测进度', phase:'当前阶段', baseline:'个人基线', trial:'当前试次', threshold:'阈值', atLeast:'至少', atMost:'不超过', outside:'范围',
+        fusion:'融合观察', fusionNotice:'研究观察，不参与正式结论或紧急分级。', fusionWaiting:'等待已完成的自动测量', fusionReliable:'可靠域', fusionTopTwo:'Top-2 严重度', fusionAgreement:'A/F 侧别一致性', fusionSeverity:'融合严重度', fusionQuality:'数据质量', fusionMissing:'尚无可靠自动测量', fusionConsistent:'一致', fusionConflict:'不一致', fusionUnavailable:'—',
         names:{
           valid_fraction:'有效数据比例', minimum_trial_valid_fraction:'最低试次有效比例', max_head_rotation_degrees:'头部转动范围', max_trial_gaze_mad:'眼动定位稳定性', minimum_response_snr:'目标响应信噪比', binocular_directional_asymmetry:'双眼方向响应不对称', max_conjugacy_error:'双眼协同性误差', conjugate_rest_gaze_deviation_degrees:'静息共轭凝视偏向',
           smile_strength:'微笑动作强度', mouth_corner_delta:'嘴角运动差', smile_score_difference:'左右微笑激活差',
@@ -685,6 +686,7 @@
         kicker:'Live decision', title:'Factors & collected data', waiting:'Waiting', collecting:'Collecting', normal:'Not triggered', alert:'Affects result', warning:'Needs attention', pending:'No data',
         summaryEmpty:'', summaryLive:'', summaryReport:'',
         factors:'Decision factors', raw:'Collected data', noData:'This stage has not produced displayable data yet.', valid:'Valid samples', captured:'Captured samples', progress:'Progress', phase:'Stage', baseline:'Personal baseline', trial:'Trial', threshold:'threshold', atLeast:'at least', atMost:'at most', outside:'range',
+        fusion:'Fusion observation', fusionNotice:'Research observation only; it does not affect the formal result or emergency triage.', fusionWaiting:'Waiting for a completed automatic measurement', fusionReliable:'Reliable domains', fusionTopTwo:'Top-2 severity', fusionAgreement:'A/F laterality', fusionSeverity:'Fusion severity', fusionQuality:'Data quality', fusionMissing:'No reliable automatic measurement yet', fusionConsistent:'Consistent', fusionConflict:'Conflicting', fusionUnavailable:'—',
         names:{
           valid_fraction:'Valid data fraction', minimum_trial_valid_fraction:'Minimum trial validity', max_head_rotation_degrees:'Head rotation range', max_trial_gaze_mad:'Eye landmark stability', minimum_response_snr:'Target-response SNR', binocular_directional_asymmetry:'Directional response asymmetry', max_conjugacy_error:'Binocular conjugacy error', conjugate_rest_gaze_deviation_degrees:'Resting conjugate deviation',
           smile_strength:'Smile strength', mouth_corner_delta:'Mouth-corner movement gap', smile_score_difference:'Smile activation gap',
@@ -1546,6 +1548,63 @@
       return t.names[key] || key.replaceAll('_', ' ');
     }
 
+    function fusionState(severity, missing) {
+      if (missing) return 'missing';
+      if (severity >= 1) return 'alert';
+      if (severity >= .75) return 'warning';
+      return 'normal';
+    }
+
+    function renderFusionPanel(fusion, t) {
+      const title = document.getElementById('fusionTitle');
+      const notice = document.getElementById('fusionNotice');
+      const summary = document.getElementById('fusionSummary');
+      const list = document.getElementById('fusionDomainList');
+      if (!title || !notice || !summary || !list) return;
+      title.textContent = t.fusion;
+      notice.textContent = t.fusionNotice;
+      list.replaceChildren();
+      const aggregate = fusion.aggregate || {};
+      const severity = fusion.domain_severity || {};
+      const quality = fusion.quality || {};
+      const missing = fusion.missing || {};
+      if (fusion.status !== 'ready') {
+        summary.textContent = t.fusionWaiting;
+        const empty = document.createElement('div');
+        empty.className = 'factor-empty';
+        empty.textContent = t.fusionWaiting;
+        list.appendChild(empty);
+        return;
+      }
+      const agreement = Number(aggregate.arm_face_laterality_agreement || 0);
+      const agreementText = agreement > 0 ? t.fusionConsistent
+        : (agreement < 0 ? t.fusionConflict : t.fusionUnavailable);
+      summary.textContent = `${t.fusionReliable}: ${Number(aggregate.reliable_domain_count || 0)} · ${t.fusionTopTwo}: ${Number(aggregate.mean_top_two_domain_severity || 0).toFixed(2)} · ${t.fusionAgreement}: ${agreementText}`;
+      for (const code of ['B', 'E', 'F', 'A', 'S']) {
+        const isMissing = Boolean(missing[code]);
+        const domainSeverity = Number(severity[code] || 0);
+        const domainQuality = Number(quality[code] || 0);
+        const row = document.createElement('div');
+        row.className = `factor-row ${fusionState(domainSeverity, isMissing)}`;
+        const head = document.createElement('div');
+        head.className = 'factor-row-head';
+        const name = document.createElement('span');
+        name.className = 'factor-row-name';
+        name.textContent = `${code} · ${text[language].itemNames[code]}`;
+        const value = document.createElement('span');
+        value.className = 'factor-row-value';
+        value.textContent = isMissing ? t.fusionUnavailable : domainSeverity.toFixed(2);
+        const rule = document.createElement('small');
+        rule.className = 'factor-row-rule';
+        rule.textContent = isMissing
+          ? t.fusionMissing
+          : `${t.fusionSeverity}: ${domainSeverity.toFixed(2)} · ${t.fusionQuality}: ${(domainQuality * 100).toFixed(0)}%`;
+        head.append(name, value);
+        row.append(head, rule);
+        list.appendChild(row);
+      }
+    }
+
     function renderFactorPanel(befast, status, report, code) {
       const t = factorText[language];
       const collection = befast.live_collection || {};
@@ -1653,6 +1712,7 @@
           raw.appendChild(row);
         }
       }
+      renderFusionPanel(befast.fusion || {}, t);
     }
 
     function stageCopy(befast) {

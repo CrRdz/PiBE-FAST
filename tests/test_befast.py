@@ -269,6 +269,8 @@ class BefastSessionTest(unittest.TestCase):
         self.assertEqual(result["live_collection"]["captured_samples"], 1)
         self.assertIn("left_elbow_angle_degrees", result["live_collection"]["metrics"])
         self.assertIn("arm_level_difference_threshold", result["factor_thresholds"])
+        self.assertEqual(result["fusion"]["mode"], "research_only_no_decision")
+        self.assertTrue(result["fusion"]["missing"]["A"])
 
     def test_arm_preview_and_countdown_do_not_collect_samples(self):
         self.session.start_stage("arms", now=0.0)

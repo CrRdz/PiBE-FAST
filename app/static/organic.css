@@ -319,6 +319,11 @@ button:focus-visible, select:focus-visible, input:focus-visible {
 .raw-data-row { border-bottom-color: rgba(222,216,207,.72); }
 .factor-empty, .history-empty-panel { border-color: var(--timber); color: var(--grass); }
 
+.fusion-panel { margin-top: 20px; padding-top: 4px; border-top: 1px dashed rgba(145, 126, 96, .34); }
+.fusion-notice, .fusion-summary { margin: 6px 0 10px; color: var(--grass); font-size: .7rem; line-height: 1.45; }
+.fusion-notice { color: var(--clay); font-weight: 760; }
+.fusion-domain-list { display: grid; gap: 7px; }
+
 .passive-speech-monitor, .speech-mode-card, .history-record, .check, .speech-prompt {
   border-color: rgba(222,216,207,.82);
   color: var(--loam);

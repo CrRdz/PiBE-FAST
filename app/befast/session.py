@@ -13,6 +13,7 @@ from .balance import BalanceScreen, PersonalBalanceBaseline
 from .config import BefastConfig
 from .eyes import EyeMovementScreen
 from .face import FaceSmileScreen
+from .fusion import build_feature_fusion
 from .guidance import face_guidance, guidance_value, pose_guidance
 from .report import build_report_items
 from .result import MotionResult
@@ -553,6 +554,9 @@ class BefastSession:
             "eye_setup": dict(self.eye_screen.setup),
             "live_collection": self._live_collection_snapshot(),
             "factor_thresholds": self._factor_thresholds_snapshot(),
+            # This is an auditable feature vector for research/model training.
+            # It intentionally has no authority over ``decision`` or emergency.
+            "fusion": build_feature_fusion(items, self.config),
             "disclaimer": (
                 "Screening prototype only; it cannot diagnose or exclude stroke. "
                 "Any sudden BE-FAST sign requires emergency medical help."

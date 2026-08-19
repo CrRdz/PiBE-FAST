@@ -81,6 +81,12 @@ function DataSidebar() {
         <div id="factorList" className="factor-list"><div className="factor-empty">等待数据</div></div>
         <div id="rawDataSectionTitle" className="factor-section-title">采集数据</div>
         <div id="rawDataList" className="raw-data-list" />
+        <section id="fusionPanel" className="fusion-panel" aria-live="polite">
+          <div id="fusionTitle" className="factor-section-title">融合观察</div>
+          <p id="fusionNotice" className="fusion-notice">研究观察，不参与正式结论</p>
+          <div id="fusionSummary" className="fusion-summary" />
+          <div id="fusionDomainList" className="fusion-domain-list" />
+        </section>
       </div>
     </aside>
   );

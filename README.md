@@ -82,6 +82,14 @@ A 需要双臂平举，B 需要在安全条件下站立。标准化动作让不�
 **不能作为构音障碍或脑卒中阳性/阴性结果**。论文到代码的逐项映射、工程假设及验证要求
 见 [`docs/speech-evidence.md`](docs/speech-evidence.md)。
 
+AISHELL-6B/MDSC 普通话构音障碍表征的训练、说话人无泄漏评估、轻量 JSON 模型、
+shadow-only 运行时接入与 M5 树莓派麦克风验证见
+[`docs/mdsc-speech-training.md`](docs/mdsc-speech-training.md)。
+官方 18,630 条录音和 46 名说话人的 v1 训练已完成；独立测试样本级
+ROC-AUC 为 `0.9573`、敏感度为 `0.6444`、特异度为 `0.9926`。独立测试只有
+6 名说话人，因此仅可作内部研究基线，不是临床性能。目标麦克风 M5 前瞻性
+影子验证仍待完成。
+
 实际推理调度如下：
 
 | 运行状态 | 摄像头预览 | MoveNet | MediaPipe Face | 医学含义 |
@@ -359,6 +367,11 @@ ALSA 麦克风采集约 7 秒、16 kHz、16-bit、单声道 WAV，并用本地 `
 方言、环境噪声、听力问题、原有言语障碍以及 ASR 本身的错误都可能影响结果，不能把
 ASR 差异直接解释为脑卒中。
 
+完成固定句后，`models/mdsc_dysarthria_v1.json` 还会以共享 90 维 log-Mel
+表征输出 `shadow_dysarthria_probability` 和阈值 `0.807859`。该概率表示与
+MDSC 慢性构音障碍表型的相似度，只在 S 报告原始数据中展示；它不改变
+S 结果、融合决策或紧急分级，也不用于长期自然语音异常投票。
+
 ### T — Time / 时间
 
 记录异常是否为新出现或突然发生，以及首次发现异常的时间。决策逻辑为：
@@ -447,7 +460,11 @@ macOS 上默认 `--speech-device default` 使用 AVFoundation 音频设备索引
 models/movenet_lightning.tflite
 models/face_landmarker.task
 models/ggml-base.bin
+models/mdsc_dysarthria_v1.json
 ```
+
+`mdsc_dysarthria_v1.json` 是固定句 S 的可选 shadow-only 表征模型；缺失或无效时
+不影响 Whisper、质量门控和原有 S 判定。
 
 下载官方 Face Landmarker 模型：
 
@@ -485,6 +502,7 @@ python -m app.main \
   --speech-device default \
   --whisper-cli ~/whisper.cpp/build/bin/whisper-cli \
   --speech-model models/ggml-base.bin \
+  --speech-representation-model models/mdsc_dysarthria_v1.json \
   --web-host 0.0.0.0 \
   --web-port 8080
 ```
@@ -512,6 +530,7 @@ python -m app.main \
 - `--scheduled-screen-interval-hours 12`：每 12 小时打开一次主动筛查提醒；默认 `0` 关闭。
 - `--speech-device plughw:CARD,DEV`：覆盖 ALSA 录音设备；用 `arecord -L` 查询；
 - `--speech-capture-seconds 7`：S 的单次固定录音时长；
+- `--speech-representation-model`：MDSC 轻量 JSON 模型路径，只输出 shadow 指标；
 - `--disable-speech`：硬件尚未接入时关闭 S 后端；页面调用会返回不可用。
 
 只测试本地长期语音监测、不启动摄像头和姿态模型：
@@ -528,6 +547,33 @@ python -m app.main \
 “朗读固定句”。长期监测页实时显示个人基线进度、当前响度、有效语音时长、三类
 声学域偏离分数以及最近 5 个有效窗口的异常投票。长期监听只负责提示变化；进入固定句
 检测时长期监听会暂时暂停，完成后恢复。
+
+确认 MDSC 模型已加载：
+
+```bash
+curl -s http://localhost:8080/api/speech/status | python3 -m json.tool
+```
+
+树莓派上可不启动摄像头，单独执行目标麦克风 M5 影子采集：
+
+```bash
+python scripts/run_speech_shadow.py \
+  --model models/mdsc_dysarthria_v1.json \
+  --device default \
+  --windows 20 \
+  --window-seconds 5 \
+  --session-id participant-001-quiet-20cm \
+  --label control \
+  --environment quiet-20cm \
+  --microphone usb-mic-v1
+
+python training/speech/evaluate_shadow.py \
+  --log data/speech/mdsc-shadow.jsonl \
+  --output training/reports/mdsc_shadow.json
+```
+
+`session-id` 只能使用去标识化研究编号。麦克风模式会在每个窗口推理后删除
+临时 WAV；完整环境矩阵、30 分钟稳定性和性能判定见 MDSC 专项文档。
 
 然后在同一局域网的手机或电脑访问：
 
@@ -590,6 +636,10 @@ POST /api/speech/passive/reset-baseline
 当前推理调度、待机 FPS、最近被动状态和
 `medical_role=trigger_only_not_stroke_diagnosis`。`passive_speech` 字段显示基线进度、
 最近窗口、多窗口异常票数以及是否建议执行固定句确认。
+`/api/speech/status` 中的 `representation_ready`、`representation_model` 和
+`representation_mode` 可用于确认 MDSC 模型已以 `shadow_only` 加载。固定句完成后，
+S 项报告的 `metrics` 包含 `shadow_dysarthria_probability` 和
+`shadow_dysarthria_threshold`。
 
 历史接口只保存状态为 `positive` 的单项报告。元数据持久化在
 `data/history/history.sqlite3`，对应 JPEG 帧保存在 `data/history/frames/`；S 的
@@ -747,6 +797,16 @@ currently verify the speaker. Passive output is **never a positive or negative
 dysarthria or stroke result**. See
 [`docs/speech-evidence.md`](docs/speech-evidence.md) for the paper-to-code map,
 engineering assumptions, and required clinical validation.
+
+The AISHELL-6B/MDSC Mandarin dysarthria representation pipeline, speaker-safe
+evaluation, compact JSON model, shadow-only integration, and M5 microphone
+protocol are documented in
+[`docs/mdsc-speech-training.md`](docs/mdsc-speech-training.md). Training of v1
+is complete on all 18,630 official recordings from 46 speakers. Held-out
+sample-level ROC-AUC is `0.9573`, sensitivity is `0.6444`, and specificity is
+`0.9926`. The held-out set contains only 6 speakers, so these are internal
+research results, not clinical performance. Prospective M5 target-microphone
+validation remains outstanding.
 
 Actual inference scheduling:
 
@@ -1057,6 +1117,13 @@ it is not a clinically validated dysarthria model. Dialects, noise, hearing
 problems, pre-existing speech disorders, and ASR errors can affect the result and
 must not be interpreted directly as stroke.
 
+After a guided phrase, `models/mdsc_dysarthria_v1.json` also uses the shared
+90-dimensional log-Mel representation to report `shadow_dysarthria_probability`
+with a frozen threshold of `0.807859`. The probability describes similarity to
+the chronic dysarthria phenotype in MDSC. It is displayed only as raw S report
+data and never changes the S result, fusion decision, emergency classification,
+or passive natural-speech anomaly votes.
+
 ### T — Time
 
 The interface records whether a sign is new/sudden and when it was first noticed:
@@ -1138,13 +1205,18 @@ On macOS, `--speech-device default` selects AVFoundation audio device index `0`
 (normally the built-in microphone); an AVFoundation audio device name or index
 can be passed instead. On Linux/Raspberry Pi, `default` retains its ALSA meaning.
 
-Required models:
+Runtime model files:
 
 ```text
 models/movenet_lightning.tflite
 models/face_landmarker.task
 models/ggml-base.bin
+models/mdsc_dysarthria_v1.json
 ```
+
+`mdsc_dysarthria_v1.json` is an optional shadow-only representation model for
+guided S. If it is missing or invalid, Whisper, quality gates, and the existing
+S decision continue unchanged.
 
 Download the official Face Landmarker model:
 
@@ -1185,6 +1257,7 @@ python -m app.main \
   --speech-device default \
   --whisper-cli ~/whisper.cpp/build/bin/whisper-cli \
   --speech-model models/ggml-base.bin \
+  --speech-representation-model models/mdsc_dysarthria_v1.json \
   --web-host 0.0.0.0 \
   --web-port 8080
 ```
@@ -1212,6 +1285,7 @@ python -m app.main \
 - `--scheduled-screen-interval-hours 12`: open a screen every 12 hours; `0` disables it.
 - `--speech-device plughw:CARD,DEV`: override the ALSA capture device listed by `arecord -L`;
 - `--speech-capture-seconds 7`: fixed S recording duration;
+- `--speech-representation-model`: compact MDSC JSON model path; output remains shadow-only;
 - `--disable-speech`: disable the S backend until microphone hardware is installed.
 
 Test only long-running local speech, without starting camera or pose models:
@@ -1233,6 +1307,35 @@ progress, input level, voiced duration, three acoustic-domain deviation scores,
 and the five most recent valid-window votes. Passive monitoring remains a change
 trigger; the fixed-phrase reading check temporarily pauses passive capture while
 it runs.
+
+Confirm that the MDSC model loaded:
+
+```bash
+curl -s http://localhost:8080/api/speech/status | python3 -m json.tool
+```
+
+On Raspberry Pi, run target-microphone M5 shadow collection without starting
+the camera stack:
+
+```bash
+python scripts/run_speech_shadow.py \
+  --model models/mdsc_dysarthria_v1.json \
+  --device default \
+  --windows 20 \
+  --window-seconds 5 \
+  --session-id participant-001-quiet-20cm \
+  --label control \
+  --environment quiet-20cm \
+  --microphone usb-mic-v1
+
+python training/speech/evaluate_shadow.py \
+  --log data/speech/mdsc-shadow.jsonl \
+  --output training/reports/mdsc_shadow.json
+```
+
+Use only de-identified research IDs in `session-id`. Microphone mode deletes
+each temporary WAV after inference. See the MDSC document for the full
+environment matrix, 30-minute stability run, and acceptance criteria.
 
 Open `http://<raspberry-pi-ip>:8080` from a phone or computer on the same network,
 or use an SSH tunnel. This HTTP URL supports the host camera, but mobile browsers
@@ -1295,6 +1398,10 @@ object reports inference scheduling, standby FPS, the last passive state, and
 `medical_role=trigger_only_not_stroke_diagnosis`. `passive_speech` reports
 baseline progress, the latest window, recent anomaly votes, and whether the
 guided phrase check is recommended.
+`/api/speech/status` exposes `representation_ready`, `representation_model`, and
+`representation_mode` to confirm that MDSC loaded in `shadow_only` mode. After a
+guided phrase, the S report `metrics` contains `shadow_dysarthria_probability`
+and `shadow_dysarthria_threshold`.
 
 The history API persists positive single-check reports only. Metadata is stored
 in `data/history/history.sqlite3`, with JPEG frames in `data/history/frames/`

@@ -16,6 +16,12 @@ from .config import BefastConfig
 from .eyes import EYE_EVIDENCE_VERSION, EyeMovementScreen, eye_frame_metrics
 from .face import FaceSmileScreen, face_frame_metrics
 from .face_geometry import aligned_face_points
+from .fusion import (
+    FEATURE_FUSION_VERSION,
+    FUSION_FEATURE_NAMES,
+    FUSION_MODEL_FEATURE_NAMES,
+    build_feature_fusion,
+)
 from .pose_geometry import Point, percentile, visible_point
 from .result import MotionResult, motion_report_item, report_item
 from .session import BefastSession
@@ -41,7 +47,11 @@ __all__ = [
     "EyeMovementScreen",
     "EYE_EVIDENCE_VERSION",
     "FaceSmileScreen",
+    "FEATURE_FUSION_VERSION",
+    "FUSION_FEATURE_NAMES",
+    "FUSION_MODEL_FEATURE_NAMES",
     "MotionResult",
     "Point",
     "summarize_balance_window",
+    "build_feature_fusion",
 ]
