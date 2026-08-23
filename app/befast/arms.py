@@ -6,14 +6,6 @@ from math import acos, degrees, hypot
 from statistics import median
 from typing import Mapping, Sequence
 
-from app.action_quality_model import summarize_action_quality
-from app.arm_model import LinearBinaryModel
-from app.compensation_model import (
-    COMMON_JOINTS,
-    compensation_frame_features,
-    load_compensation_shadow_models,
-    summarize_compensation_frames,
-)
 from app.keypoints import keypoint_map
 
 from .config import BefastConfig
@@ -88,23 +80,6 @@ def arm_frame_metrics(
     }
 
 
-def compensation_keypoint_features(
-    keypoints: Sequence[Mapping[str, float]], min_score: float
-) -> dict[str, float] | None:
-    """提取 Toronto 研究模型需要的八关节二维特征。"""
-
-    mapped = keypoint_map(keypoints)
-    points = {name: visible_point(mapped, name, min_score) for name in COMMON_JOINTS}
-    if not all(points.values()):
-        return None
-    try:
-        return compensation_frame_features(
-            {name: point for name, point in points.items() if point is not None}
-        )
-    except ValueError:
-        return None
-
-
 class ArmDriftScreen:
     """双臂侧平举状态机；旧类名保留以兼容会话接口。"""
 
@@ -113,26 +88,6 @@ class ArmDriftScreen:
 
     def __init__(self, config: BefastConfig) -> None:
         self.config = config
-        self.compensation_models = {}
-        self.compensation_model_errors: list[str] = []
-        if config.arm_compensation_shadow_enabled:
-            self.compensation_models, self.compensation_model_errors = (
-                load_compensation_shadow_models(
-                    config.arm_compensation_shadow_model_dir
-                )
-            )
-        self.action_quality_model = None
-        self.action_quality_model_error: str | None = None
-        if config.arm_action_quality_shadow_enabled:
-            try:
-                self.action_quality_model = LinearBinaryModel.load(
-                    config.arm_action_quality_shadow_model_path,
-                    expected_component="A_ACTION_QUALITY_SHADOW",
-                )
-            except FileNotFoundError:
-                pass
-            except (OSError, TypeError, ValueError) as exc:
-                self.action_quality_model_error = str(exc)
         self.reset()
 
     @property
@@ -158,7 +113,6 @@ class ArmDriftScreen:
         self.hold_capture_frames = 0
         self.hold_valid_frames = 0
         self.samples: list[tuple[float, float, float]] = []
-        self.compensation_frames: list[dict[str, float]] = []
         self.live_metrics: dict[str, float] = {}
         self.phase_completion_metrics: dict[str, dict[str, float]] = {}
 
@@ -337,9 +291,6 @@ class ArmDriftScreen:
 
         self.capture_frames += 1
         metrics = arm_frame_metrics(keypoints, self.config.min_keypoint_score)
-        shadow = compensation_keypoint_features(keypoints, self.config.min_keypoint_score)
-        if shadow is not None:
-            self.compensation_frames.append(shadow)
         if metrics is not None:
             self.valid_frames += 1
             self.live_metrics = dict(metrics)
@@ -393,55 +344,6 @@ class ArmDriftScreen:
                 self._fail("both_arms_were_not_lowered")
         return self.phase_state == "complete"
 
-    def _compensation_shadow_output(self) -> tuple[dict[str, float], dict[str, str]]:
-        """输出研究概率；这些值永远不参与正式 A 判定。"""
-
-        size = max(10, int(self.config.arm_compensation_shadow_window_frames))
-        if not self.compensation_models or len(self.compensation_frames) < 10:
-            return {}, {"compensation_shadow_mode": "research_only_no_decision"}
-        windows = [
-            self.compensation_frames[start : start + size]
-            for start in range(0, len(self.compensation_frames), size)
-            if len(self.compensation_frames[start : start + size]) >= 10
-        ]
-        if not windows:
-            return {}, {"compensation_shadow_mode": "research_only_no_decision"}
-        summaries = [summarize_compensation_frames(window) for window in windows]
-        output: dict[str, float] = {
-            "shadow_compensation_window_count": float(len(summaries))
-        }
-        versions = []
-        for target, model in self.compensation_models.items():
-            probabilities = [model.predict_probability(row) for row in summaries]
-            output[f"shadow_{target}_probability_median"] = median(probabilities)
-            output[f"shadow_{target}_probability_max"] = max(probabilities)
-            output[f"shadow_{target}_decision_threshold"] = model.decision_threshold
-            versions.append(model.version)
-        return output, {
-            "compensation_shadow_mode": "research_only_no_decision",
-            "compensation_shadow_models": ",".join(versions),
-        }
-
-    def _action_quality_shadow_output(self) -> tuple[dict[str, float], dict[str, str]]:
-        """Evaluate each arm with IntelliRehabDS; never gate the Web result."""
-
-        details = {"action_quality_shadow_mode": "research_only_no_decision"}
-        if self.action_quality_model is None or len(self.compensation_frames) < 10:
-            return {}, details
-        probabilities = {}
-        for side in ("left", "right"):
-            features = summarize_action_quality(self.compensation_frames, side)
-            probabilities[side] = self.action_quality_model.predict_probability(features)
-        details["action_quality_shadow_model"] = self.action_quality_model.version
-        return {
-            "shadow_action_invalid_probability_left": probabilities["left"],
-            "shadow_action_invalid_probability_right": probabilities["right"],
-            "shadow_action_invalid_probability_max": max(probabilities.values()),
-            "shadow_action_invalid_decision_threshold": (
-                self.action_quality_model.decision_threshold
-            ),
-        }, details
-
     def finish(self) -> MotionResult:
         """完成门控通过后，汇总保持阶段的高度差和单侧下落。"""
 
@@ -483,12 +385,6 @@ class ArmDriftScreen:
             "initial_left_wrist_relative_y": initial_left,
             "initial_right_wrist_relative_y": initial_right,
         }
-        shadow_metrics, shadow_details = self._compensation_shadow_output()
-        metrics.update(shadow_metrics)
-        quality_metrics, quality_details = self._action_quality_shadow_output()
-        metrics.update(quality_metrics)
-        shadow_details.update(quality_details)
-
         height_positive = abs(level_difference) >= self.config.arm_level_difference_threshold
         drift_positive = abs(drift_difference) >= self.config.arm_drift_difference_threshold
         if not (height_positive or drift_positive):
@@ -497,7 +393,6 @@ class ArmDriftScreen:
                 reason="no_clear_arm_asymmetry",
                 quality=valid_fraction,
                 metrics=metrics,
-                details=shadow_details,
             )
         height_score = level_difference / max(self.config.arm_level_difference_threshold, 1e-6)
         drift_score = drift_difference / max(self.config.arm_drift_difference_threshold, 1e-6)
@@ -510,5 +405,4 @@ class ArmDriftScreen:
             affected_side=affected_side,
             quality=valid_fraction,
             metrics=metrics,
-            details=shadow_details,
         )

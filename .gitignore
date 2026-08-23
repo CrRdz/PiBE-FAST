@@ -5,6 +5,8 @@
 node_modules/
 __pycache__/
 *.py[cod]
+/tmp/
+/output/
 
 models/*.tflite
 models/*.task
@@ -33,3 +35,4 @@ training/manifests/*.local.csv
 *.jpg
 *.jpeg
 *.png
+!docs/pibefast-paper/figures/speech-architecture-original.png

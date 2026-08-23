@@ -233,7 +233,7 @@ class SpeechAudioTest(unittest.TestCase):
             service.discard_consumed_audio(audio_path)
             self.assertFalse(audio_path.exists())
 
-    def test_representation_model_is_shadow_only(self):
+    def test_mdsc_positive_directly_changes_speech_result(self):
         with tempfile.TemporaryDirectory() as directory:
             service = SpeechCaptureService(
                 directory,
@@ -245,12 +245,16 @@ class SpeechAudioTest(unittest.TestCase):
             service.start(language="zh")
             self.assertTrue(service.wait(timeout=2.0))
             result, audio_path, _, _ = service.consume_result()
-            self.assertEqual(result.status, "negative")
-            self.assertEqual(result.reason, "no_clear_speech_abnormality")
-            self.assertEqual(result.metrics["shadow_dysarthria_probability"], 0.8)
+            self.assertEqual(result.status, "positive")
+            self.assertEqual(result.reason, "mdsc_dysarthria_detected")
+            self.assertEqual(result.metrics["mdsc_dysarthria_probability"], 0.8)
             self.assertEqual(
-                result.details["shadow_medical_role"],
-                "dysarthria_representation_not_acute_stroke",
+                result.details["mdsc_medical_role"],
+                "speech_screening_component_not_stroke_diagnosis",
+            )
+            self.assertEqual(
+                service.snapshot()["representation_mode"],
+                "direct_speech_decision",
             )
             service.discard_consumed_audio(audio_path)
 

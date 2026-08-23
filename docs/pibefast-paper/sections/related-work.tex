@@ -1,0 +1,55 @@
+\section{Related Work}
+\label{sec:related_work}
+
+\subsection{Digital BE-FAST Screening and Neurological Task Automation}
+
+BE-FAST organizes balance, visual, facial, arm, and speech warning signs into a
+rapid public screening procedure and emphasizes timely action
+\cite{aroor2017befast}, but correct task execution and interpretation remain
+user dependent. Digital studies have automated facial video and speech
+\cite{cai2022deepstroke}, landmark sequences from neurological examinations
+\cite{lee2022skeleton}, and multimodal limb, face, and speech evidence
+\cite{ou2025multimodal,hoang2026digitalfast}. Mobile modified-NIHSS monitoring
+has also proved feasible after stroke \cite{noch2023destroke}. This work
+establishes task-level feasibility, yet remains distributed across individual
+signs, NIHSS subsets, hospital classification, and post-stroke monitoring; a
+home workflow must additionally separate valid negative findings from unusable
+attempts.
+
+\subsection{Camera- and Audio-Based Neurological Measurement}
+
+Camera landmarks provide compact, inspectable alternatives to end-to-end video
+classification. Skeleton sequences represent neurological movements
+\cite{lee2022skeleton}; Kinect sway supports controlled balance measurement
+\cite{yeung2014kinect}; and face or iris landmarks capture smile motion and
+relative eye position \cite{bazarevsky2020mediapipeiris}. Interpretation remains
+device and task specific: monocular trunk motion is not force-plate centre of
+pressure, and low-rate gaze endpoints are not clinical imaging or
+video-oculography \cite{singer2006gaze,kudo2021eyemovement}.
+
+Speech complements vision because post-stroke dysarthria affects timing,
+phonation, articulation, and resonance \cite{decock2021acute,kim2011acoustic}.
+Mandarin studies report formant and vowel-space changes
+\cite{mou2018mandarin,ge2021vowels}, while the Mandarin Dysarthria Speech Corpus
+(MDSC) supports learned representations \cite{gao2024mdsc}. Evidence from controlled vowels,
+corpus-level labels, and supervised recordings nonetheless requires validation
+before transfer to unsupervised home audio and acute screening.
+
+\subsection{Quality-Aware Multimodal Edge Screening}
+
+Multimodal fusion broadens symptom coverage: DeepStroke combined face and
+speech, while asymmetric attention reduced noisy-audio influence
+\cite{cai2022deepstroke,ou2025multimodal}. For unsupervised screening, however,
+normal observations, poor signal, incomplete tasks, and missing modalities must
+remain distinguishable. Edge processing reduces network dependence and raw-data
+transmission but adds latency, memory, power, and thermal constraints;
+RhythmEdge demonstrates relevant Raspberry Pi feasibility and profiling
+\cite{hasan2022rhythmedge}. Few stroke-screening designs jointly address these
+quality, missingness, and scheduling requirements.
+
+\paragraph{Research gap.}
+Prior work establishes component feasibility, but integration is incomplete. PiBE-FAST
+targets a complete edge-based BE-FAST workflow, including balance and ocular
+tasks, valid-negative versus insufficient-result handling, modality-specific
+quality gates, explicit missingness, stage-aware local inference, and separation
+of research fusion from user-facing urgency rules.

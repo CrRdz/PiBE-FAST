@@ -34,21 +34,6 @@ class BefastConfig:
     arm_drift_difference_threshold: float = 0.22
     # 手腕相对肩膀低得过多，说明受试者没有完成抬臂动作。
     arm_max_initial_wrist_below_shoulder: float = 0.85
-    # 学习模型需匹配本协议的数据才可启用；默认使用可解释的左右时序指标。
-    arm_model_enabled: bool = False
-    arm_model_path: str = "models/arm_screen_v2.json"
-    # Toronto Rehab 代偿模型仅输出影子概率，不参与用户可见判定。
-    arm_compensation_shadow_enabled: bool = True
-    arm_compensation_shadow_model_dir: str = "models/research"
-    arm_compensation_shadow_window_frames: int = 30
-    # IntelliRehabDS 正确/错误模型也仅作影子观察，等待 Web 双臂协议验证。
-    arm_action_quality_shadow_enabled: bool = True
-    arm_action_quality_shadow_model_path: str = (
-        "models/research/intellirehab_action_quality_v1.json"
-    )
-    # Toronto 训练窗口中活动侧手腕二维波动的约第 5 百分位；只验证动作完成度。
-    arm_reach_min_wrist_motion_std: float = 0.02
-
     # MediaPipe Face Landmarker 以低于摄像头帧率的频率运行，减少树莓派负载。
     face_inference_fps: float = 5.0
     # 双眼外眼角距离过小时，面部像素不足，E/F 检查按质量不足处理。
@@ -58,6 +43,9 @@ class BefastConfig:
     # 只分析随后保持注视的低帧率终点，不把它描述成扫视速度/潜伏期测量。
     eye_target_seconds: float = 2.0
     eye_settle_seconds: float = 0.5
+    # 下列固定质量门槛缺少目标设备健康受试者数据，默认不参与有效性判定；
+    # 保留配置只用于预先声明的离线消融和旧数据复现。
+    eye_enable_unvalidated_quality_gates: bool = False
     eye_min_samples_per_trial: int = 5
     eye_min_valid_fraction_per_trial: float = 0.60
     # 实际视频帧尺寸可用时，同时要求每只眼有足够像素；7.5% 脸宽规则不再
@@ -70,8 +58,14 @@ class BefastConfig:
     eye_max_repeat_relative_error: float = 1.00
     eye_min_head_pose_fraction: float = 0.80
     eye_max_head_rotation_degrees: float = 8.0
-    # 3.5 表示可见终点位移需明显高于同一试次的稳健噪声。下列相对差阈值
-    # 仍是待临床标定的研究参数，但不再依赖眼裂绝对比例或拍摄距离。
+    # MediaPipe 可输出亚像素坐标，但零 MAD 不等于零测量误差。每段终点噪声
+    # 至少按 0.5 个眼部像素换算，再与另一段按独立误差平方和合并。
+    eye_landmark_noise_floor_pixels: float = 0.5
+    # 摄像头坐标镜像必须由采集配置明确给出，不能从受试者是否正确跟随目标反推。
+    eye_camera_mirrored: bool = False
+    # 未经目标设备健康受试者数据估计前，候选阈值只供离线消融，默认不参与
+    # 摄像头 E 阳性或阴性判定。连续指标仍写入报告，供技术验证预先估计阈值。
+    eye_enable_unvalidated_warning_thresholds: bool = False
     eye_response_snr_threshold: float = 3.5
     eye_directional_asymmetry_threshold: float = 0.45
     eye_conjugacy_relative_error_threshold: float = 0.35
@@ -104,8 +98,9 @@ class BefastConfig:
     balance_min_valid_fraction: float = 0.75
     # 五个重复窗口取自静态姿势测量通常需要 3～5 次重复的可靠性建议。
     balance_baseline_windows: int = 5
-    # 3.5 是 median/MAD 稳健异常分数的常用统计界值；它只表示相对个人
-    # 基线的显著变化，不是卒中诊断阈值。
+    # 3.5 源于 Iglewicz--Hoaglin 修正 Z 分数的潜在离群值建议。本实现还取
+    # MAD 与 IQR 尺度中的较大值，因此不比原始 MAD 规则更敏感。横向摆动
+    # 仅在速度和 R90 同时越界时触发；该值是工程起点，不是卒中诊断阈值。
     balance_robust_z_threshold: float = 3.5
 
     # Feature-level BE-FAST fusion remains a research-only observation layer.
@@ -116,3 +111,7 @@ class BefastConfig:
     fusion_speech_pause_fraction_reference: float = 0.55
     fusion_speech_min_characters_per_second: float = 1.0
     fusion_speech_max_characters_per_second: float = 8.0
+    # Frozen threshold exported by models/mdsc_dysarthria_v1.json. Individual
+    # S reports retain their model-specific threshold; this is the fallback for
+    # older reports that include the probability but not threshold metadata.
+    fusion_speech_mdsc_probability_reference: float = 0.8078592037937518

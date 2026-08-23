@@ -1,12 +1,13 @@
-# AISHELL-6B/MDSC 构音障碍语音表征训练与 M5 验证
+# AISHELL-6B/MDSC 构音障碍语音筛查训练与 M5 验证
 
 更新日期：2026-08-17
 
 ## 定位
 
 这条管线训练普通话构音障碍语音表征与二分类识别器。正类是 MDSC 的
-`Uncontrol/Dysarthria`，负类是 `Control`。它不学习急性卒中标签，运行时只能输出
-`shadow_dysarthria_*`，不会改变现有 BE-FAST S 项的状态或紧急决策。
+`Uncontrol/Dysarthria`，负类是 `Control`。它不学习急性卒中标签，但运行时会直接
+参与 BE-FAST S：合格的固定句概率达到冻结阈值时将 S 判为阳性；合格的长期语音窗口
+达到阈值时立即建议固定句确认。它仍不是急性卒中诊断器。
 
 AISHELL 官方页说明 MDSC 包含 18,630 条、17 小时录音：21 名构音障碍说话人和
 25 名对照说话人，16 kHz、安静室内、手机麦克风约 20 cm。许可为 CC BY-NC 4.0。
@@ -56,7 +57,7 @@ lrdwws/
 `training/reports/mdsc_dysarthria_v1.json`。
 当前产物为 `models/mdsc_dysarthria_v1.json`，已通过运行时加载和真实 WAV 推理检查。
 开发机 100 个测试窗口的推理中位时间为 0.96 ms、p95 为 1.33 ms；这不是
-树莓派或目标麦克风的 M5 性能数据。当次仓库验证为 128 项测试全部通过。
+树莓派或目标麦克风的 M5 性能数据。当次仓库验证为 122 项测试全部通过。
 
 ## 1. 数据审计与固定切分
 
@@ -109,7 +110,7 @@ python training/speech/train_mdsc.py \
 不得根据持出测试结果调整阈值。若要调整特征或超参数，应产生新模型版本，并保留新的
 最终测试说话人。
 
-## 4. 运行时 shadow 接入
+## 4. 运行时 S 判定接入
 
 服务默认查找：
 
@@ -126,13 +127,15 @@ python -m app.main \
 
 模型存在时，固定句结果增加：
 
-- `metrics.shadow_dysarthria_probability`
-- `metrics.shadow_dysarthria_threshold`
-- `details.shadow_dysarthria_model`
-- `details.shadow_dysarthria_prediction`
-- `details.shadow_medical_role=dysarthria_representation_not_acute_stroke`
+- `metrics.mdsc_dysarthria_probability`
+- `metrics.mdsc_dysarthria_threshold`
+- `details.mdsc_dysarthria_model`
+- `details.mdsc_dysarthria_prediction`
+- `details.mdsc_medical_role=dysarthria_speech_screening_component`
 
-模型缺失、格式无效或推理失败时，现有 Whisper、质量门控和规则结果保持不变。
+合格固定句的 MDSC 概率达到阈值时，报告状态为 `positive`，原因为
+`mdsc_dysarthria_detected`。模型缺失、格式无效或推理失败时，Whisper、质量门控和
+其他 S 规则仍可独立工作；音质门控失败时不运行 MDSC。
 
 启动后可检查模型状态：
 
@@ -141,10 +144,11 @@ curl -s http://localhost:8080/api/speech/status | python3 -m json.tool
 ```
 
 正常时 `representation_ready=true`、`representation_model=mdsc-dysarthria-v1`、
-`representation_mode=shadow_only`。固定句完成后，概率和阈值会出现在 S 项报告的
-原始数据区。当前模型只应用于固定句，不参与长期自然语音基线的异常投票。
+`representation_mode=direct_speech_decision`。固定句完成后，概率和阈值会出现在
+S 项报告的原始数据区。长期自然语音窗口也运行同一模型：达到阈值时直接建议固定句
+确认，且不把该异常窗口写入个人基线；未达到阈值时仍执行原有多域、多窗口变化规则。
 
-## 5. M5 目标麦克风影子验证
+## 5. M5 目标麦克风前瞻性验证
 
 在树莓派运行，不保存临时原始音频：
 
@@ -182,7 +186,7 @@ M5 工程完成条件：
 - 麦克风模式日志中 `raw_audio_retained=false`；
 - 同一说话人同一环境的概率分布和阳性比例可复查；
 - 至少覆盖安静、距离变化和家庭噪声；
-- 模型仍为 shadow-only，阈值未根据影子参与者标签反复调节。
+- 冻结阈值不根据前瞻性参与者标签反复调节，并单独报告误触发和漏检。
 
 只有完成预先冻结、具有独立参与者的前瞻性方案，才能报告目标麦克风性能。项目自带的
 合成冒烟数据只能证明代码可运行，不能作为模型准确率。

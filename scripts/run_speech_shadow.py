@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""M5 target-device shadow logger; it stores predictions, never raw audio."""
+"""M5 target-device prospective logger; it stores predictions, never raw audio."""
 
 from __future__ import annotations
 

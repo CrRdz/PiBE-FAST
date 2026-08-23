@@ -50,8 +50,17 @@ def face_guidance(
         metrics = (
             eye_frame_metrics(
                 observation,
-                config.face_min_interocular_width,
-                config.eye_min_eye_width_pixels,
+                (
+                    config.face_min_interocular_width
+                    if config.eye_enable_unvalidated_quality_gates
+                    else 0.0
+                ),
+                (
+                    config.eye_min_eye_width_pixels
+                    if config.eye_enable_unvalidated_quality_gates
+                    else 0.0
+                ),
+                config.eye_enable_unvalidated_quality_gates,
             )
             if observation is not None
             else None
@@ -116,5 +125,9 @@ def pose_guidance(
         ready,
         "standing_pose_ready" if ready else "show_full_body_and_stand_safely",
         ts,
-        metrics,
+        (
+            {"trunk_roll_degrees": metrics["trunk_roll_degrees"]}
+            if metrics is not None
+            else None
+        ),
     )

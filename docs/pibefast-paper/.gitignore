@@ -1,0 +1,22 @@
+# Default latexmk output directory.
+/build/
+
+# Fallback ignores if a TeX engine is run directly in the paper root.
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.dvi
+*.fdb_latexmk
+*.fls
+*.log
+*.nav
+*.out
+*.run.xml
+*.snm
+*.synctex.gz
+*.toc
+*.vrb
+*.xdv
+*-blx.bib
+/main.pdf

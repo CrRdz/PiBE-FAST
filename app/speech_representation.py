@@ -1,8 +1,8 @@
-"""Lightweight Mandarin dysarthria representation and shadow inference.
+"""Lightweight Mandarin dysarthria representation and screening inference.
 
 The model trained by ``training/speech/train_mdsc.py`` distinguishes speech
-from MDSC Control and Dysarthria speakers.  It is deliberately a research-only
-speech representation: it neither detects acute change nor diagnoses stroke.
+from MDSC Control and Dysarthria speakers. Its output can contribute to the
+Speech screening status, but it is not an acute-stroke classifier or diagnosis.
 """
 
 from __future__ import annotations
@@ -67,7 +67,7 @@ class DysarthriaPrediction:
             "predicted_dysarthria": self.predicted_dysarthria,
             "model_version": self.model_version,
             "representation_version": self.representation_version,
-            "medical_role": "dysarthria_representation_shadow_only",
+            "medical_role": "dysarthria_speech_screening_component",
             "clinical_validation": False,
         }
         if include_embedding:

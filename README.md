@@ -30,9 +30,8 @@ PiBE-FAST 是面向树莓派边缘部署的 BE-FAST 急性脑卒中早期筛查�
 - 多帧时序运动特征；
 - 本人或照护者提供的言语、平衡和发病时间信息。
 
-树莓派负责模型推理、规则计算、日志和 Web 服务；默认使用与服务主机相连的
-CSI/USB 摄像头，也可由打开页面的手机或电脑浏览器提供前置摄像头帧。
-推理仍在运行 Python 服务的设备上完成，不上传到第三方云服务。
+系统采用全本地分层部署，具体的树莓派常驻层与电脑引导层见第 3 节。所有推理都在
+对应的本地主机完成，不上传到第三方云服务；仓库同时保留单主机模式用于开发和演示。
 
 本项目不是医疗器械，不能诊断或排除脑卒中。当前阈值是没有可靠临床数据时的
 工程初值，不是临床决策阈值，也不是卒中概率。
@@ -62,13 +61,15 @@ A 需要双臂平举，B 需要在安全条件下站立。标准化动作让不�
 
 树莓派是**始终可用的本地边缘主机**，而不是电脑的摄像头配件。它负责：
 
-- 连接 CSI/USB 摄像头，并持续提供本地预览；
-- 待机时以默认约 2 FPS 低频运行 MoveNet，被动观察疑似跌倒；
-- 根据当前步骤在 MoveNet 与 MediaPipe 之间切换，避免两套模型同时满负荷运行；
-- 执行 BE-FAST 时序特征计算、质量门控和保守决策；
-- 提供 Flask Web 页面，手机或电脑只是局域网内的显示与控制终端；
+- 访问 IP Camera，并以默认约 2 FPS 低频运行 MoveNet，执行 B 的长期姿态观察；
+- 通过直连麦克风采集 S 的滚动自然语音窗口和固定句确认；
+- 执行 B/S 时序特征、质量门控和保守触发规则；
+- 提供 Flask Web 页面、日志和本地历史记录；
 - 断网时继续本地筛查；按配置记录 JSONL 和紧急事件短片段；
-- 后续可连接实体求助按钮、蜂鸣器、麦克风或可穿戴设备。
+- 后续可连接实体求助按钮、蜂鸣器或可穿戴设备。
+
+本地电脑负责 E/F/A 的主动视觉筛查：用户发起检测后才打开 Web Camera，并按页面提示
+完成眼动、微笑或双臂动作；对应的 MediaPipe 或 MoveNet 推理在电脑本地完成。
 
 当前被动层实现了两类只用于触发后续确认的信号：
 
@@ -83,14 +84,16 @@ A 需要双臂平举，B 需要在安全条件下站立。标准化动作让不�
 见 [`docs/speech-evidence.md`](docs/speech-evidence.md)。
 
 AISHELL-6B/MDSC 普通话构音障碍表征的训练、说话人无泄漏评估、轻量 JSON 模型、
-shadow-only 运行时接入与 M5 树莓派麦克风验证见
+直接 S 判定接入与 M5 树莓派麦克风验证见
 [`docs/mdsc-speech-training.md`](docs/mdsc-speech-training.md)。
 官方 18,630 条录音和 46 名说话人的 v1 训练已完成；独立测试样本级
 ROC-AUC 为 `0.9573`、敏感度为 `0.6444`、特异度为 `0.9926`。独立测试只有
 6 名说话人，因此仅可作内部研究基线，不是临床性能。目标麦克风 M5 前瞻性
-影子验证仍待完成。
+前瞻性目标麦克风验证仍待完成。
 
-实际推理调度如下：
+目标分层部署中，树莓派只长期运行节流后的 B 姿态与 S 音频变化监测，本地电脑只在用户
+启动 E/F/A 后打开 Web Camera 和对应模型。仓库同时保留单主机演示模式，其实际推理
+调度如下：
 
 | 运行状态 | 摄像头预览 | MoveNet | MediaPipe Face | 医学含义 |
 |---|---:|---:|---:|---|
@@ -153,24 +156,22 @@ S（言语）会采集约 7 秒固定提示句，在树莓派上完成音频质�
 ## 3. 系统架构
 
 ```text
-CSI / USB 摄像头 ────┐
-浏览器前置摄像头 ─────┴─▶ 选定的视频输入 ─┐
-USB / I²S 麦克风 ────────────────────────┴─▶
-Raspberry Pi
-  ├─ Picamera2 / OpenCV：采集视频
-  ├─ ALSA arecord：采集 S 的 16 kHz 单声道音频
-  ├─ whisper.cpp：本地离线转写
-  ├─ MediaPipe Face Landmarker：E、F
-  ├─ MoveNet Lightning：A、B
-  ├─ BE-FAST 时序特征与保守决策
-  ├─ JSONL 研究日志 / 可选事件片段
-  └─ Flask Web 服务
-        │ 局域网 / SSH 端口转发
-        ▼
-手机或电脑浏览器：预览、引导、操作和结果
+IP Camera ───────────────▶ Raspberry Pi
+树莓派直连麦克风 ────────────┤
+                             ├─ MoveNet Lightning：B，约 2 FPS 长期监测
+                             ├─ ALSA / 本地音频特征：S 长期监测
+                             ├─ whisper.cpp：S 固定句短时确认
+                             └─ Flask / 日志 / 本地历史
+                                      │ 局域网
+                                      ▼
+本地电脑 Web Camera ───────▶ E / F / A 引导式主动筛查
+                             ├─ MediaPipe Face Landmarker：E、F
+                             ├─ MoveNet Lightning：A
+                             └─ 页面动作引导、质量门控和单项结果
 ```
 
-为控制树莓派 CPU 占用和温度，系统采用阶段调度：
+目标分层部署通过主机分工控制树莓派 CPU 占用和温度：树莓派长期节流运行 B，并以滚动
+短窗口处理 S；本地电脑只在主动任务时运行 E/F/A。单主机演示模式继续采用以下阶段调度：
 
 - 待机阶段仅以默认约 2 FPS 运行 MoveNet，Face Landmarker 暂停；
 - E/F 阶段仅以默认 5 FPS 运行 Face Landmarker，暂停 MoveNet；
@@ -203,8 +204,8 @@ Raspberry Pi
    ```
 
 4. 预热 1.5 秒后采集 30 秒有效安静站立；默认积累 5 个合格窗口形成个人基线。
-5. 窗口级计算躯干方向中位数、横向摆动 RMS、第 5–95 百分位范围、路径长度及
-   平均速度。
+5. 窗口级只保留躯干方向中位数、横向摆动平均速度和第 5–95 百分位范围
+   $R_{90}$。
 6. 后续窗口用 median/MAD（MAD 退化时同时参考 IQR）与个人基线比较。
 
 **判定规则：**
@@ -212,8 +213,9 @@ Raspberry Pi
 - 至少 30 个有效样本且有效帧比例不低于 75%；
 - 校准完成前返回 `insufficient`，不伪造自动正常结论；
 - 自动判定仅比较当前窗口与个人基线，不采用固定肩宽比例作为异常阈值；
-- 躯干方向变化或横向摆动平均速度增加达到 modified Z-score `3.5` 时，仅触发
-  后续主动筛查；`3.5` 是稳健统计过程界值，不是卒中临床 cutoff；
+- 躯干方向变化达到 modified Z-score `3.5`，或横向摆动平均速度和 $R_{90}$
+  同时达到 `3.5` 时，仅触发后续主动筛查；`3.5` 是稳健统计过程界值，不是
+  卒中临床 cutoff；
 - 若个人基线离散度为零，变化分数不可估计时返回 `insufficient`，不加入任意噪声下限；
 - 全身、脚踝或稳定站姿持续不可见：`insufficient`；
 - 本人/照护者报告突然失衡时，无需冒险站立，B 可直接记为阳性。
@@ -225,9 +227,6 @@ Raspberry Pi
 辅助器具、骨科疾病和既往残疾都会影响结果。“与个人基线一致”不能排除卒中。
 
 ### E — Eyes / 眼睛
-
-**摄像头来源：** 可使用服务主机的本地摄像头，也可使用当前浏览器设备的
-前置摄像头。两者都会进入相同的 E/F 特征识别流程。
 
 **目标：** 先记录突发视觉症状，再辅助检查静息共轭偏向、双眼共同的方向性终点
 减弱和明显不共轭响应。它不是视力、视野或高速扫视检查。
@@ -243,39 +242,33 @@ Raspberry Pi
 
 1. 先询问突然视力下降、黑蒙、视野缺损、复视或持续凝视偏向；报告新发异常时直接
    形成 E 警示，摄像头结果不能覆盖。
-2. 未报告症状时，填写屏幕物理宽度和观看距离，页面把左右目标近似放在中心
-   `±15°`，并将视口限幅后的实际角度回传到报告。
+2. 未报告症状时，填写屏幕物理宽度和观看距离；页面按配置的请求刺激角放置左右目标，
+   并将视口限幅后的实际角度回传到报告。请求角属于采集设计变量，不是临床界值。
 3. 先采集一次无目标的自然直视，再按“中—左—中—右—中—右—中—左—中—
-   左—中—右”呈现目标，左右各重复三次；每阶段 2 秒，切换后的前 0.5 秒不进入
-   终点统计。
+   左—中—右”呈现目标，左右各重复三次。三次是取中位数并容许一次非典型响应的最小
+   结构；阶段时间与切换排除时间按实际配置记录，不解释为生理界值。
 4. 使用双眼外眼角连线校正画面内滚转，并检查每只眼实际像素宽度。
-5. 每只眼的虹膜位置转换为眼裂内相对位置：
+5. 每只眼的虹膜位置转换为眼裂内相对位置；该值不是经过校准的真实视线角：
 
    ```text
-   gaze_x = (iris_x - eye_corner_min_x) / eye_width
+   iris_x_normalized = (iris_x - eye_corner_min_x) / eye_width
    ```
 
-6. 每个侧方终点只与紧邻在前的中心终点比较，位移需同时满足正确方向和相对
-   MAD 噪声的 SNR 门槛。
-7. 三轮取中位数并允许一个离群试次；至少 2/3 方向和 SNR 合格后，再检查静息
-   共轭偏向、双眼共同方向减弱和归一化终点不共轭。
+6. 摄像头原始坐标是否镜像由采集配置固定，不从受试者表现反推。每个侧方终点只与
+   紧邻在前的中心终点比较。
+7. 三轮取中位数并允许一个非典型试次；记录静息偏向代理、双眼方向响应差和双眼终点差
+   等连续指标，待目标设备技术实验与临床研究标定。
 
-**可靠性门控：**
-
-- 每个重复试次至少 5 个有效终点样本，试次有效率至少 60%；
-- 眼裂宽度至少 24 像素，稳定注视阶段虹膜位置 MAD 不高于 `0.08`；
-- 同方向三次响应取中位数，最接近中位数的另一轮相对差不高于 `1.00`；
-- 至少 80% 有效帧带有三维头姿，任一头姿角一轮内变化不超过 `8°`；
-- 任一质量项失败均为 `insufficient`，不会被当作正常；
-- 可靠性门控只采用上述采样、眼裂宽度、MAD、重复性和头姿质量条件。
-
-**研究阈值：** 可见响应使用同轮 `MAD` 形成 SNR。静息共轭偏向的 `12°` 候选值
-借鉴影像测角研究的高特异度区间，但尚未验证可迁移到本摄像头；方向减弱 `45%` 和
-归一化不共轭 `35%` 仍是待临床标定参数。左右眼总范围差仅用于质量分析，不单独触发阳性。约
-5 FPS 只分析稳定终点，不输出眼震、扫视潜伏期、速度或平滑追踪增益。
+**当前判定边界：** 默认版本只记录有效帧比例、眼部像素宽度、终点 MAD、三次离散度、
+头姿变化和三个连续眼动表型，不使用未经目标设备数据支持的固定质量或异常阈值。因此
+摄像头检查不输出自动阳性/阴性；只有突然视觉症状直接形成 E 警示。固定门槛仅保留在
+显式开启的离线旧版复现模式。低帧率采集只分析稳定终点，不输出眼震、扫视潜伏期、
+速度或平滑追踪增益。
 
 参数、论文映射和验证要求见
 [E 眼动辅助检查：证据、实现与限制](docs/eyes-evidence.md)。
+健康受试者的固定条件矩阵、失败/重试统计、ICC、Bland--Altman 和单次/三次消融见
+[Eyes 健康受试者技术验证方案](docs/eyes-healthy-experiment.md)。
 
 **关键医学边界：** E 不能测量视力、视野、眼底，也不能排除视物模糊、复视、黑蒙
 或视野缺损。本人报告突然视觉异常时，必须直接按急症处理。
@@ -324,12 +317,10 @@ Raspberry Pi
 3. 记录开始后先确认双臂自然下垂，再在最多 8 秒内抬至肩高。
 4. 双臂有效保持 5 秒；只有该阶段样本进入左右高度和下落计算。
 5. 保持结束后必须放下双臂，完整动作才可形成报告；任一步失败都会清空本次尝试并提示重做。
-6. IntelliRehabDS 动作质量模型和 Toronto 三类代偿模型只输出 `shadow_*` 研究指标，
-   不影响用户可见的 A 判定。
+6. 仅使用动作完整性、双臂高度差和单侧下落差形成 A 结果，不加载额外的手臂分类模型。
 
-**限制：** 当前完成门控与左右差阈值仍需在目标 Web 摄像头上验证。IntelliRehabDS
-使用 Kinect 且以单侧康复动作为主，Toronto 使用康复机器人；二者都不能替代本项目
-协议的临床标注，也不能用于排除或确诊卒中。
+**限制：** 当前完成门控与左右差阈值仍需在目标 Web 摄像头和匹配人群中验证，
+不能用于排除或确诊卒中。
 
 ### S — Speech / 言语
 
@@ -368,9 +359,9 @@ ALSA 麦克风采集约 7 秒、16 kHz、16-bit、单声道 WAV，并用本地 `
 ASR 差异直接解释为脑卒中。
 
 完成固定句后，`models/mdsc_dysarthria_v1.json` 还会以共享 90 维 log-Mel
-表征输出 `shadow_dysarthria_probability` 和阈值 `0.807859`。该概率表示与
-MDSC 慢性构音障碍表型的相似度，只在 S 报告原始数据中展示；它不改变
-S 结果、融合决策或紧急分级，也不用于长期自然语音异常投票。
+表征输出 `mdsc_dysarthria_probability` 和冻结阈值 `0.807859`。合格录音达到阈值时
+直接把 S 判为阳性；合格的长期自然语音窗口达到阈值时立即建议固定句确认，并且不写入
+个人基线。该模型识别的是 MDSC 构音障碍表型，不是急性卒中诊断器。
 
 ### T — Time / 时间
 
@@ -463,8 +454,8 @@ models/ggml-base.bin
 models/mdsc_dysarthria_v1.json
 ```
 
-`mdsc_dysarthria_v1.json` 是固定句 S 的可选 shadow-only 表征模型；缺失或无效时
-不影响 Whisper、质量门控和原有 S 判定。
+`mdsc_dysarthria_v1.json` 是固定句与长期语音共用的可选 S 筛查模型；缺失或无效时
+Whisper、质量门控、其他 S 规则和个人基线变化判断仍可独立工作。
 
 下载官方 Face Landmarker 模型：
 
@@ -530,7 +521,7 @@ python -m app.main \
 - `--scheduled-screen-interval-hours 12`：每 12 小时打开一次主动筛查提醒；默认 `0` 关闭。
 - `--speech-device plughw:CARD,DEV`：覆盖 ALSA 录音设备；用 `arecord -L` 查询；
 - `--speech-capture-seconds 7`：S 的单次固定录音时长；
-- `--speech-representation-model`：MDSC 轻量 JSON 模型路径，只输出 shadow 指标；
+- `--speech-representation-model`：MDSC 轻量 JSON 模型路径，达到冻结阈值时参与 S 判定；
 - `--disable-speech`：硬件尚未接入时关闭 S 后端；页面调用会返回不可用。
 
 只测试本地长期语音监测、不启动摄像头和姿态模型：
@@ -637,9 +628,9 @@ POST /api/speech/passive/reset-baseline
 `medical_role=trigger_only_not_stroke_diagnosis`。`passive_speech` 字段显示基线进度、
 最近窗口、多窗口异常票数以及是否建议执行固定句确认。
 `/api/speech/status` 中的 `representation_ready`、`representation_model` 和
-`representation_mode` 可用于确认 MDSC 模型已以 `shadow_only` 加载。固定句完成后，
-S 项报告的 `metrics` 包含 `shadow_dysarthria_probability` 和
-`shadow_dysarthria_threshold`。
+`representation_mode` 可用于确认 MDSC 模型已以 `direct_speech_decision` 加载。固定句
+完成后，S 项报告的 `metrics` 包含 `mdsc_dysarthria_probability` 和
+`mdsc_dysarthria_threshold`。
 
 历史接口只保存状态为 `positive` 的单项报告。元数据持久化在
 `data/history/history.sqlite3`，对应 JPEG 帧保存在 `data/history/frames/`；S 的
@@ -732,10 +723,10 @@ BE-FAST screening of acute stroke. It fuses:
 - temporal motion features across multiple frames; and
 - structured observations about speech, balance, and symptom onset.
 
-The Raspberry Pi performs model inference, feature computation, logging, and Web
-serving. It uses an attached CSI/USB camera by default, or it can receive front-
-camera frames from the phone or computer that opened the page. Inference still
-runs on the Python-service host and no video is sent to a third-party cloud.
+The system uses a fully local split deployment; Section 3 describes the always-on
+Raspberry Pi tier and guided computer tier. All inference remains on the
+corresponding local host, nothing is uploaded to a third-party cloud, and a
+single-host mode remains available for development and demos.
 
 This project is not a medical device and cannot diagnose or rule out stroke.
 All current thresholds are unvalidated engineering defaults, not clinical
@@ -769,16 +760,19 @@ camera or perform any action.
 The Raspberry Pi is the **always-on local edge host**, not a camera accessory for
 a desktop computer. It:
 
-- connects to a CSI/USB camera and serves a local live preview;
-- runs MoveNet at about 2 FPS by default in standby to observe possible falls;
-- switches between MoveNet and MediaPipe by stage instead of saturating the CPU
-  with both models;
-- computes temporal features, quality gates, and conservative BE-FAST decisions;
-- hosts the Flask interface while a phone or computer acts only as a LAN client;
+- accesses an IP camera and runs MoveNet at about 2 FPS for long-running B pose
+  observation;
+- captures rolling natural-speech windows and guided S confirmation through an
+  attached microphone;
+- computes B/S temporal features, quality gates, and conservative trigger rules;
+- hosts the Flask interface, logs, and local history;
 - continues local screening without Internet access and optionally records JSONL
   data or short emergency event clips; and
-- captures fixed-duration S audio from an attached ALSA microphone and runs local
-  offline transcription; a physical help button, buzzer, or wearable can be added later.
+- can later integrate a physical help button, buzzer, or wearable.
+
+The local computer owns active E/F/A vision. It opens its webcam only after the
+user starts a screen, guides the gaze, smile, or bilateral-arm action, and runs
+the corresponding MediaPipe or MoveNet inference locally.
 
 The passive layer has two trigger-only signals:
 
@@ -799,7 +793,7 @@ dysarthria or stroke result**. See
 engineering assumptions, and required clinical validation.
 
 The AISHELL-6B/MDSC Mandarin dysarthria representation pipeline, speaker-safe
-evaluation, compact JSON model, shadow-only integration, and M5 microphone
+evaluation, compact JSON model, direct S-decision integration, and M5 microphone
 protocol are documented in
 [`docs/mdsc-speech-training.md`](docs/mdsc-speech-training.md). Training of v1
 is complete on all 18,630 official recordings from 46 speakers. Held-out
@@ -808,7 +802,10 @@ sample-level ROC-AUC is `0.9573`, sensitivity is `0.6444`, and specificity is
 research results, not clinical performance. Prospective M5 target-microphone
 validation remains outstanding.
 
-Actual inference scheduling:
+In the target split deployment, the Pi keeps only throttled B pose and S audio-
+change monitoring active, while the local computer opens its webcam and model
+only for user-initiated E/F/A tasks. The repository also retains a single-host
+demo mode, whose actual scheduling is:
 
 | State | Camera preview | MoveNet | MediaPipe Face | Medical role |
 |---|---:|---:|---:|---|
@@ -885,24 +882,23 @@ eye had a smaller horizontal range” instead of showing only “abnormal.”
 ## 3. Architecture
 
 ```text
-CSI / USB camera ──────┐
-browser front camera ───┴─▶ selected video input ─┐
-USB / I²S microphone ─────────────────────────────┴─▶
-Raspberry Pi
-  ├─ Picamera2 / OpenCV video capture
-  ├─ ALSA arecord speech capture
-  ├─ local whisper.cpp transcription
-  ├─ MediaPipe Face Landmarker for E and F
-  ├─ MoveNet Lightning for A and B
-  ├─ temporal BE-FAST features and conservative decisions
-  ├─ JSONL research logs / optional event clips
-  └─ Flask Web service
-        │ LAN or SSH tunnel
-        ▼
-Phone or computer browser: preview, guidance, controls, and results
+IP camera ──────────────▶ Raspberry Pi
+Pi-attached microphone ─────┤
+                            ├─ MoveNet Lightning: B at about 2 FPS
+                            ├─ ALSA / local audio features: long-running S
+                            ├─ whisper.cpp: short guided S confirmation
+                            └─ Flask / logs / local history
+                                      │ LAN
+                                      ▼
+Local-computer webcam ───▶ guided active E / F / A
+                           ├─ MediaPipe Face Landmarker: E and F
+                           ├─ MoveNet Lightning: A
+                           └─ action guidance, quality gates, and item results
 ```
 
-To limit Raspberry Pi CPU load and thermal pressure, inference is stage-aware:
+The split profile limits Raspberry Pi CPU load and thermal pressure by keeping B
+throttled and processing S in rolling windows; E/F/A run only during active tasks
+on the local computer. The single-host demo retains this stage-aware schedule:
 
 - standby runs MoveNet at about 2 FPS by default and pauses Face Landmarker;
 - E/F runs Face Landmarker at 5 FPS by default and pauses MoveNet;
@@ -940,8 +936,8 @@ quality.
 
 4. After a 1.5-second warm-up, collect 30 seconds of valid quiet standing. Five
    qualified windows form the default personal baseline.
-5. Summarize median trunk orientation, mediolateral RMS, 5th–95th percentile
-   range, path length, and mean velocity.
+5. Retain only median trunk orientation, mediolateral mean velocity, and the
+   5th–95th percentile range $R_{90}$ as decision-related summaries.
 6. Compare later windows with the personal median/MAD profile, using IQR when MAD
    degenerates.
 
@@ -949,9 +945,10 @@ quality.
 returns `insufficient` rather than a false normal result. Automatic decisions
 compare the current window only with the personal baseline.
 Fixed shoulder-width ratios are not used as abnormality thresholds. A
-trunk-orientation change or increased mediolateral mean velocity at
-modified Z-score `3.5` triggers active follow-up only; `3.5` is a robust process
-monitoring boundary, not a clinical stroke cutoff. If personal-baseline dispersion
+A trunk-orientation change at modified Z-score `3.5`, or simultaneous increases
+of mediolateral mean velocity and $R_{90}$ to `3.5`, triggers active follow-up
+only; `3.5` is a robust process-monitoring boundary, not a clinical stroke
+cutoff. If personal-baseline dispersion
 is zero, an unscorable change returns `insufficient` instead of introducing an
 arbitrary noise floor. Missing ankles/body or an unstable pose produces
 `insufficient`. A reported sudden balance problem can mark B positive without
@@ -965,10 +962,6 @@ Camera angle, walking aids, orthopedic disease, and pre-existing disability can
 affect the result. Agreement with the personal baseline cannot rule out stroke.
 
 ### E — Eyes
-
-**Camera source:** either the local camera attached to the service host or the
-front camera of the current browser device. Both enter the same E/F feature
-extraction path.
 
 **Purpose:** record sudden visual symptoms first, then assist with resting
 conjugate deviation, binocular directional endpoint reduction, and marked
@@ -986,46 +979,43 @@ pitch/yaw/roll quality gating.
    gaze deviation. A reported new sign produces an E warning without requiring
    camera confirmation.
 2. If none is reported, use physical screen width and viewing distance to place
-   lateral targets at approximately `±15°`, and report the angle actually achieved
-   after viewport clipping.
+   lateral targets at the configured requested angle, and report the angle actually
+   achieved after viewport clipping. The request is an acquisition variable, not a
+   clinical cutoff.
 3. Capture an untargeted natural-forward-gaze stage, then present
    center–left–center–right–center–right–center–left–center–left–center–right,
-   repeating both directions three times with alternating order. Each stage lasts
-   2 seconds; its first 0.5 seconds is excluded from endpoint analysis.
+   repeating both directions three times with alternating order. Three is the
+   minimum count that permits a median while retaining one atypical response;
+   stage and exclusion durations are logged acquisition variables.
 4. Correct in-plane roll using the outer-eye line and check actual eye-region
    pixel width.
-5. Represent each iris within its eye opening:
+5. Represent each iris within its eye opening; this is not calibrated gaze angle:
 
    ```text
-   gaze_x = (iris_x - eye_corner_min_x) / eye_width
+   iris_x_normalized = (iris_x - eye_corner_min_x) / eye_width
    ```
 
-6. Compare every lateral endpoint only with its immediately preceding center.
-   A response must have the expected direction and exceed same-trial MAD noise.
-7. Take the median of three repetitions, allow one outlier trial, and require at
-   least two of three direction/SNR checks before evaluating resting conjugate
-   deviation, binocular directional reduction, and normalized dysconjugacy.
+6. Fix the raw-camera mirroring convention in acquisition configuration rather
+   than inferring it from performance. Compare every lateral endpoint only with
+   its immediately preceding center.
+7. Take the median of three repetitions and record resting-deviation,
+   directional-response, and binocular-endpoint continuous measures for later
+   target-device and clinical calibration.
 
-**Reliability gates:** each repeated trial needs at least 5 valid endpoint samples
-and 60% validity. Eye-opening width must be at least 24 pixels and fixation MAD no
-greater than `0.08`. Three responses use their median, allow one outlier, and
-require the nearest companion's relative error to be no greater than `1.00`.
-At least 80% of valid frames must include 3D head pose. More than `8°` of
-within-run pitch, yaw, or roll change makes the result insufficient. Reliability
-gating uses only the sampling, eye-opening width, MAD, repeatability, and head-pose
-quality conditions listed above.
-
-Visible response uses same-run MAD to form an SNR. The `12°` resting-deviation
-candidate borrows a high-specificity range from imaging studies but is not
-validated for this webcam. The `45%` directional-reduction and `35%` normalized
-dysconjugacy thresholds remain research parameters. Inter-eye total-range
-difference is retained for quality analysis and does not independently trigger a
-positive result. At about 5 FPS, the
-implementation analyzes stable endpoints only and does not report nystagmus,
-saccade latency/velocity, or pursuit gain.
+**Current decision boundary:** the default build records valid-frame fraction,
+eye-region pixel width, endpoint MAD, between-repeat spread, head-pose change, and
+the three continuous eye phenotypes. It does not use unsupported fixed quality or
+abnormality cutoffs, so the camera check produces no automatic positive/negative
+decision. Sudden visual symptoms still raise E directly. Fixed candidate gates
+remain available only in an explicitly enabled legacy/offline reproduction mode.
+The low-rate acquisition analyzes stable endpoints only and does not report
+nystagmus, saccade latency/velocity, or pursuit gain.
 
 See [E eye endpoint check: evidence, implementation, and
 limitations](docs/eyes-evidence.md).
+The fixed condition matrix, failure/retry analysis, ICC, Bland--Altman analysis,
+and single-versus-three-repeat ablation are specified in
+[the healthy-participant Eyes protocol](docs/eyes-healthy-experiment.md).
 
 **Critical medical boundary:** E does not measure visual acuity, visual fields, or
 the fundus and cannot rule out blurred vision, diplopia, transient visual loss,
@@ -1118,11 +1108,12 @@ problems, pre-existing speech disorders, and ASR errors can affect the result an
 must not be interpreted directly as stroke.
 
 After a guided phrase, `models/mdsc_dysarthria_v1.json` also uses the shared
-90-dimensional log-Mel representation to report `shadow_dysarthria_probability`
-with a frozen threshold of `0.807859`. The probability describes similarity to
-the chronic dysarthria phenotype in MDSC. It is displayed only as raw S report
-data and never changes the S result, fusion decision, emergency classification,
-or passive natural-speech anomaly votes.
+90-dimensional log-Mel representation to report `mdsc_dysarthria_probability`
+with a frozen threshold of `0.807859`. A qualified recording at or above the
+threshold directly makes S positive. A qualified passive window at or above the
+threshold immediately recommends the guided check and is excluded from the
+personal baseline. The model represents an MDSC dysarthria phenotype; it is not
+an acute-stroke diagnostic model.
 
 ### T — Time
 
@@ -1214,9 +1205,9 @@ models/ggml-base.bin
 models/mdsc_dysarthria_v1.json
 ```
 
-`mdsc_dysarthria_v1.json` is an optional shadow-only representation model for
-guided S. If it is missing or invalid, Whisper, quality gates, and the existing
-S decision continue unchanged.
+`mdsc_dysarthria_v1.json` is an optional S screening model shared by guided and
+passive speech. If it is missing or invalid, Whisper, quality gates, the other
+S rules, and personal-baseline change detection continue independently.
 
 Download the official Face Landmarker model:
 
@@ -1285,7 +1276,7 @@ python -m app.main \
 - `--scheduled-screen-interval-hours 12`: open a screen every 12 hours; `0` disables it.
 - `--speech-device plughw:CARD,DEV`: override the ALSA capture device listed by `arecord -L`;
 - `--speech-capture-seconds 7`: fixed S recording duration;
-- `--speech-representation-model`: compact MDSC JSON model path; output remains shadow-only;
+- `--speech-representation-model`: compact MDSC JSON model path; the frozen threshold contributes to S;
 - `--disable-speech`: disable the S backend until microphone hardware is installed.
 
 Test only long-running local speech, without starting camera or pose models:
@@ -1399,9 +1390,9 @@ object reports inference scheduling, standby FPS, the last passive state, and
 baseline progress, the latest window, recent anomaly votes, and whether the
 guided phrase check is recommended.
 `/api/speech/status` exposes `representation_ready`, `representation_model`, and
-`representation_mode` to confirm that MDSC loaded in `shadow_only` mode. After a
-guided phrase, the S report `metrics` contains `shadow_dysarthria_probability`
-and `shadow_dysarthria_threshold`.
+`representation_mode` to confirm that MDSC loaded in `direct_speech_decision`
+mode. After a guided phrase, the S report `metrics` contains
+`mdsc_dysarthria_probability` and `mdsc_dysarthria_threshold`.
 
 The history API persists positive single-check reports only. Metadata is stored
 in `data/history/history.sqlite3`, with JPEG frames in `data/history/frames/`

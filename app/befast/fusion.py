@@ -15,7 +15,7 @@ from typing import Any, Mapping
 from .config import BefastConfig
 
 
-FEATURE_FUSION_VERSION = "befast-feature-fusion-v1"
+FEATURE_FUSION_VERSION = "befast-feature-fusion-v2"
 COMPONENTS = ("B", "E", "F", "A", "S")
 
 # The vector is deliberately fixed-length.  Missing modality values are zeroed
@@ -39,6 +39,7 @@ FUSION_FEATURE_NAMES = (
     "S_character_error_rate",
     "S_characters_per_second",
     "S_pause_fraction",
+    "S_mdsc_dysarthria_probability",
 )
 FUSION_MODEL_FEATURE_NAMES = (
     *FUSION_FEATURE_NAMES,
@@ -75,7 +76,10 @@ def build_feature_fusion(
         name: _round(value * quality[name[0]])
         for name, value in raw_features.items()
     }
-    severities = _domain_severities(raw_features, quality, available, config)
+    mdsc_threshold = _speech_mdsc_threshold(items, config)
+    severities = _domain_severities(
+        raw_features, quality, available, config, mdsc_threshold
+    )
     present_severities = [
         severity
         for component, severity in severities.items()
@@ -162,6 +166,9 @@ def _raw_features(items: Mapping[str, Mapping[str, Any]]) -> dict[str, float]:
             metrics["S"], "characters_per_second"
         ),
         "S_pause_fraction": _metric(metrics["S"], "pause_fraction"),
+        "S_mdsc_dysarthria_probability": _metric(
+            metrics["S"], "mdsc_dysarthria_probability"
+        ),
     }
 
 
@@ -170,6 +177,7 @@ def _domain_severities(
     quality: Mapping[str, float],
     available: Mapping[str, bool],
     config: BefastConfig,
+    mdsc_threshold: float,
 ) -> dict[str, float]:
     """Compute threshold-normalized research severities for explainability."""
 
@@ -178,19 +186,25 @@ def _domain_severities(
             _scale(features["B_trunk_orientation_change_score"], config.balance_robust_z_threshold),
             _scale(features["B_mediolateral_sway_change_score"], config.balance_robust_z_threshold),
         ),
-        "E": max(
-            _scale(
-                features["E_binocular_directional_asymmetry"],
-                config.eye_directional_asymmetry_threshold,
-            ),
-            _scale(
-                features["E_max_conjugacy_error"],
-                config.eye_conjugacy_relative_error_threshold,
-            ),
-            _scale(
-                features["E_conjugate_rest_gaze_deviation_degrees"],
-                config.eye_rest_gaze_deviation_degrees_threshold,
-            ),
+        # There is no threshold-normalized E severity until a prespecified
+        # target-device study has estimated and independently validated it.
+        "E": (
+            max(
+                _scale(
+                    features["E_binocular_directional_asymmetry"],
+                    config.eye_directional_asymmetry_threshold,
+                ),
+                _scale(
+                    features["E_max_conjugacy_error"],
+                    config.eye_conjugacy_relative_error_threshold,
+                ),
+                _scale(
+                    features["E_conjugate_rest_gaze_deviation_degrees"],
+                    config.eye_rest_gaze_deviation_degrees_threshold,
+                ),
+            )
+            if config.eye_enable_unvalidated_warning_thresholds
+            else 0.0
         ),
         "F": max(
             _scale(
@@ -222,6 +236,10 @@ def _domain_severities(
                 config.fusion_speech_pause_fraction_reference,
             ),
             _speech_rate_severity(features["S_characters_per_second"], config),
+            _scale(
+                features["S_mdsc_dysarthria_probability"],
+                mdsc_threshold,
+            ),
         ),
     }
     return {
@@ -245,6 +263,8 @@ def _quality(
     result_quality = _bounded(item.get("quality"), default=0.0)
     metrics = _metrics(item)
     if component == "E":
+        if not config.eye_enable_unvalidated_quality_gates:
+            return _round(result_quality)
         valid = _bounded(metrics.get("minimum_trial_valid_fraction"), result_quality)
         snr = _bounded(
             _metric(metrics, "minimum_response_snr")
@@ -287,6 +307,18 @@ def _has_measurement(item: Mapping[str, Any]) -> bool:
         str(item.get("status", "")) in {"positive", "negative"}
         and bool(_metrics(item))
         and _bounded(item.get("quality"), default=0.0) > 0.0
+    )
+
+
+def _speech_mdsc_threshold(
+    items: Mapping[str, Mapping[str, Any]], config: BefastConfig
+) -> float:
+    metrics = _metrics(items.get("S", {}))
+    value = _metric(metrics, "mdsc_dysarthria_threshold")
+    return (
+        value
+        if value > 0.0
+        else config.fusion_speech_mdsc_probability_reference
     )
 
 

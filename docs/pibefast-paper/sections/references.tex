@@ -1,0 +1,10 @@
+% The supplied archive contains IEEEtran.cls but not IEEEtran.bst. The standard
+% numeric IEEE-compatible style distributed with TeX is used here.
+% Slightly tighten only the reference-list leading so the final entry does not
+% spill by two lines onto an otherwise blank page.
+\vspace{-0.4\baselineskip}
+\bibliographystyle{ieeetr}
+\begingroup
+\renewcommand{\baselinestretch}{0.98}\selectfont
+\bibliography{\paperroot references}
+\endgroup

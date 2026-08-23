@@ -9,7 +9,7 @@ MoveNet 关键点既不是力台压力中心（COP），也不是真实全身质
 from __future__ import annotations
 
 import json
-from math import atan2, degrees, hypot, sqrt
+from math import atan2, degrees, hypot
 from pathlib import Path
 from statistics import median
 import threading
@@ -22,10 +22,11 @@ from .pose_geometry import percentile, visible_point
 from .result import MotionResult, motion_report_item, report_item
 
 
-BALANCE_EVIDENCE_VERSION = "stroke-balance-evidence-v1"
+BALANCE_EVIDENCE_VERSION = "stroke-balance-evidence-v2"
 BALANCE_BASELINE_FEATURES = (
     "median_trunk_roll_degrees",
     "ml_sway_mean_velocity",
+    "ml_sway_p95_range",
 )
 
 
@@ -79,8 +80,6 @@ def balance_frame_metrics(
         )
         / shoulder_width,
         "trunk_roll_degrees": trunk_roll_degrees,
-        "torso_lateral_offset": (shoulder_center_x - hip_center_x) / shoulder_width,
-        "shoulder_width": shoulder_width,
     }
 
 
@@ -88,17 +87,14 @@ def summarize_balance_window(
     timestamps: Sequence[float],
     frame_metrics: Sequence[Mapping[str, float]],
 ) -> dict[str, float]:
-    """把一段安静站立转换成文献常用的幅度、路径和速度类运动学代理。"""
+    """只保留倾角、横向速度与中央 90% 范围三个判定相关汇总量。"""
 
     if len(timestamps) != len(frame_metrics) or not frame_metrics:
         raise ValueError("timestamps and frame_metrics must be non-empty and aligned")
 
     offsets = [float(value["trunk_support_offset"]) for value in frame_metrics]
     rolls = [float(value["trunk_roll_degrees"]) for value in frame_metrics]
-    offset_center = median(offsets)
     roll_center = median(rolls)
-    offset_residuals = [value - offset_center for value in offsets]
-    roll_residuals = [value - roll_center for value in rolls]
     path_length = sum(
         abs(current - previous)
         for previous, current in zip(offsets, offsets[1:])
@@ -106,21 +102,11 @@ def summarize_balance_window(
     duration = max(float(timestamps[-1]) - float(timestamps[0]), 1e-9)
 
     return {
-        "median_trunk_support_offset": offset_center,
         "median_trunk_roll_degrees": roll_center,
-        "ml_sway_rms": sqrt(
-            sum(value * value for value in offset_residuals)
-            / len(offset_residuals)
-        ),
         "ml_sway_p95_range": (
             percentile(offsets, 0.95) - percentile(offsets, 0.05)
         ),
-        "ml_sway_path_length": path_length,
         "ml_sway_mean_velocity": path_length / duration,
-        "trunk_roll_rms_degrees": sqrt(
-            sum(value * value for value in roll_residuals)
-            / len(roll_residuals)
-        ),
         "window_duration_seconds": duration,
         "valid_samples": float(len(frame_metrics)),
     }
@@ -201,6 +187,7 @@ class PersonalBalanceBaseline:
             profile = self._profile_locked()
             roll_values = profile["median_trunk_roll_degrees"]
             velocity_values = profile["ml_sway_mean_velocity"]
+            range_values = profile["ml_sway_p95_range"]
             roll_delta = abs(
                 sample["median_trunk_roll_degrees"] - roll_values["median"]
             )
@@ -209,6 +196,10 @@ class PersonalBalanceBaseline:
             velocity_delta = max(
                 0.0,
                 sample["ml_sway_mean_velocity"] - velocity_values["median"],
+            )
+            range_delta = max(
+                0.0,
+                sample["ml_sway_p95_range"] - range_values["median"],
             )
             roll_score = (
                 0.0
@@ -228,6 +219,15 @@ class PersonalBalanceBaseline:
                     else None
                 )
             )
+            range_score = (
+                0.0
+                if range_delta == 0.0
+                else (
+                    range_delta / range_values["scale"]
+                    if range_values["scale"] > 0.0
+                    else None
+                )
+            )
             threshold = float(self.config.balance_robust_z_threshold)
             changed_domains = []
             unscorable_domains = []
@@ -236,8 +236,15 @@ class PersonalBalanceBaseline:
             elif roll_score >= threshold:
                 changed_domains.append("trunk_orientation")
             if velocity_score is None:
-                unscorable_domains.append("mediolateral_sway")
-            elif velocity_score >= threshold:
+                unscorable_domains.append("mediolateral_sway_velocity")
+            if range_score is None:
+                unscorable_domains.append("mediolateral_sway_range")
+            if (
+                velocity_score is not None
+                and range_score is not None
+                and velocity_score >= threshold
+                and range_score >= threshold
+            ):
                 changed_domains.append("mediolateral_sway")
             status = "changed" if changed_domains else "stable"
             if unscorable_domains and not changed_domains:
@@ -248,7 +255,8 @@ class PersonalBalanceBaseline:
                 "unscorable_domains": unscorable_domains,
                 "scores": {
                     "trunk_orientation": roll_score,
-                    "mediolateral_sway": velocity_score,
+                    "mediolateral_sway_velocity": velocity_score,
+                    "mediolateral_sway_range": range_score,
                 },
                 "baseline_windows": len(self.samples),
                 "baseline_target": target,
@@ -309,7 +317,7 @@ class PersonalBalanceBaseline:
         temporary.write_text(
             json.dumps(
                 {
-                    "schema_version": 1,
+                    "schema_version": 2,
                     "evidence_version": BALANCE_EVIDENCE_VERSION,
                     "samples": self.samples,
                 },
@@ -395,7 +403,9 @@ class BalanceScreen:
         # standing 只作为安全/质量门槛，本身不是卒中诊断信号。
         if frame_metrics is not None and pose == "standing":
             self.valid_frames += 1
-            self.live_metrics = frame_metrics
+            self.live_metrics = {
+                "trunk_roll_degrees": frame_metrics["trunk_roll_degrees"]
+            }
             self.timestamps.append(float(ts))
             self.samples.append(frame_metrics)
         return elapsed >= self.duration_seconds
@@ -437,11 +447,28 @@ class BalanceScreen:
         )
         for domain, metric_name in (
             ("trunk_orientation", "trunk_orientation_change_score"),
-            ("mediolateral_sway", "mediolateral_sway_change_score"),
+            (
+                "mediolateral_sway_velocity",
+                "mediolateral_sway_velocity_change_score",
+            ),
+            (
+                "mediolateral_sway_range",
+                "mediolateral_sway_range_change_score",
+            ),
         ):
             score = assessment["scores"].get(domain)
             if score is not None:
                 metrics[metric_name] = float(score)
+        velocity_score = assessment["scores"].get(
+            "mediolateral_sway_velocity"
+        )
+        range_score = assessment["scores"].get("mediolateral_sway_range")
+        if velocity_score is not None and range_score is not None:
+            # The combined score crosses the threshold only when both the
+            # velocity increase and the robust R90 amplitude increase do.
+            metrics["mediolateral_sway_change_score"] = float(
+                min(velocity_score, range_score)
+            )
         details = {
             "measurement": "camera_trunk_kinematic_proxy_not_cop",
             "comparison": "personal_median_mad",
@@ -486,7 +513,7 @@ class BalanceScreen:
         if "mediolateral_sway" in assessment["changed_domains"]:
             return MotionResult(
                 status="positive",
-                reason="increased_mediolateral_sway_velocity",
+                reason="increased_mediolateral_sway_velocity_and_range",
                 quality=valid_fraction,
                 metrics=metrics,
                 details=details,

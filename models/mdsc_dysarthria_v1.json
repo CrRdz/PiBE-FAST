@@ -374,7 +374,7 @@
   ],
   "intercept": 0.20667152065479194,
   "decision_threshold": 0.8078592037937518,
-  "medical_role": "dysarthria_representation_shadow_only",
+  "medical_role": "dysarthria_speech_screening_component",
   "clinical_validation": false,
   "training_summary": {
     "created_at": "2026-08-17T08:29:35+00:00",
@@ -568,7 +568,7 @@
     "warnings": [
       "Research-only internal MDSC validation; not clinical validation.",
       "The positive label represents chronic dysarthria in MDSC, not acute stroke or acute change.",
-      "Keep runtime inference in shadow mode until target-device microphone validation is complete."
+      "Runtime inference contributes to the Speech screening status but is not an acute-stroke diagnosis."
     ]
   }
 }
