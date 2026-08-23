@@ -128,7 +128,7 @@ class PassiveMonitorTest(unittest.TestCase):
             monitor.snapshot("standby", "passive_trigger")["balance_change"][
                 "latest_result"
             ]["reason"],
-            "increased_mediolateral_sway_velocity",
+            "increased_mediolateral_sway_velocity_and_range",
         )
 
 

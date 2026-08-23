@@ -1,0 +1,11 @@
+participant_id,session_id,attempt,condition,distance_cm,light_lux,glasses,head_condition,result_index,log_path
+P001,S1,1,baseline,60,400,habitual,still,1,../../../data/keypoints/P001-S1-baseline-attempt1.jsonl
+P001,S1,2,baseline,60,400,habitual,still,1,../../../data/keypoints/P001-S1-baseline-attempt2.jsonl
+P001,S1,1,distance_near,40,400,habitual,still,1,../../../data/keypoints/P001-S1-near-attempt1.jsonl
+P001,S1,1,distance_far,80,400,habitual,still,1,../../../data/keypoints/P001-S1-far-attempt1.jsonl
+P001,S1,1,low_light,60,75,habitual,still,1,../../../data/keypoints/P001-S1-lowlight-attempt1.jsonl
+P001,S1,1,bright_light,60,900,habitual,still,1,../../../data/keypoints/P001-S1-bright-attempt1.jsonl
+P001,S1,1,glasses_on,60,400,on,still,1,../../../data/keypoints/P001-S1-glasses-on-attempt1.jsonl
+P001,S1,1,glasses_off,60,400,off,still,1,../../../data/keypoints/P001-S1-glasses-off-attempt1.jsonl
+P001,S1,1,deliberate_head_turn,60,400,habitual,deliberate_turn,1,../../../data/keypoints/P001-S1-headturn-attempt1.jsonl
+P001,S2,1,baseline,60,400,habitual,still,1,../../../data/keypoints/P001-S2-baseline-attempt1.jsonl

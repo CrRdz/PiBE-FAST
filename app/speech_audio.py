@@ -75,7 +75,7 @@ class SpeechRecognizer(Protocol):
 
 
 class SpeechRepresentationModel(Protocol):
-    """Research-only shadow model; it must not control the S decision."""
+    """MDSC dysarthria model whose prediction can control the S decision."""
 
     model_version: str
 
@@ -453,6 +453,52 @@ def analyze_speech_wav(
     )
 
 
+_MDSC_AUDIO_QUALITY_FAILURE_REASONS = frozenset(
+    {
+        "speech_recording_too_short",
+        "speech_audio_too_quiet",
+        "speech_audio_clipped",
+        "speech_not_detected",
+        "microphone_unavailable",
+        "speech_processing_failed",
+    }
+)
+
+
+def _mdsc_audio_eligible(result: MotionResult) -> bool:
+    """Return whether the recording passed the audio gates needed by MDSC."""
+
+    return result.reason not in _MDSC_AUDIO_QUALITY_FAILURE_REASONS
+
+
+def _apply_mdsc_prediction(result: MotionResult, prediction: Any) -> MotionResult:
+    """Attach MDSC evidence and promote a qualified positive to the S result."""
+
+    predicted = bool(prediction.predicted_dysarthria)
+    status = result.status
+    reason = result.reason
+    if predicted and _mdsc_audio_eligible(result) and result.status != "positive":
+        status = "positive"
+        reason = "mdsc_dysarthria_detected"
+    return MotionResult(
+        status=status,
+        reason=reason,
+        affected_side=result.affected_side,
+        quality=result.quality,
+        metrics={
+            **result.metrics,
+            "mdsc_dysarthria_probability": prediction.probability,
+            "mdsc_dysarthria_threshold": prediction.threshold,
+        },
+        details={
+            **result.details,
+            "mdsc_dysarthria_model": prediction.model_version,
+            "mdsc_dysarthria_prediction": str(predicted).lower(),
+            "mdsc_medical_role": "speech_screening_component_not_stroke_diagnosis",
+        },
+    )
+
+
 class SpeechCaptureService:
     """Coordinate one asynchronous microphone capture and local assessment."""
 
@@ -597,7 +643,7 @@ class SpeechCaptureService:
                 "representation_model": representation_version,
                 "representation_ready": representation_ready,
                 "representation_reason": representation_reason,
-                "representation_mode": "shadow_only",
+                "representation_mode": "direct_speech_decision",
                 "result": self.result.as_dict() if self.result is not None else None,
             }
 
@@ -650,10 +696,10 @@ class SpeechCaptureService:
                 config=self.config,
             )
             # MDSC predicts a chronic dysarthria phenotype, not acute stroke.
-            # Keep it auditable in shadow fields without changing status/reason.
+            # A qualified positive contributes directly to the S status.
             if self.representation_model is not None:
                 model_ready, _ = self.representation_model.availability()
-                if model_ready:
+                if model_ready and _mdsc_audio_eligible(result):
                     try:
                         prediction = self.representation_model.predict_wav(path)
                     except Exception as exc:
@@ -665,31 +711,11 @@ class SpeechCaptureService:
                             metrics=result.metrics,
                             details={
                                 **result.details,
-                                "shadow_dysarthria_error": str(exc),
+                                "mdsc_dysarthria_error": str(exc),
                             },
                         )
                     else:
-                        result = MotionResult(
-                            status=result.status,
-                            reason=result.reason,
-                            affected_side=result.affected_side,
-                            quality=result.quality,
-                            metrics={
-                                **result.metrics,
-                                "shadow_dysarthria_probability": prediction.probability,
-                                "shadow_dysarthria_threshold": prediction.threshold,
-                            },
-                            details={
-                                **result.details,
-                                "shadow_dysarthria_model": prediction.model_version,
-                                "shadow_dysarthria_prediction": str(
-                                    prediction.predicted_dysarthria
-                                ).lower(),
-                                "shadow_medical_role": (
-                                    "dysarthria_representation_not_acute_stroke"
-                                ),
-                            },
-                        )
+                        result = _apply_mdsc_prediction(result, prediction)
         except SpeechBackendUnavailable as exc:
             result = MotionResult(
                 status="insufficient",

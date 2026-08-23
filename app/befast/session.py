@@ -612,6 +612,7 @@ class BefastSession:
             "eye_max_gaze_mad",
             "eye_max_repeat_relative_error",
             "eye_max_head_rotation_degrees",
+            "eye_landmark_noise_floor_pixels",
             "eye_response_snr_threshold",
             "eye_directional_asymmetry_threshold",
             "eye_conjugacy_relative_error_threshold",
@@ -630,7 +631,26 @@ class BefastSession:
             "balance_min_valid_fraction",
             "balance_robust_z_threshold",
         )
-        return {name: float(getattr(self.config, name)) for name in names}
+        thresholds = {name: float(getattr(self.config, name)) for name in names}
+        if not self.config.eye_enable_unvalidated_quality_gates:
+            for name in (
+                "eye_max_gaze_mad",
+                "eye_max_repeat_relative_error",
+                "eye_max_head_rotation_degrees",
+                "eye_landmark_noise_floor_pixels",
+                "eye_min_valid_fraction_per_trial",
+            ):
+                thresholds.pop(name, None)
+        if not self.config.eye_enable_unvalidated_warning_thresholds:
+            for name in (
+                "eye_max_repeat_relative_error",
+                "eye_response_snr_threshold",
+                "eye_directional_asymmetry_threshold",
+                "eye_conjugacy_relative_error_threshold",
+                "eye_rest_gaze_deviation_degrees_threshold",
+            ):
+                thresholds.pop(name, None)
+        return thresholds
 
     def _finish_or_retry(
         self,

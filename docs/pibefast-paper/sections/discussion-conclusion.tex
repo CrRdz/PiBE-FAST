@@ -1,0 +1,95 @@
+\section{Discussion}
+\label{sec:discussion}
+
+The experimental results indicate that PiBE-FAST can deploy a full BE-FAST
+screening workflow on edge hardware with interpretability in all intermediate
+outputs across multiple sensing modalities. Instead of relying on one visual
+observation, the proposed approach leverages the balance, eye movement, facial
+symmetry, arm movement, speech analysis, and structured clinical information
+through a quality-gated multimodal fusion framework. Such design allows each
+component to retain their own interpretability, but to preserve the information
+across modalities.
+
+One of the key engineering innovations is the efficiency of the stage-aware
+inference scheduling technique. Instead of activating both MoveNet and
+MediaPipe at all time, the system activates each model only during the
+corresponding stage of the BE-FAST screening process. Such inference scheduling
+technique helps to reduce unnecessary CPU load and thermal stress of Raspberry
+Pi and ensures responsive interaction during guided screening. In comparison
+with simultaneous execution of multiple vision models, the stage-aware
+scheduling may become a more practical deployment technique for a low-power
+device.
+
+Quality gating mechanisms enhance deployment robustness of the system in real
+world settings. Instead of making each observation based on binary criteria,
+each modality is evaluated based on confidence filtering, landmark visibility,
+valid-frame ratio and statistical consistency across multiple frames before
+being included in the multimodal feature vector. Such strategy prevents
+low-quality measurements caused by occlusion, unstable posture, lighting
+changes, and low-quality audio data from being recognized as a valid clinical
+observation, making the system suitable for home-screening setting.
+
+Speech subsystem contributes to visual screening with both linguistic and
+acoustic information. Offline Whisper transcription enables fixed-sentence
+speech recognition without cloud-based services, and CER quantifies the
+disagreement between the recognized and prompted sentences. The MDSC-trained
+acoustic model separately estimates a dysarthria-related probability. For
+passive monitoring, fundamental frequency, jitter, shimmer,
+harmonics-to-noise ratio, pause properties, and speaking rate are compared with
+the individual baseline. The fixed fusion vector retains four Speech features:
+CER, characters per second, pause fraction, and MDSC dysarthria probability.
+
+Even though the multimodal architecture has many engineering benefits in
+contrast with isolated facial and body-pose analysis, the current realization
+of the system should be considered as a research prototype, not a clinically
+validated diagnostic tool. The safety-rule framework, therefore, is separate
+from the research fusion layer, making sure that engineering experiments do not
+override the conservative emergency screening procedure.
+
+\subsection{Limitations and Future Work}
+
+Several limitations should be considered before proceeding to clinical
+evaluation.
+
+First of all, the current experiment mainly evaluates the engineering
+performance of the system rather than its diagnostic capabilities. The
+thresholds used in the system (quality gates, modified Z-score detection, and
+speech feature boundaries) are engineering parameters and not clinically
+validated diagnostic cutoffs. As a result, negative screening does not rule out
+the possibility of stroke.
+
+Secondly, speech experiments rely on the Mandarin Dysarthric Speech Corpus,
+which contains chronic dysarthric speech rather than acute-stroke cases. The
+MDSC model therefore contributes directly to the Speech screening status using
+its frozen engineering threshold, but its corpus labels do not establish
+acute-stroke sensitivity, specificity, or calibration.
+
+Thirdly, the visual subsystem uses the monocular RGB camera. Body sway, eye
+movement, and arm position estimations are kinematic proxies and not direct
+physiological measurements obtained with force platform or eye tracking
+equipment or neurological examination. Moreover, simulating abnormal movements
+by healthy participants does not perfectly reproduce the true symptoms of
+stroke.
+
+Future work will involve gathering of the clinically annotated acute stroke
+datasets, adding stroke mimic control groups, evaluation of the stability of
+the Raspberry Pi deployment, improvement of multilingual speech processing,
+and investigation of the learnable multimodal fusion models while preserving
+the safety-rule framework.
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+In this paper, we have presented PiBE-FAST, a quality-gated multimodal BE-FAST
+screening framework for privacy-preserving edge deployment on Raspberry Pi. The
+proposed system leverages the balance, eye movement, facial symmetry, arm
+movement, speech analysis, and structured clinical information through
+stage-aware inference scheduling and local multimodal fusion while retaining
+the interpretability of intermediate outputs for each screening component.
+
+The engineering evaluation demonstrated that multimodal BE-FAST screening is
+possible on resource-constrained hardware with local processing, robust quality
+control, and offline speech analysis. However, the proposed framework remains a
+research prototype and not a clinically validated diagnostic tool. Further work
+requires large scale clinical validation, standardization of acute stroke
+cohorts, stroke-mimic controls, and prospective evaluation.

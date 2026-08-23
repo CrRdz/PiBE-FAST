@@ -22,6 +22,7 @@ import numpy as np
 from app.speech_audio import (
     SpeechAudioConfig,
     SpeechCaptureBackend,
+    SpeechRepresentationModel,
     _read_pcm_wav,
 )
 
@@ -251,12 +252,14 @@ class PassiveSpeechMonitor:
         root_dir: str | Path,
         *,
         capture_backend: SpeechCaptureBackend,
+        representation_model: SpeechRepresentationModel | None = None,
         config: PassiveSpeechConfig | None = None,
     ) -> None:
         self.root_dir = Path(root_dir)
         self.root_dir.mkdir(parents=True, exist_ok=True)
         self.baseline_path = self.root_dir / "passive-baseline.json"
         self.capture_backend = capture_backend
+        self.representation_model = representation_model
         self.config = config or PassiveSpeechConfig()
         self.lock = threading.RLock()
         self.condition = threading.Condition(self.lock)
@@ -404,7 +407,12 @@ class PassiveSpeechMonitor:
                 "last_error": self.last_error,
                 "raw_audio_retained": False,
                 "speaker_verification": False,
-                "medical_role": "change_detection_trigger_only",
+                "representation_mode": (
+                    "direct_guided_trigger"
+                    if self.representation_model is not None
+                    else "disabled"
+                ),
+                "medical_role": "change_detection_and_mdsc_guided_trigger",
                 "clinical_validation": False,
                 "evidence_version": EVIDENCE_VERSION,
                 "feature_domains": {
@@ -412,8 +420,8 @@ class PassiveSpeechMonitor:
                     for name, features in FEATURE_DOMAINS.items()
                 },
                 "trigger_policy": (
-                    "engineering_threshold_two_or_more_domains_then_"
-                    "multi_window_vote"
+                    "mdsc_positive_or_engineering_threshold_two_or_more_"
+                    "domains_then_multi_window_vote"
                 ),
             }
 
@@ -423,6 +431,7 @@ class PassiveSpeechMonitor:
         with self.lock:
             generation = self.generation
         analysis = analyze_passive_speech_wav(wav_path, self.config)
+        analysis = self._with_mdsc_prediction(analysis, wav_path)
         self._accept_analysis(analysis, generation)
         return self.snapshot()
 
@@ -457,6 +466,7 @@ class PassiveSpeechMonitor:
                 if cancel_event.is_set() or self.stop_event.is_set():
                     continue
                 analysis = analyze_passive_speech_wav(path, self.config)
+                analysis = self._with_mdsc_prediction(analysis, path)
                 self._accept_analysis(analysis, generation)
             except Exception as exc:
                 if not cancel_event.is_set() and not self.stop_event.is_set():
@@ -504,6 +514,37 @@ class PassiveSpeechMonitor:
             if not analysis.get("valid"):
                 self.latest_window = window
                 self.assessment = "waiting_for_speech"
+                return
+
+            mdsc = analysis.get("mdsc", {})
+            mdsc_anomaly = bool(
+                isinstance(mdsc, dict) and mdsc.get("predicted_dysarthria")
+            )
+            if mdsc_anomaly:
+                probability = float(mdsc.get("probability", 0.0))
+                threshold = max(float(mdsc.get("threshold", 1.0)), 1e-9)
+                window.update(
+                    {
+                        "anomaly": True,
+                        "anomaly_score": round(probability / threshold, 4),
+                        "changed_features": ["mdsc_dysarthria_probability"],
+                        "changed_domains": ["mdsc"],
+                        "feature_scores": {
+                            "mdsc_dysarthria_probability": round(
+                                probability / threshold, 4
+                            )
+                        },
+                        "domain_scores": {
+                            "mdsc": round(probability / threshold, 4)
+                        },
+                    }
+                )
+                self.recent_anomalies.append(True)
+                self.recommend_guided_check = True
+                if self.suspected_since is None:
+                    self.suspected_since = now
+                self.assessment = "suspected_change"
+                self.latest_window = window
                 return
 
             features = {
@@ -589,6 +630,31 @@ class PassiveSpeechMonitor:
                 self.latest_window = window
         if save_baseline:
             self._save_baseline(generation)
+
+    def _with_mdsc_prediction(
+        self, analysis: dict[str, Any], wav_path: str | Path
+    ) -> dict[str, Any]:
+        """Add MDSC probability to a valid passive window when available."""
+
+        if not analysis.get("valid") or self.representation_model is None:
+            return analysis
+        try:
+            ready, reason = self.representation_model.availability()
+            if not ready:
+                return {**analysis, "mdsc_error": reason or "model unavailable"}
+            prediction = self.representation_model.predict_wav(wav_path)
+        except Exception as exc:
+            return {**analysis, "mdsc_error": str(exc)}
+        mdsc = prediction.as_dict()
+        return {
+            **analysis,
+            "metrics": {
+                **analysis.get("metrics", {}),
+                "mdsc_dysarthria_probability": prediction.probability,
+                "mdsc_dysarthria_threshold": prediction.threshold,
+            },
+            "mdsc": mdsc,
+        }
 
     def _load_baseline(self) -> None:
         try:

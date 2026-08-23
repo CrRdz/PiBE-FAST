@@ -1,4 +1,4 @@
-"""Tests for the shadow-only feature-level BE-FAST fusion payload."""
+"""Tests for the quality-gated feature-level BE-FAST fusion payload."""
 
 from __future__ import annotations
 
@@ -69,6 +69,8 @@ class FeatureFusionTest(unittest.TestCase):
                     "character_error_rate": 0.175,
                     "characters_per_second": 4.0,
                     "pause_fraction": 0.275,
+                    "mdsc_dysarthria_probability": 0.4039296019,
+                    "mdsc_dysarthria_threshold": 0.8078592038,
                 },
                 quality=0.75,
             ),
@@ -91,8 +93,16 @@ class FeatureFusionTest(unittest.TestCase):
         self.assertAlmostEqual(fusion["quality"]["F"], 0.6)
         self.assertAlmostEqual(fusion["quality"]["A"], 0.7)
         self.assertAlmostEqual(fusion["gated_features"]["A_level_difference"], 0.21)
+        self.assertAlmostEqual(
+            fusion["gated_features"]["S_mdsc_dysarthria_probability"],
+            0.30295,
+            places=5,
+        )
         self.assertAlmostEqual(fusion["domain_severity"]["B"], 0.8)
         self.assertAlmostEqual(fusion["domain_severity"]["F"], 0.6)
+        self.assertAlmostEqual(fusion["domain_severity"]["S"], 0.375)
+        self.assertEqual(len(FUSION_FEATURE_NAMES), 19)
+        self.assertEqual(len(FUSION_MODEL_FEATURE_NAMES), 29)
         self.assertAlmostEqual(fusion["aggregate"]["arm_face_laterality_agreement"], 1.0)
 
     def test_manual_only_item_remains_missing_not_a_sensor_zero(self):

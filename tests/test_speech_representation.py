@@ -37,7 +37,7 @@ class SpeechRepresentationTest(unittest.TestCase):
         self.assertTrue(np.isfinite(first).all())
         np.testing.assert_allclose(first, second)
 
-    def test_loads_model_and_returns_shadow_prediction(self):
+    def test_loads_model_and_returns_screening_prediction(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             wav = root / "sample.wav"
@@ -65,6 +65,10 @@ class SpeechRepresentationTest(unittest.TestCase):
         self.assertTrue(model.availability()[0])
         self.assertGreater(prediction.probability, 0.5)
         self.assertTrue(prediction.predicted_dysarthria)
+        self.assertEqual(
+            prediction.as_dict()["medical_role"],
+            "dysarthria_speech_screening_component",
+        )
 
     def test_mdsc_manifest_is_split_by_speaker(self):
         with tempfile.TemporaryDirectory() as directory:

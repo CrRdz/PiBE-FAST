@@ -1,0 +1,40 @@
+\makeatletter
+\IfFileExists{IEEEtran.cls}{}{\def\input@path{{docs/pibefast-paper/}}}
+\makeatother
+\documentclass[conference]{IEEEtran}
+% Based on the IEEE conference template version dated 27 June 2024.
+
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{url}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+% Resolve manuscript files both from this directory and from the repository
+% root, which is commonly used as the working directory by editor recipes.
+\newcommand{\paperroot}{}
+\IfFileExists{sections/frontmatter.tex}{}{%
+  \renewcommand{\paperroot}{docs/pibefast-paper/}%
+}
+\newcommand{\paperinput}[1]{\input{\paperroot#1}}
+
+\begin{document}
+
+\paperinput{sections/frontmatter}
+\paperinput{sections/abstract}
+\paperinput{sections/introduction}
+\paperinput{sections/related-work}
+\paperinput{sections/system-overview}
+\paperinput{sections/multimodal-methods}
+\paperinput{sections/fusion}
+\paperinput{sections/experiments}
+\paperinput{sections/discussion-conclusion}
+\paperinput{sections/references}
+
+\end{document}

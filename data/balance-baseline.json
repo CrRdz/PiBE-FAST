@@ -1,26 +1,5 @@
 {
-  "schema_version": 1,
-  "evidence_version": "stroke-balance-evidence-v1",
-  "samples": [
-    {
-      "median_trunk_roll_degrees": 0.7940535089045438,
-      "ml_sway_mean_velocity": 0.5324378081274735
-    },
-    {
-      "median_trunk_roll_degrees": 1.3185597850886723,
-      "ml_sway_mean_velocity": 0.10555568301966041
-    },
-    {
-      "median_trunk_roll_degrees": 3.242886601028112,
-      "ml_sway_mean_velocity": 0.10152497324730857
-    },
-    {
-      "median_trunk_roll_degrees": 2.309414085343781,
-      "ml_sway_mean_velocity": 0.19657125040138634
-    },
-    {
-      "median_trunk_roll_degrees": 0.9692612335144162,
-      "ml_sway_mean_velocity": 0.20541890143567065
-    }
-  ]
+  "schema_version": 2,
+  "evidence_version": "stroke-balance-evidence-v2",
+  "samples": []
 }

@@ -209,7 +209,7 @@ def main() -> int:
         "warnings": [
             "Research-only internal MDSC validation; not clinical validation.",
             "The positive label represents chronic dysarthria in MDSC, not acute stroke or acute change.",
-            "Keep runtime inference in shadow mode until target-device microphone validation is complete.",
+            "Runtime inference contributes to the Speech screening status but is not an acute-stroke diagnosis.",
         ],
     }
     payload = {
@@ -224,7 +224,7 @@ def main() -> int:
         "coefficients": fitted_all.coefficients.tolist(),
         "intercept": fitted_all.intercept,
         "decision_threshold": threshold,
-        "medical_role": "dysarthria_representation_shadow_only",
+        "medical_role": "dysarthria_speech_screening_component",
         "clinical_validation": False,
         "training_summary": report,
     }

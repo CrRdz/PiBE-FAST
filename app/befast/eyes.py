@@ -59,6 +59,7 @@ def eye_frame_metrics(
     observation: FaceObservation,
     min_interocular_width: float,
     min_eye_width_pixels: float = 0.0,
+    enforce_relative_eye_width: bool = True,
 ) -> dict[str, float] | None:
     """返回虹膜终点、眼部像素尺度和独立三维头姿质量指标。"""
 
@@ -74,7 +75,11 @@ def eye_frame_metrics(
 
     right_eye_width = abs(points[133][0] - points[33][0])
     left_eye_width = abs(points[263][0] - points[362][0])
-    if right_eye_width <= scale * 0.04 or left_eye_width <= scale * 0.04:
+    if right_eye_width <= 0.0 or left_eye_width <= 0.0:
+        return None
+    if enforce_relative_eye_width and (
+        right_eye_width <= scale * 0.04 or left_eye_width <= scale * 0.04
+    ):
         return None
 
     right_eye_width_pixels = (
@@ -240,8 +245,17 @@ class EyeMovementScreen:
         metrics = (
             eye_frame_metrics(
                 observation,
-                self.config.face_min_interocular_width,
-                self.config.eye_min_eye_width_pixels,
+                (
+                    self.config.face_min_interocular_width
+                    if self.config.eye_enable_unvalidated_quality_gates
+                    else 0.0
+                ),
+                (
+                    self.config.eye_min_eye_width_pixels
+                    if self.config.eye_enable_unvalidated_quality_gates
+                    else 0.0
+                ),
+                self.config.eye_enable_unvalidated_quality_gates,
             )
             if observation is not None
             else None
@@ -271,11 +285,17 @@ class EyeMovementScreen:
                 for index, count in enumerate(counts)
             },
         }
-        if any(
-            count < self.config.eye_min_samples_per_trial for count in counts
-        ) or any(
-            fraction < self.config.eye_min_valid_fraction_per_trial
-            for fraction in valid_fractions
+        minimum_samples = (
+            self.config.eye_min_samples_per_trial
+            if self.config.eye_enable_unvalidated_quality_gates
+            else 1
+        )
+        if any(count < minimum_samples for count in counts) or (
+            self.config.eye_enable_unvalidated_quality_gates
+            and any(
+                fraction < self.config.eye_min_valid_fraction_per_trial
+                for fraction in valid_fractions
+            )
         ):
             return MotionResult(
                 status="insufficient",
@@ -285,7 +305,7 @@ class EyeMovementScreen:
             )
 
         summaries: list[dict[str, float]] = []
-        for values in self.samples:
+        for trial_index, values in enumerate(self.samples):
             left_values = [sample["left_gaze_x"] for sample in values]
             right_values = [sample["right_gaze_x"] for sample in values]
             pose_values = [
@@ -296,6 +316,12 @@ class EyeMovementScreen:
                 "right_gaze_x": median(right_values),
                 "left_gaze_mad": _median_absolute_deviation(left_values),
                 "right_gaze_mad": _median_absolute_deviation(right_values),
+                "left_eye_width_pixels": median(
+                    sample["left_eye_width_pixels"] for sample in values
+                ),
+                "right_eye_width_pixels": median(
+                    sample["right_eye_width_pixels"] for sample in values
+                ),
                 "head_pose_fraction": len(pose_values) / len(values),
             }
             if pose_values:
@@ -306,13 +332,24 @@ class EyeMovementScreen:
                 ):
                     summary[name] = median(sample[name] for sample in pose_values)
             summaries.append(summary)
+            trial_number = trial_index + 1
+            for eye in ("left", "right"):
+                quality_metrics[
+                    f"trial_{trial_number}_{eye}_iris_position"
+                ] = summary[f"{eye}_gaze_x"]
+                quality_metrics[
+                    f"trial_{trial_number}_{eye}_iris_mad"
+                ] = summary[f"{eye}_gaze_mad"]
 
         max_gaze_mad = max(
             max(summary["left_gaze_mad"], summary["right_gaze_mad"])
             for summary in summaries
         )
         quality_metrics["max_trial_gaze_mad"] = max_gaze_mad
-        if max_gaze_mad > self.config.eye_max_gaze_mad:
+        if (
+            self.config.eye_enable_unvalidated_quality_gates
+            and max_gaze_mad > self.config.eye_max_gaze_mad
+        ):
             return MotionResult(
                 status="insufficient",
                 reason="unstable_eye_landmarks_during_test",
@@ -324,7 +361,10 @@ class EyeMovementScreen:
             summary["head_pose_fraction"] for summary in summaries
         )
         quality_metrics["minimum_head_pose_fraction"] = minimum_pose_fraction
-        if minimum_pose_fraction < self.config.eye_min_head_pose_fraction:
+        if (
+            self.config.eye_enable_unvalidated_quality_gates
+            and minimum_pose_fraction < self.config.eye_min_head_pose_fraction
+        ):
             return MotionResult(
                 status="insufficient",
                 reason="head_pose_not_available_during_eye_test",
@@ -332,24 +372,35 @@ class EyeMovementScreen:
                 metrics=quality_metrics,
             )
 
-        head_ranges: dict[str, float] = {}
-        for name in (
+        pose_names = (
             "head_pitch_degrees",
             "head_yaw_degrees",
             "head_roll_degrees",
-        ):
-            values = [summary[name] for summary in summaries]
-            head_ranges[name] = max(values) - min(values)
-        max_head_rotation = max(head_ranges.values())
-        quality_metrics.update(
-            {
-                "head_pitch_range_degrees": head_ranges["head_pitch_degrees"],
-                "head_yaw_range_degrees": head_ranges["head_yaw_degrees"],
-                "head_roll_range_degrees": head_ranges["head_roll_degrees"],
-                "max_head_rotation_degrees": max_head_rotation,
-            }
         )
-        if max_head_rotation > self.config.eye_max_head_rotation_degrees:
+        complete_head_pose = all(
+            all(name in summary for name in pose_names) for summary in summaries
+        )
+        quality_metrics["complete_head_pose"] = 1.0 if complete_head_pose else 0.0
+        max_head_rotation: float | None = None
+        if complete_head_pose:
+            head_ranges: dict[str, float] = {}
+            for name in pose_names:
+                values = [summary[name] for summary in summaries]
+                head_ranges[name] = max(values) - min(values)
+            max_head_rotation = max(head_ranges.values())
+            quality_metrics.update(
+                {
+                    "head_pitch_range_degrees": head_ranges["head_pitch_degrees"],
+                    "head_yaw_range_degrees": head_ranges["head_yaw_degrees"],
+                    "head_roll_range_degrees": head_ranges["head_roll_degrees"],
+                    "max_head_rotation_degrees": max_head_rotation,
+                }
+            )
+        if (
+            self.config.eye_enable_unvalidated_quality_gates
+            and max_head_rotation is not None
+            and max_head_rotation > self.config.eye_max_head_rotation_degrees
+        ):
             return MotionResult(
                 status="insufficient",
                 reason="head_moved_during_eye_test",
@@ -369,29 +420,31 @@ class EyeMovementScreen:
                 raw_response = (
                     summaries[target_index][key] - summaries[center_index][key]
                 )
-                noise = 1.4826 * (
-                    summaries[target_index][f"{eye}_gaze_mad"]
-                    + summaries[center_index][f"{eye}_gaze_mad"]
-                )
                 raw_responses[eye][direction].append(raw_response)
-                response_noises[eye][direction].append(noise)
+                if self.config.eye_enable_unvalidated_warning_thresholds:
+                    center_sigma = max(
+                        1.4826 * summaries[center_index][f"{eye}_gaze_mad"],
+                        self.config.eye_landmark_noise_floor_pixels
+                        / max(
+                            summaries[center_index][f"{eye}_eye_width_pixels"],
+                            _EPSILON,
+                        ),
+                    )
+                    target_sigma = max(
+                        1.4826 * summaries[target_index][f"{eye}_gaze_mad"],
+                        self.config.eye_landmark_noise_floor_pixels
+                        / max(
+                            summaries[target_index][f"{eye}_eye_width_pixels"],
+                            _EPSILON,
+                        ),
+                    )
+                    response_noises[eye][direction].append(
+                        hypot(center_sigma, target_sigma)
+                    )
 
-        # 浏览器前置摄像头、主机摄像头和视频文件可能使用不同镜像约定。
-        # 依据本轮左右目标的总体分离方向自动确定坐标符号，避免把健康响应
-        # 稳定地解释成“反方向运动”。
-        left_raw = [
-            value
-            for eye in ("left", "right")
-            for value in raw_responses[eye]["left"]
-        ]
-        right_raw = [
-            value
-            for eye in ("left", "right")
-            for value in raw_responses[eye]["right"]
-        ]
-        coordinate_orientation = (
-            1.0 if median(right_raw) >= median(left_raw) else -1.0
-        )
+        # 镜像约定来自采集配置，不能从受试者响应反推；否则始终看反方向的
+        # 任务错误也可能被解释成“镜像摄像头”并错误通过。
+        coordinate_orientation = -1.0 if self.config.eye_camera_mirrored else 1.0
         responses: dict[str, dict[str, list[float]]] = {
             eye: {"left": [], "right": []} for eye in ("left", "right")
         }
@@ -405,18 +458,12 @@ class EyeMovementScreen:
                     if direction == "left"
                     else coordinate_orientation
                 )
-                for raw_response, noise in zip(
-                    raw_responses[eye][direction],
-                    response_noises[eye][direction],
-                ):
+                for index, raw_response in enumerate(raw_responses[eye][direction]):
                     response = expected_sign * raw_response
-                    snr = (
-                        response / noise
-                        if noise > _EPSILON
-                        else (1_000_000.0 if response > 0.0 else 0.0)
-                    )
                     responses[eye][direction].append(response)
-                    response_snrs[eye][direction].append(snr)
+                    if self.config.eye_enable_unvalidated_warning_thresholds:
+                        noise = response_noises[eye][direction][index]
+                        response_snrs[eye][direction].append(response / noise)
 
         repeat_errors: dict[str, float] = {}
         for eye in ("left", "right"):
@@ -432,18 +479,18 @@ class EyeMovementScreen:
                 repeat_spread = max(
                     abs(response - center) for response in ordered
                 ) / scale
-                for repetition, (response, noise, snr) in enumerate(
-                    zip(
-                        responses[eye][direction],
-                        response_noises[eye][direction],
-                        response_snrs[eye][direction],
-                    ),
-                    start=1,
+                for repetition, response in enumerate(
+                    responses[eye][direction], start=1
                 ):
                     prefix = f"{eye}_{direction}_repeat_{repetition}"
                     quality_metrics[f"{prefix}_response"] = response
-                    quality_metrics[f"{prefix}_noise"] = noise
-                    quality_metrics[f"{prefix}_snr"] = snr
+                    if self.config.eye_enable_unvalidated_warning_thresholds:
+                        quality_metrics[f"{prefix}_noise"] = response_noises[eye][
+                            direction
+                        ][repetition - 1]
+                        quality_metrics[f"{prefix}_snr"] = response_snrs[eye][
+                            direction
+                        ][repetition - 1]
                 quality_metrics[
                     f"{eye}_{direction}_repeat_relative_error"
                 ] = repeat_errors[f"{eye}_{direction}"]
@@ -453,7 +500,10 @@ class EyeMovementScreen:
         max_repeat_error = max(repeat_errors.values())
         quality_metrics["max_repeat_relative_error"] = max_repeat_error
         quality_metrics["coordinate_orientation"] = coordinate_orientation
-        if max_repeat_error > self.config.eye_max_repeat_relative_error:
+        if (
+            self.config.eye_enable_unvalidated_quality_gates
+            and max_repeat_error > self.config.eye_max_repeat_relative_error
+        ):
             return MotionResult(
                 status="insufficient",
                 reason="eye_response_not_repeatable",
@@ -462,38 +512,43 @@ class EyeMovementScreen:
             )
 
         persistent_failures: list[tuple[str, str]] = []
-        for eye in ("left", "right"):
-            for direction in ("left", "right"):
-                passed = [
-                    response > 0.0
-                    and snr >= self.config.eye_response_snr_threshold
-                    for response, snr in zip(
-                        responses[eye][direction],
-                        response_snrs[eye][direction],
-                    )
-                ]
-                passed_count = sum(passed)
-                if passed_count == 0:
-                    persistent_failures.append((eye, direction))
-                elif passed_count < 2:
-                    return MotionResult(
-                        status="insufficient",
-                        reason="eye_response_not_repeatable",
-                        quality=quality,
-                        metrics={
-                            **quality_metrics,
-                            "minimum_response_snr": min(
-                                min(values)
-                                for directions in response_snrs.values()
-                                for values in directions.values()
-                            ),
-                        },
-                    )
+        if self.config.eye_enable_unvalidated_warning_thresholds:
+            for eye in ("left", "right"):
+                for direction in ("left", "right"):
+                    passed = [
+                        response > 0.0
+                        and snr >= self.config.eye_response_snr_threshold
+                        for response, snr in zip(
+                            responses[eye][direction],
+                            response_snrs[eye][direction],
+                        )
+                    ]
+                    passed_count = sum(passed)
+                    if passed_count == 0:
+                        persistent_failures.append((eye, direction))
+                    elif passed_count < 2:
+                        return MotionResult(
+                            status="insufficient",
+                            reason="eye_response_not_repeatable",
+                            quality=quality,
+                            metrics={
+                                **quality_metrics,
+                                "minimum_response_snr": min(
+                                    min(values)
+                                    for directions in response_snrs.values()
+                                    for values in directions.values()
+                                ),
+                            },
+                        )
 
-        minimum_response_snr = min(
-            min(values)
-            for directions in response_snrs.values()
-            for values in directions.values()
+        minimum_response_snr = (
+            min(
+                min(values)
+                for directions in response_snrs.values()
+                for values in directions.values()
+            )
+            if self.config.eye_enable_unvalidated_warning_thresholds
+            else None
         )
         response_medians = {
             eye: {
@@ -531,14 +586,17 @@ class EyeMovementScreen:
             binocular_directional_responses["left"]
             - binocular_directional_responses["right"]
         ) / max(max(binocular_directional_responses.values()), _EPSILON)
-        eye_totals = {
-            eye: max(sum(values.values()), _EPSILON)
-            for eye, values in response_amplitudes.items()
-        }
+        # 按方向直接比较两眼的归一化虹膜响应。旧实现先把每只眼的两个方向
+        # 除以该眼总响应，使左右方向误差在数学上必然相等，无法定位方向。
         conjugacy_errors = {
             direction: abs(
-                response_amplitudes["left"][direction] / eye_totals["left"]
-                - response_amplitudes["right"][direction] / eye_totals["right"]
+                response_amplitudes["left"][direction]
+                - response_amplitudes["right"][direction]
+            )
+            / max(
+                response_amplitudes["left"][direction],
+                response_amplitudes["right"][direction],
+                _EPSILON,
             )
             for direction in ("left", "right")
         }
@@ -599,12 +657,30 @@ class EyeMovementScreen:
             "left_conjugacy_relative_error": conjugacy_errors["left"],
             "right_conjugacy_relative_error": conjugacy_errors["right"],
             "max_conjugacy_error": max_conjugacy_error,
-            "minimum_response_snr": minimum_response_snr,
+            "left_left_response": response_amplitudes["left"]["left"],
+            "left_right_response": response_amplitudes["left"]["right"],
+            "right_left_response": response_amplitudes["right"]["left"],
+            "right_right_response": response_amplitudes["right"]["right"],
+            "binocular_left_response": binocular_directional_responses["left"],
+            "binocular_right_response": binocular_directional_responses["right"],
             "coordinate_orientation": coordinate_orientation,
             "left_rest_gaze_bias_degrees": rest_bias_degrees["left"],
             "right_rest_gaze_bias_degrees": rest_bias_degrees["right"],
             "conjugate_rest_gaze_deviation_degrees": conjugate_rest_deviation,
         }
+        if minimum_response_snr is not None:
+            metrics["minimum_response_snr"] = minimum_response_snr
+
+        # 这些连续指标已具备可重复记录路径，但候选界值尚未由目标摄像头的
+        # 健康受试者数据估计。默认仅返回技术验证记录，避免内部工程值形成
+        # 自动阳性或阴性结论。显式启用只供预先声明的离线消融研究。
+        if not self.config.eye_enable_unvalidated_warning_thresholds:
+            return MotionResult(
+                status="insufficient",
+                reason="eye_metrics_recorded_for_validation",
+                quality=quality,
+                metrics=metrics,
+            )
 
         if persistent_failures:
             failed_eyes = {eye for eye, _ in persistent_failures}
@@ -685,7 +761,7 @@ class EyeMovementScreen:
             )
             return MotionResult(
                 status="positive",
-                reason="possible_internuclear_gaze_dysconjugacy",
+                reason="possible_binocular_endpoint_dysconjugacy",
                 affected_side=affected_eye,
                 quality=quality,
                 metrics=metrics,

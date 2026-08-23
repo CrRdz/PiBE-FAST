@@ -1,5 +1,6 @@
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from dataclasses import replace
 from math import cos, radians, sin
 import unittest
 
@@ -10,8 +11,6 @@ from app.befast import (
     PersonalBalanceBaseline,
 )
 from app.face_landmarker import FaceObservation
-from app.arm_model import LinearBinaryModel
-from app.compensation_model import COMPENSATION_MODEL_FEATURES, COMPENSATION_TARGETS
 from app.keypoints import KEYPOINT_NAMES
 
 
@@ -117,7 +116,9 @@ class BefastSessionTest(unittest.TestCase):
         self.config = BefastConfig(
             eye_target_seconds=0.15,
             eye_settle_seconds=0.05,
+            eye_enable_unvalidated_quality_gates=True,
             eye_min_samples_per_trial=3,
+            eye_enable_unvalidated_warning_thresholds=True,
             face_neutral_seconds=0.3,
             face_smile_seconds=0.3,
             face_min_samples_per_phase=3,
@@ -136,30 +137,18 @@ class BefastSessionTest(unittest.TestCase):
         balance_baseline = PersonalBalanceBaseline(self.config)
         baseline_rolls = (-0.4, -0.2, 0.0, 0.2, 0.4)
         baseline_velocities = (0.0, 0.002, 0.004, 0.006, 0.008)
-        for roll, velocity in zip(baseline_rolls, baseline_velocities):
+        baseline_ranges = (0.0, 0.002, 0.004, 0.006, 0.008)
+        for roll, velocity, sway_range in zip(
+            baseline_rolls, baseline_velocities, baseline_ranges
+        ):
             balance_baseline.assess(
                 {
                     "median_trunk_roll_degrees": roll,
                     "ml_sway_mean_velocity": velocity,
+                    "ml_sway_p95_range": sway_range,
                 }
             )
         self.session = BefastSession(self.config, balance_baseline)
-        self._set_compensation_models(positive_targets=set())
-
-    def _set_compensation_models(self, positive_targets):
-        self.session.arm_screen.compensation_models = {
-            target: LinearBinaryModel(
-                component=f"A_COMPENSATION_SHADOW_{target.upper()}",
-                version=f"test-{target}",
-                feature_names=tuple(COMPENSATION_MODEL_FEATURES),
-                means=(0.0,) * len(COMPENSATION_MODEL_FEATURES),
-                scales=(1.0,) * len(COMPENSATION_MODEL_FEATURES),
-                coefficients=(0.0,) * len(COMPENSATION_MODEL_FEATURES),
-                intercept=10.0 if target in positive_targets else -10.0,
-                decision_threshold=0.5,
-            )
-            for target in COMPENSATION_TARGETS
-        }
 
     def run_eye_screen(self, gaze_factory):
         self.session.start_stage("eyes", now=0.0)
@@ -338,17 +327,6 @@ class BefastSessionTest(unittest.TestCase):
         self.assertEqual(result["items"]["A"]["status"], "negative")
         self.assertEqual(result["stage"], "ready_balance")
 
-    def test_compensation_model_is_shadow_only(self):
-        self._set_compensation_models({"shoulder_elevation"})
-        result = self.run_arm_screen()
-
-        self.assertEqual(result["items"]["A"]["status"], "negative")
-        self.assertIsNone(result["items"]["A"]["affected_side"])
-        self.assertEqual(
-            result["items"]["A"]["details"]["compensation_shadow_mode"],
-            "research_only_no_decision",
-        )
-
     def test_incomplete_raise_requires_retry(self):
         self.session.start_stage("arms", now=0.0)
         self.session.ready_arm_phase(now=0.0)
@@ -380,6 +358,20 @@ class BefastSessionTest(unittest.TestCase):
             "ml_sway_mean_velocity",
             checked["items"]["B"]["metrics"],
         )
+        self.assertIn(
+            "ml_sway_p95_range",
+            checked["items"]["B"]["metrics"],
+        )
+        for removed_metric in (
+            "median_trunk_support_offset",
+            "ml_sway_rms",
+            "ml_sway_path_length",
+            "trunk_roll_rms_degrees",
+        ):
+            self.assertNotIn(
+                removed_metric,
+                checked["items"]["B"]["metrics"],
+            )
 
     def test_increased_lateral_sway_from_personal_baseline_is_positive(self):
         result = self.run_balance_screen(
@@ -397,7 +389,44 @@ class BefastSessionTest(unittest.TestCase):
         self.assertEqual(checked["items"]["B"]["status"], "positive")
         self.assertEqual(
             checked["items"]["B"]["reason"],
-            "increased_mediolateral_sway_velocity",
+            "increased_mediolateral_sway_velocity_and_range",
+        )
+
+    def test_sway_velocity_requires_r90_range_confirmation(self):
+        baseline = PersonalBalanceBaseline(
+            BefastConfig(balance_baseline_windows=3)
+        )
+        for value in (0.01, 0.02, 0.03):
+            baseline.assess(
+                {
+                    "median_trunk_roll_degrees": value,
+                    "ml_sway_mean_velocity": value,
+                    "ml_sway_p95_range": value,
+                }
+            )
+
+        velocity_only = baseline.assess(
+            {
+                "median_trunk_roll_degrees": 0.02,
+                "ml_sway_mean_velocity": 0.20,
+                "ml_sway_p95_range": 0.02,
+            }
+        )
+        self.assertEqual(velocity_only["status"], "stable")
+        self.assertNotIn(
+            "mediolateral_sway", velocity_only["changed_domains"]
+        )
+
+        velocity_and_range = baseline.assess(
+            {
+                "median_trunk_roll_degrees": 0.02,
+                "ml_sway_mean_velocity": 0.20,
+                "ml_sway_p95_range": 0.20,
+            }
+        )
+        self.assertEqual(velocity_and_range["status"], "changed")
+        self.assertIn(
+            "mediolateral_sway", velocity_and_range["changed_domains"]
         )
 
     def test_zero_dispersion_baseline_does_not_invent_a_noise_floor(self):
@@ -407,6 +436,7 @@ class BefastSessionTest(unittest.TestCase):
         stable = {
             "median_trunk_roll_degrees": 0.0,
             "ml_sway_mean_velocity": 0.0,
+            "ml_sway_p95_range": 0.0,
         }
         baseline.assess(stable)
         baseline.assess(stable)
@@ -415,13 +445,18 @@ class BefastSessionTest(unittest.TestCase):
             {
                 "median_trunk_roll_degrees": 1.0,
                 "ml_sway_mean_velocity": 0.1,
+                "ml_sway_p95_range": 0.1,
             }
         )
 
         self.assertEqual(result["status"], "unscorable")
         self.assertEqual(
             set(result["unscorable_domains"]),
-            {"trunk_orientation", "mediolateral_sway"},
+            {
+                "trunk_orientation",
+                "mediolateral_sway_velocity",
+                "mediolateral_sway_range",
+            },
         )
 
     def test_personal_balance_baseline_persists_between_runs(self):
@@ -433,6 +468,7 @@ class BefastSessionTest(unittest.TestCase):
                 {
                     "median_trunk_roll_degrees": -0.2,
                     "ml_sway_mean_velocity": 0.01,
+                    "ml_sway_p95_range": 0.01,
                 }
             )
 
@@ -442,6 +478,7 @@ class BefastSessionTest(unittest.TestCase):
                 {
                     "median_trunk_roll_degrees": 0.2,
                     "ml_sway_mean_velocity": 0.02,
+                    "ml_sway_p95_range": 0.02,
                 }
             )
             self.assertTrue(restored.ready)
@@ -532,6 +569,8 @@ class BefastSessionTest(unittest.TestCase):
         )
 
     def test_eye_response_accepts_mirrored_camera_coordinates(self):
+        self.config = replace(self.config, eye_camera_mirrored=True)
+        self.session = BefastSession(self.config)
         result = self.run_eye_screen(
             lambda ts: face_observation(
                 gaze_ratio={
@@ -547,6 +586,53 @@ class BefastSessionTest(unittest.TestCase):
         self.assertEqual(
             result["items"]["E"]["metrics"]["coordinate_orientation"],
             -1.0,
+        )
+
+    def test_default_eye_thresholds_are_research_metrics_only(self):
+        self.config = replace(
+            self.config,
+            eye_enable_unvalidated_quality_gates=False,
+            eye_enable_unvalidated_warning_thresholds=False,
+        )
+        self.session = BefastSession(self.config)
+
+        result = self.run_eye_screen(
+            lambda ts: face_observation(
+                gaze_ratio={
+                    "rest": 0.5,
+                    "center": 0.5,
+                    "left": 0.25,
+                    "right": 0.75,
+                }[self.session.eye_screen.target(ts)]
+            )
+        )
+
+        self.assertEqual(result["items"]["E"]["status"], "insufficient")
+        self.assertEqual(
+            result["items"]["E"]["reason"],
+            "eye_metrics_recorded_for_validation",
+        )
+        self.assertIn(
+            "binocular_directional_asymmetry",
+            result["items"]["E"]["metrics"],
+        )
+
+    def test_opposite_target_following_is_not_inferred_as_camera_mirroring(self):
+        result = self.run_eye_screen(
+            lambda ts: face_observation(
+                gaze_ratio={
+                    "rest": 0.5,
+                    "center": 0.5,
+                    "left": 0.75,
+                    "right": 0.25,
+                }[self.session.eye_screen.target(ts)]
+            )
+        )
+
+        self.assertEqual(result["items"]["E"]["status"], "insufficient")
+        self.assertEqual(
+            result["items"]["E"]["reason"],
+            "visual_target_following_not_demonstrated",
         )
 
     def test_eye_response_allows_low_rate_endpoint_amplitude_variation(self):
@@ -663,7 +749,7 @@ class BefastSessionTest(unittest.TestCase):
                     "rest": 0.5,
                     "center": 0.5,
                     # 极弱但方向正确；不得因左右终点中点偏移而误标为静息偏向。
-                    "left": 0.49,
+                    "left": 0.45,
                     "right": 0.75,
                 }[self.session.eye_screen.target(ts)]
             )
@@ -674,6 +760,58 @@ class BefastSessionTest(unittest.TestCase):
             result["items"]["E"]["reason"],
             "binocular_directional_gaze_hypometria",
         )
+
+    def test_zero_mad_does_not_turn_subpixel_drift_into_infinite_snr(self):
+        result = self.run_eye_screen(
+            lambda ts: face_observation(
+                gaze_ratio={
+                    "rest": 0.5,
+                    "center": 0.5,
+                    "left": 0.499,
+                    "right": 0.501,
+                }[self.session.eye_screen.target(ts)]
+            )
+        )
+
+        self.assertEqual(
+            result["items"]["E"]["reason"],
+            "visual_target_following_not_demonstrated",
+        )
+        self.assertLess(
+            result["items"]["E"]["metrics"]["minimum_response_snr"],
+            self.config.eye_response_snr_threshold,
+        )
+
+    def test_direction_specific_binocular_endpoint_dysconjugacy_is_positive(self):
+        def observation(ts):
+            target = self.session.eye_screen.target(ts)
+            left_eye = {
+                "rest": 0.5,
+                "center": 0.5,
+                "left": 0.35,
+                "right": 0.75,
+            }[target]
+            right_eye = {
+                "rest": 0.5,
+                "center": 0.5,
+                "left": 0.25,
+                "right": 0.75,
+            }[target]
+            return face_observation(
+                left_gaze_ratio=left_eye,
+                right_gaze_ratio=right_eye,
+            )
+
+        result = self.run_eye_screen(observation)
+
+        self.assertEqual(result["items"]["E"]["status"], "positive")
+        self.assertEqual(
+            result["items"]["E"]["reason"],
+            "possible_binocular_endpoint_dysconjugacy",
+        )
+        metrics = result["items"]["E"]["metrics"]
+        self.assertGreater(metrics["left_conjugacy_relative_error"], 0.35)
+        self.assertAlmostEqual(metrics["right_conjugacy_relative_error"], 0.0)
 
     def test_one_eye_directional_restriction_is_positive(self):
         def observation(ts):

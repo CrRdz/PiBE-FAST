@@ -7,6 +7,8 @@ from pathlib import Path
 
 import numpy as np
 
+from app.speech_representation import DysarthriaPrediction
+
 from app.passive_speech import (
     EVIDENCE_VERSION,
     PassiveSpeechConfig,
@@ -60,6 +62,22 @@ class _ImmediateCapture:
 
     def capture(self, output_path, config, cancel_event):
         write_modulated_wav(Path(output_path), seconds=config.capture_seconds)
+
+
+class _PositiveMdscModel:
+    model_version = "test-mdsc"
+
+    def availability(self):
+        return True, None
+
+    def predict_wav(self, wav_path):
+        return DysarthriaPrediction(
+            probability=0.9,
+            threshold=0.8,
+            model_version=self.model_version,
+            representation_version="mdsc-logmel-v1",
+            embedding=(),
+        )
 
 
 class PassiveSpeechTest(unittest.TestCase):
@@ -118,6 +136,28 @@ class PassiveSpeechTest(unittest.TestCase):
         self.assertEqual(status["baseline_windows"], 0)
         self.assertEqual(status["assessment"], "waiting_for_speech")
         self.assertFalse(status["latest_window"]["valid"])
+
+    def test_mdsc_positive_immediately_recommends_guided_check(self):
+        with tempfile.TemporaryDirectory() as directory:
+            wav_path = Path(directory) / "window.wav"
+            write_modulated_wav(wav_path)
+            monitor = PassiveSpeechMonitor(
+                Path(directory) / "work",
+                capture_backend=_BlockingCapture(),
+                representation_model=_PositiveMdscModel(),
+                config=self.config(),
+            )
+
+            status = monitor.process_window(wav_path)
+
+        self.assertEqual(status["baseline_windows"], 0)
+        self.assertTrue(status["recommend_guided_check"])
+        self.assertEqual(status["assessment"], "suspected_change")
+        self.assertEqual(status["latest_window"]["changed_domains"], ["mdsc"])
+        self.assertAlmostEqual(
+            status["latest_window"]["metrics"]["mdsc_dysarthria_probability"],
+            0.9,
+        )
 
     def test_calibrates_persists_and_reloads_personal_baseline(self):
         with tempfile.TemporaryDirectory() as directory:

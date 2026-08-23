@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Summarize M5 target-microphone shadow sessions without raw audio."""
+"""Summarize M5 target-microphone prospective sessions without raw audio."""
 
 from __future__ import annotations
 
@@ -51,7 +51,7 @@ def main() -> int:
         "labeled_session_count": len(known),
         "descriptive_session_accuracy_at_model_threshold": sum(correct) / len(correct) if correct else None,
         "raw_audio_retained_by_microphone_runner": False,
-        "warning": "Descriptive M5 shadow summary only; define and freeze a prospective protocol before performance claims.",
+        "warning": "Descriptive M5 summary only; define and freeze a prospective protocol before performance claims.",
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

@@ -95,6 +95,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--height", type=int, default=RuntimeConfig.frame_height)
     parser.add_argument("--fps", type=int, default=RuntimeConfig.frame_fps)
     parser.add_argument(
+        "--eye-camera-mirrored",
+        action="store_true",
+        help=(
+            "Declare that raw E/F inference frames are horizontally mirrored; "
+            "CSS preview mirroring alone does not require this flag"
+        ),
+    )
+    parser.add_argument(
         "--standby-pose-fps",
         type=float,
         default=RuntimeConfig.standby_pose_fps,
@@ -144,6 +152,11 @@ def parse_args() -> argparse.Namespace:
     # 关闭 JSONL 可以减少磁盘写入；调试姿态规则时建议保持开启。
     parser.add_argument("--no-keypoint-log", action="store_true", help="Disable JSONL keypoint logging")
     parser.add_argument("--log-dir", default="data/keypoints")
+    parser.add_argument(
+        "--log-prefix",
+        default="session",
+        help="De-identified JSONL filename prefix for technical experiments",
+    )
     parser.add_argument(
         "--history-dir",
         default="data/history",
@@ -315,7 +328,11 @@ def run_detection(
         * 3600.0,
     )
     next_scheduled_trigger: float | None = None
-    logger = None if args.no_keypoint_log else JsonlKeypointLogger(args.log_dir)
+    logger = (
+        None
+        if args.no_keypoint_log
+        else JsonlKeypointLogger(args.log_dir, prefix=args.log_prefix)
+    )
     recorder = None
     pose_model = None
     face_model = None
@@ -936,7 +953,9 @@ def main() -> None:
     Path(args.log_dir).mkdir(parents=True, exist_ok=True)
     Path(args.clips_dir).mkdir(parents=True, exist_ok=True)
     history_store = AbnormalHistoryStore(args.history_dir)
-    balance_config = BefastConfig()
+    balance_config = BefastConfig(
+        eye_camera_mirrored=bool(args.eye_camera_mirrored)
+    )
     balance_baseline = PersonalBalanceBaseline(
         balance_config,
         args.balance_baseline_path,
@@ -945,6 +964,9 @@ def main() -> None:
     passive_speech_monitor = None
     if not args.disable_speech:
         microphone_capture = default_microphone_capture(device=args.speech_device)
+        mdsc_model = DysarthriaRepresentationModel(
+            args.speech_representation_model
+        )
         speech_service = SpeechCaptureService(
             args.speech_work_dir,
             capture_backend=microphone_capture,
@@ -952,9 +974,7 @@ def main() -> None:
                 model_path=args.speech_model,
                 executable=args.whisper_cli,
             ),
-            representation_model=DysarthriaRepresentationModel(
-                args.speech_representation_model
-            ),
+            representation_model=mdsc_model,
             config=SpeechAudioConfig(
                 capture_seconds=max(2.0, float(args.speech_capture_seconds))
             ),
@@ -974,6 +994,7 @@ def main() -> None:
             passive_speech_monitor = PassiveSpeechMonitor(
                 args.speech_work_dir,
                 capture_backend=microphone_capture,
+                representation_model=mdsc_model,
                 config=PassiveSpeechConfig(
                     window_seconds=max(
                         3.0, float(args.passive_speech_window_seconds)
