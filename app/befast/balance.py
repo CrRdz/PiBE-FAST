@@ -119,12 +119,36 @@ class PersonalBalanceBaseline:
         self,
         config: BefastConfig | None = None,
         path: str | Path | None = None,
+        require_confirmation: bool = False,
     ) -> None:
         self.config = config or BefastConfig()
         self.path = Path(path) if path is not None else None
         self.lock = threading.RLock()
         self.samples: list[dict[str, float]] = []
+        self.require_confirmation = bool(require_confirmation)
+        self.enrollment_confirmed = not self.require_confirmation
+        self.enrollment_context: dict[str, str] = {}
         self._load()
+
+    def confirm_enrollment(
+        self, *, subject_id: str, device_id: str, camera_fingerprint: str
+    ) -> dict[str, Any]:
+        """Confirm a symptom-free subject/device/camera context before learning."""
+
+        values = {
+            "subject_id": str(subject_id).strip(),
+            "device_id": str(device_id).strip(),
+            "camera_fingerprint": str(camera_fingerprint).strip(),
+        }
+        if any(not value for value in values.values()):
+            raise ValueError("subject_id, device_id, and camera_fingerprint are required")
+        with self.lock:
+            if self.enrollment_context and self.enrollment_context != values:
+                self.samples.clear()
+            self.enrollment_context = values
+            self.enrollment_confirmed = True
+            self._save_locked()
+            return self.snapshot()
 
     @property
     def ready(self) -> bool:
@@ -151,6 +175,8 @@ class PersonalBalanceBaseline:
                 "profile": self._profile_locked(),
                 "comparison": "personal_median_mad",
                 "evidence_version": BALANCE_EVIDENCE_VERSION,
+                "enrollment_confirmed": self.enrollment_confirmed,
+                "enrollment_context": dict(self.enrollment_context),
             }
 
     def assess(
@@ -171,6 +197,15 @@ class PersonalBalanceBaseline:
 
         with self.lock:
             target = max(1, int(self.config.balance_baseline_windows))
+            if self.require_confirmation and not self.enrollment_confirmed:
+                return {
+                    "status": "enrollment_required",
+                    "changed_domains": [],
+                    "unscorable_domains": [],
+                    "scores": {},
+                    "baseline_windows": len(self.samples),
+                    "baseline_target": target,
+                }
             if len(self.samples) < target:
                 if learn_if_needed:
                     self.samples.append(sample)
@@ -295,6 +330,16 @@ class PersonalBalanceBaseline:
             return
         try:
             payload = json.loads(self.path.read_text(encoding="utf-8"))
+            context = payload.get("enrollment_context", {})
+            if isinstance(context, dict):
+                self.enrollment_context = {
+                    key: str(context.get(key, ""))
+                    for key in ("subject_id", "device_id", "camera_fingerprint")
+                    if context.get(key)
+                }
+            self.enrollment_confirmed = bool(
+                payload.get("enrollment_confirmed", not self.require_confirmation)
+            )
             loaded = []
             for raw in payload.get("samples", []):
                 sample = {
@@ -319,6 +364,8 @@ class PersonalBalanceBaseline:
                 {
                     "schema_version": 2,
                     "evidence_version": BALANCE_EVIDENCE_VERSION,
+                    "enrollment_confirmed": self.enrollment_confirmed,
+                    "enrollment_context": self.enrollment_context,
                     "samples": self.samples,
                 },
                 ensure_ascii=False,
@@ -334,17 +381,28 @@ def balance_report_item(
 ) -> dict[str, Any]:
     """合并人工平衡回答与姿态结果，生成最终 B 报告项。"""
 
-    # 人工明确报告平衡问题时直接保留阳性，不被姿态结果覆盖。
+    measurement = motion_report_item(result, "pose")
     if manual_problem is True:
-        return report_item("positive", "manual", "reported_balance_problem")
-    if result.status in {"positive", "skipped"}:
-        return motion_report_item(result, "pose")
-    # B 同时包含主观症状和粗粒度姿态代理；两者都阴性才输出阴性。
-    if manual_problem is False and result.status == "negative":
-        return motion_report_item(result, "manual+pose")
-    if manual_problem is False and result.status == "insufficient":
-        return motion_report_item(result, "pose")
-    return report_item("pending", "manual+pose", "not_fully_checked")
+        status, reason = "positive", "reported_balance_problem"
+    elif result.status in {"positive", "skipped"}:
+        status, reason = result.status, result.reason
+    elif manual_problem is False and result.status in {"negative", "insufficient"}:
+        status, reason = result.status, result.reason
+    else:
+        status, reason = "pending", "not_fully_checked"
+    # A reported symptom may exempt an unstarted standing task for safety.
+    # A completed/failed acquisition is always retained, never relabeled exempt.
+    completion = ("safety_exempt" if manual_problem is True and result.status == "not_run"
+                  else result.status if result.status in {"insufficient", "skipped", "checking"}
+                  else status)
+    return {
+        **measurement, "status": status, "reason": reason,
+        "source": "manual" if manual_problem is True else "manual+pose",
+        "interpretation_status": status, "completion_status": completion,
+        "measurement_status": result.status, "camera_measurement": measurement,
+        "safety_exemption": "reported_balance_problem_do_not_stand" if completion == "safety_exempt" else None,
+    }
+
 
 
 class BalanceScreen:
@@ -482,6 +540,14 @@ class BalanceScreen:
             return MotionResult(
                 status="insufficient",
                 reason="personal_balance_baseline_calibrating",
+                quality=valid_fraction,
+                metrics=metrics,
+                details=details,
+            )
+        if assessment["status"] == "enrollment_required":
+            return MotionResult(
+                status="insufficient",
+                reason="personal_balance_baseline_enrollment_required",
                 quality=valid_fraction,
                 metrics=metrics,
                 details=details,

@@ -1,0 +1,91 @@
+\section{Supplied-Record Audit}
+\label{app:record_audit}
+
+The supplied feature-level dataset describes 40 de-identified healthy participants (20
+female and 20 male at birth), with ten participants in each of four age bands
+(18--29, 30--44, 45--59, and 60--74 years). Each participant contributed five
+visits, yielding 200 sessions and 800 B/E/F/A component evaluations. Visits were
+separate acquisitions spaced exactly seven days apart (160 successive-visit
+intervals; median and range, 7 days). The
+supplied participant metadata mark inclusion as passed, consent as obtained,
+and ethics review as approved. Committee identifier, approval documentation,
+and an independently auditable acquisition log are not included; these fields
+are source assertions rather than verified approvals. The supplied session metadata describe collection in a controlled
+indoor simulated-home environment using a Raspberry Pi Camera Module 3 at
+1280$\times$720 and a
+target rate of 15 frames/s. We treated a module observation as analyzable when its
+state was neither \textit{insufficient} nor \textit{skipped}. For each
+selected module output, Table~\ref{tab:human_repeatability} reproduces a
+one-way single-measure ICC(1,1), computed from the analyzable observations, a
+participant-bootstrap 95\% interval, and the residual within-participant SD
+normalized numerically by the corresponding engineering reference. For F, the
+unresolved source-unit mismatch prevents interpreting that ratio as variation
+relative to the implemented threshold. Because four
+observations per module failed quality gating, the ICC calculation used 196
+observations from 40 participants, with four or five repeats per participant.
+As a sensitivity analysis, ICC(2,1) used the 36 participants with all five
+visits for the relevant module.
+
+\begin{table}[htbp]
+\centering
+\caption{Descriptive reanalysis of supplied records from 40 participants; baseline provenance and F units remain unresolved.}
+\label{tab:human_repeatability}
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.03}
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+\textbf{Module} & \textbf{ICC(1,1)} & \textbf{95\% CI} & \textbf{ICC(2,1)} & \textbf{SD/ref.} \\
+\midrule
+B & 0.1404 & 0.013--0.498 & 0.1440 & 8.25\% \\
+E & 0.2662 & 0.089--0.817 & 0.2573 & 9.50\% \\
+F & 0.7837 & 0.649--0.883 & 0.7882 & 9.81\% \\
+A & 0.6788 & 0.429--0.880 & 0.6579 & 9.30\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+For every module, 195/200 evaluations were negative, 1/200 was positive, and
+4/200 were insufficient, giving an analyzable rate of 98\%. Mean quality scores
+were 0.933 for B, 0.928 for E, 0.931 for F, and 0.931 for A. The positive state
+in each module coincided with a raw metric crossing its engineering reference;
+the four insufficient states coincided with the module-specific quality-failure
+reason. These supplied healthy-control records describe selected-output variation and
+recorded quality yield, but do not estimate clinical
+sensitivity or specificity. The B and E numeric ICC estimates were lower than F and A. These
+relative-variation statistics do not resolve measurement provenance or establish
+absolute repeatability of the implemented modules.
+The E status counts were recorded as an offline
+engineering-reference audit. Unvalidated E thresholds remain disabled in the
+released runtime.
+
+The supplied age--sex cross-tabulation has ten women in each of the
+18--29 and 45--59 bands and ten men in each of the other two bands; age-band
+and sex effects cannot be separated. More fundamentally, the exported B change
+scores have no linked five-window enrollment records, so overlap with evaluation
+visits and baseline freezing cannot be audited. F is labeled
+\textit{shoulder-width ratio} in the source whereas the method uses interocular
+normalization. We preserve the source values and do not infer a conversion.
+The reported F SD/reference is therefore only a source-numeric calculation.
+Only one selected output per module is exported; the full multi-feature runtime
+decisions and quality gates cannot be reconstructed from these tables. These
+results are descriptive reanalysis pending provenance reconciliation, not a
+validated repeatability study of the released implementation.
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.88\columnwidth]{repeatability-icc.pdf}
+  \caption{Selected-output repeatability. Intervals resample participants;
+  quality-gate failures remain in yield summaries but are excluded from ICC.}
+  \label{fig:repeatability_icc}
+\end{figure}
+
+ICC is sensitive to the restricted between-participant range of a healthy cohort
+and therefore does not by itself establish agreement. The within-participant
+SD/reference values are engineering-normalized dispersion, not standard clinical
+repeatability coefficients. Future reporting should add Bland--Altman limits,
+standard error of measurement, minimal detectable change, and sensitivity
+analyses that retain quality failures. The one engineering-rule positive per 200
+evaluations is a threshold-crossing proportion, not a clinically adjudicated
+false-positive rate.
+

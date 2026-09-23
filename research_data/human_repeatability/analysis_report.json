@@ -1,0 +1,98 @@
+{
+  "analysis": "healthy_participant_repeatability",
+  "source": "research_data/human_repeatability/measurements.csv",
+  "bootstrap_seed": 203,
+  "bootstrap_replicates": 5000,
+  "module_records": 800,
+  "participants": 40,
+  "modules": {
+    "B": {
+      "selected_output": "trunk_orientation_change_score",
+      "total_evaluations": 200,
+      "analyzable_evaluations": 196,
+      "analyzable_rate": 0.98,
+      "status_counts": {
+        "insufficient": 4,
+        "negative": 195,
+        "positive": 1
+      },
+      "mean_quality": 0.9334139,
+      "icc_1_1": 0.1403855984295785,
+      "icc_1_1_participant_bootstrap_95pct": [
+        0.013203289390930248,
+        0.4981095849139493
+      ],
+      "within_participant_residual_sd": 0.2888721243357295,
+      "engineering_reference": 3.5,
+      "within_participant_sd_as_reference_percent": 8.253489266735128,
+      "complete_case_participants": 36,
+      "icc_2_1_complete_case": 0.14398788972585314
+    },
+    "E": {
+      "selected_output": "binocular_directional_asymmetry",
+      "total_evaluations": 200,
+      "analyzable_evaluations": 196,
+      "analyzable_rate": 0.98,
+      "status_counts": {
+        "insufficient": 4,
+        "negative": 195,
+        "positive": 1
+      },
+      "mean_quality": 0.9279546500000001,
+      "icc_1_1": 0.2661638563793389,
+      "icc_1_1_participant_bootstrap_95pct": [
+        0.08900246905100485,
+        0.8166670567289748
+      ],
+      "within_participant_residual_sd": 0.04274860503497042,
+      "engineering_reference": 0.45,
+      "within_participant_sd_as_reference_percent": 9.499690007771203,
+      "complete_case_participants": 36,
+      "icc_2_1_complete_case": 0.2572572815777419
+    },
+    "F": {
+      "selected_output": "mouth_corner_delta",
+      "total_evaluations": 200,
+      "analyzable_evaluations": 196,
+      "analyzable_rate": 0.98,
+      "status_counts": {
+        "insufficient": 4,
+        "negative": 195,
+        "positive": 1
+      },
+      "mean_quality": 0.93130815,
+      "icc_1_1": 0.7837048683188231,
+      "icc_1_1_participant_bootstrap_95pct": [
+        0.6487161403472994,
+        0.8834721683348381
+      ],
+      "within_participant_residual_sd": 0.0073568114151932665,
+      "engineering_reference": 0.075,
+      "within_participant_sd_as_reference_percent": 9.809081886924355,
+      "complete_case_participants": 36,
+      "icc_2_1_complete_case": 0.7882044027396138
+    },
+    "A": {
+      "selected_output": "level_difference",
+      "total_evaluations": 200,
+      "analyzable_evaluations": 196,
+      "analyzable_rate": 0.98,
+      "status_counts": {
+        "insufficient": 4,
+        "negative": 195,
+        "positive": 1
+      },
+      "mean_quality": 0.93100275,
+      "icc_1_1": 0.6787994153930208,
+      "icc_1_1_participant_bootstrap_95pct": [
+        0.4286972901078637,
+        0.8795910049190075
+      ],
+      "within_participant_residual_sd": 0.02791271113461778,
+      "engineering_reference": 0.3,
+      "within_participant_sd_as_reference_percent": 9.304237044872593,
+      "complete_case_participants": 36,
+      "icc_2_1_complete_case": 0.6579049617461392
+    }
+  }
+}

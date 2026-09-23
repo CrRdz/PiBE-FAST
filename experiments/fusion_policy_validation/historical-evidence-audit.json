@@ -1,0 +1,21 @@
+{
+  "scope": "No inference from component, timestamp, or operation label to runtime path.",
+  "targets": 38,
+  "triggered": 35,
+  "runtime_paths_resolved": 0,
+  "historical_comparators": {
+    "SCH-A-NOBASE": {
+      "population_parameters": null,
+      "construction_provenance": null
+    },
+    "SCH-B-NOGATE": {
+      "disabled_rules": null
+    }
+  },
+  "source_hashes": {
+    "events_and_references.csv": "9d39376762e0f28ae519a4d07acd9c0af058bb8907db61d467c4e848a9bec411",
+    "system_outputs.csv": "51d6d2d1b28f845f8cc3f9be6f1bf4a868069460f9cefbd4dc20fcd788d91701",
+    "sessions.csv": "eb62bd22b8bd05f03b12e9aa6c1d6a8ef9a94f9f4173cbdc7fd70e6f167e7b32",
+    "face_eye_reference_measurements.csv": "f46514871cb56ce78ce98958faf223d09b2e2d4d7c625b142006ddb7d6e198e3"
+  }
+}

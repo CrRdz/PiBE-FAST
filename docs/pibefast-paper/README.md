@@ -1,35 +1,25 @@
-# PiBE-FAST conference paper
+# Current manuscript
 
-The latest compiled English manuscript is available as
-[`pibefast-conference-paper.pdf`](pibefast-conference-paper.pdf).
+**Multimodal Embodied AI for Stroke Warning-Sign Assessment**
 
-The paper is organized as one LaTeX file per top-level section. `main.tex`
-contains only the IEEE preamble and ordered `\input` statements.
+- [English paper PDF](pibefast-conference-paper.pdf)
+- [Final data index](../../research_data/FINAL_DATA_TABLES.md)
 
-```text
-pibefast-paper/
-├── main.tex
-├── IEEEtran.cls
-├── references.bib
-└── sections/
-    ├── frontmatter.tex
-    ├── abstract.tex
-    ├── introduction.tex
-    ├── related-work.tex
-    ├── system-overview.tex
-    ├── multimodal-methods.tex
-    ├── fusion.tex
-    ├── experiments.tex
-    ├── discussion-conclusion.tex
-    └── references.tex
-```
+## Build
 
-Compile from this directory:
+Run `latexmk -interaction=nonstopmode -halt-on-error main.tex` from this directory. Output: `build/main.pdf`. Delivery copy: `pibefast-conference-paper.pdf`.
 
-```bash
-latexmk main.tex
-```
+## Data and reproduction
 
-The local `.latexmkrc` writes the PDF and all intermediate files to `build/`.
-That directory is ignored by Git. The compiled paper is therefore available at
-`build/main.pdf` without adding generated files to the source directory.
+- [Supporting methods and evidence](supporting-notes.md)
+- `scripts/analyze_validation_workbook.py`: validation analysis.
+- `scripts/generate_validation_figures.py`: participant outcome and reference plots; defaults to the final data version.
+- `scripts/analyze_human_repeatability.py`: healthy-participant repeatability.
+- `scripts/analyze_pipc_pilot.py`: pilot counts and resource analysis.
+- `scripts/polish_paper_figures.py`: healthy, speaker and resource plots, plus supplementary pilot counts.
+- `scripts/draw_system_overview.py`: system overview.
+- `scripts/generate_paper_evidence_figures.py` and `scripts/analyze_model_evidence.py`: calibration and speaker evidence.
+- `scripts/verify_fusion_policy.py`, `scripts/export_api_traces.py` and `tests/`: software verification.
+
+Script paths are relative to the repository root. Figure QA depends on local
+plotting utilities; generated previews and temporary workspaces are not versioned.

@@ -1,0 +1,79 @@
+{
+  "analysis": "held_out_mdsc_recording_level_calibration",
+  "model_version": "mdsc-dysarthria-v1",
+  "decision_threshold": 0.7352820324592312,
+  "feature_archive": "training/processed/mdsc_features.npz",
+  "interpretation": "Descriptive internal-corpus calibration only; the effective independent test sample is six speakers and the label is chronic dysarthria, not acute stroke.",
+  "recordings": 2430,
+  "speakers": 6,
+  "calibration_in_the_large": 1.4653846123098422,
+  "calibration_model_intercept": 1.1007748298966866,
+  "calibration_slope": 0.8019541337070211,
+  "mean_predicted_probability": 0.4115708413932538,
+  "observed_prevalence": 0.5,
+  "brier_score": 0.09825585066292333,
+  "scaled_brier_score": 0.6069765973483067,
+  "speaker_cluster_bootstrap_95pct": {
+    "calibration_in_the_large": [
+      -1.591935377140422,
+      3.5918147964403904
+    ],
+    "brier_score": [
+      0.021985635955198052,
+      0.22729648061606547
+    ]
+  },
+  "calibration_parameter_interval_note": "Speaker-clustered intervals for the joint calibration intercept and slope are not reported because six test speakers produce frequent separation and non-identifiable bootstrap fits.",
+  "equal_frequency_bins": [
+    {
+      "count": 243,
+      "mean_predicted": 0.000518375194047641,
+      "observed_fraction": 0.00823045267489712
+    },
+    {
+      "count": 243,
+      "mean_predicted": 0.002932493522908666,
+      "observed_fraction": 0.03292181069958848
+    },
+    {
+      "count": 243,
+      "mean_predicted": 0.009458794160912144,
+      "observed_fraction": 0.07407407407407407
+    },
+    {
+      "count": 243,
+      "mean_predicted": 0.0290698001788369,
+      "observed_fraction": 0.13168724279835392
+    },
+    {
+      "count": 243,
+      "mean_predicted": 0.09146841972261283,
+      "observed_fraction": 0.2880658436213992
+    },
+    {
+      "count": 243,
+      "mean_predicted": 0.2985317027429429,
+      "observed_fraction": 0.6255144032921811
+    },
+    {
+      "count": 243,
+      "mean_predicted": 0.7070988240322369,
+      "observed_fraction": 0.8518518518518519
+    },
+    {
+      "count": 243,
+      "mean_predicted": 0.9773777291842242,
+      "observed_fraction": 0.9876543209876543
+    },
+    {
+      "count": 243,
+      "mean_predicted": 0.9993058924203981,
+      "observed_fraction": 1.0
+    },
+    {
+      "count": 243,
+      "mean_predicted": 0.9999463827734179,
+      "observed_fraction": 1.0
+    }
+  ]
+}

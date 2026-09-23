@@ -8,13 +8,14 @@ to request the existing guided fixed-phrase speech check.
 from __future__ import annotations
 
 from collections import deque
+from copy import deepcopy
 from dataclasses import dataclass
 import json
 from math import ceil, log10
 from pathlib import Path
 import threading
 import time
-from typing import Any
+from typing import Any, Callable
 from uuid import uuid4
 
 import numpy as np
@@ -74,6 +75,13 @@ FEATURE_SCALE_FLOORS = {
 }
 
 
+def _cosine_similarity(left: np.ndarray, right: np.ndarray) -> float:
+    denominator = float(np.linalg.norm(left) * np.linalg.norm(right))
+    if denominator <= 1e-12 or left.shape != right.shape:
+        return -1.0
+    return float(np.dot(left, right) / denominator)
+
+
 @dataclass(frozen=True)
 class PassiveSpeechConfig:
     """Capture cadence and conservative change-detection thresholds."""
@@ -93,6 +101,9 @@ class PassiveSpeechConfig:
     anomaly_votes_required: int = 3
     anomaly_z_threshold: float = 3.5
     min_abnormal_domains: int = 2
+    require_speaker_verification: bool = False
+    speaker_enrollment_windows: int = 3
+    speaker_cosine_threshold: float = 0.70
 
 
 def analyze_passive_speech_wav(
@@ -254,13 +265,16 @@ class PassiveSpeechMonitor:
         capture_backend: SpeechCaptureBackend,
         representation_model: SpeechRepresentationModel | None = None,
         config: PassiveSpeechConfig | None = None,
+        on_trigger: Callable[[str], None] | None = None,
     ) -> None:
         self.root_dir = Path(root_dir)
         self.root_dir.mkdir(parents=True, exist_ok=True)
         self.baseline_path = self.root_dir / "passive-baseline.json"
+        self.speaker_path = self.root_dir / "passive-speaker.json"
         self.capture_backend = capture_backend
         self.representation_model = representation_model
         self.config = config or PassiveSpeechConfig()
+        self.on_trigger = on_trigger
         self.lock = threading.RLock()
         self.condition = threading.Condition(self.lock)
         self.stop_event = threading.Event()
@@ -284,9 +298,24 @@ class PassiveSpeechMonitor:
             )
         )
         self.recommend_guided_check = False
+        self.vote_windows: deque[dict[str, Any]] = deque(maxlen=self.recent_anomalies.maxlen)
         self.suspected_since: float | None = None
         self.generation = 0
+        self.speaker_embedding: np.ndarray | None = None
+        self.speaker_enrollment: list[np.ndarray] = []
+        self.enrolling_speaker = False
         self._load_baseline()
+        self._load_speaker()
+
+    def start_speaker_enrollment(self) -> dict[str, Any]:
+        """Require explicit consent before collecting target-speaker windows."""
+
+        with self.lock:
+            self.speaker_embedding = None
+            self.speaker_enrollment.clear()
+            self.enrolling_speaker = True
+            self.speaker_path.unlink(missing_ok=True)
+            return self.snapshot()
 
     def start(self) -> dict[str, Any]:
         with self.condition:
@@ -356,6 +385,7 @@ class PassiveSpeechMonitor:
             self.generation += 1
             self.baseline_samples.clear()
             self.recent_anomalies.clear()
+            self.vote_windows.clear()
             self.latest_window = None
             self.recommend_guided_check = False
             self.suspected_since = None
@@ -400,13 +430,21 @@ class PassiveSpeechMonitor:
                 "suspected_since": self.suspected_since,
                 "last_window_at": self.last_window_at,
                 "latest_window": (
-                    dict(self.latest_window)
+                    {
+                        key: deepcopy(value)
+                        for key, value in self.latest_window.items()
+                        if not key.startswith("_")
+                    }
                     if self.latest_window is not None
                     else None
                 ),
                 "last_error": self.last_error,
                 "raw_audio_retained": False,
-                "speaker_verification": False,
+                "speaker_verification": self.config.require_speaker_verification,
+                "speaker_profile_ready": self.speaker_embedding is not None,
+                "speaker_enrollment_active": self.enrolling_speaker,
+                "speaker_enrollment_windows": len(self.speaker_enrollment),
+                "speaker_enrollment_target": self.config.speaker_enrollment_windows,
                 "representation_mode": (
                     "direct_guided_trigger"
                     if self.representation_model is not None
@@ -462,11 +500,17 @@ class PassiveSpeechMonitor:
             path = self.root_dir / f"passive-{uuid4().hex}.wav"
             failed = False
             try:
+                capture_started_at = time.time()
                 self.capture_backend.capture(path, capture_config, cancel_event)
+                capture_finished_at = time.time()
                 if cancel_event.is_set() or self.stop_event.is_set():
                     continue
                 analysis = analyze_passive_speech_wav(path, self.config)
                 analysis = self._with_mdsc_prediction(analysis, path)
+                analysis.update(window_id=path.stem,
+                                capture_started_at=capture_started_at,
+                                capture_finished_at=capture_finished_at,
+                                analysis_completed_at=time.time())
                 self._accept_analysis(analysis, generation)
             except Exception as exc:
                 if not cancel_event.is_set() and not self.stop_event.is_set():
@@ -496,6 +540,7 @@ class PassiveSpeechMonitor:
     def _accept_analysis(self, analysis: dict[str, Any], generation: int) -> None:
         now = time.time()
         save_baseline = False
+        trigger_reason: str | None = None
         with self.lock:
             if generation != self.generation:
                 return
@@ -504,6 +549,7 @@ class PassiveSpeechMonitor:
             window = {
                 **analysis,
                 "captured_at": round(now, 4),
+                "decision_evaluated_at": now,
                 "anomaly": False,
                 "anomaly_score": 0.0,
                 "changed_features": [],
@@ -517,42 +563,51 @@ class PassiveSpeechMonitor:
                 return
 
             mdsc = analysis.get("mdsc", {})
+            embedding = analysis.get("_speaker_embedding")
+            if self.config.require_speaker_verification:
+                if not isinstance(embedding, list):
+                    self.latest_window = {**window, "reason": "speaker_embedding_unavailable"}
+                    self.assessment = "speaker_unverified"
+                    return
+                vector = np.asarray(embedding, dtype=np.float64)
+                if self.enrolling_speaker:
+                    self.speaker_enrollment.append(vector)
+                    if len(self.speaker_enrollment) >= max(
+                        1, self.config.speaker_enrollment_windows
+                    ):
+                        self.speaker_embedding = np.mean(self.speaker_enrollment, axis=0)
+                        self.enrolling_speaker = False
+                        self._save_speaker()
+                    self.latest_window = {**window, "reason": "speaker_enrollment_window"}
+                    self.assessment = "speaker_enrollment"
+                    return
+                if self.speaker_embedding is None:
+                    self.latest_window = {**window, "reason": "speaker_profile_required"}
+                    self.assessment = "speaker_unverified"
+                    return
+                similarity = _cosine_similarity(vector, self.speaker_embedding)
+                window["speaker_similarity"] = round(similarity, 4)
+                if similarity < self.config.speaker_cosine_threshold:
+                    self.latest_window = {**window, "reason": "non_target_speaker_rejected"}
+                    self.assessment = "speaker_unverified"
+                    return
             mdsc_anomaly = bool(
                 isinstance(mdsc, dict) and mdsc.get("predicted_dysarthria")
             )
-            if mdsc_anomaly:
+            mdsc_score = 0.0
+            if isinstance(mdsc, dict):
                 probability = float(mdsc.get("probability", 0.0))
                 threshold = max(float(mdsc.get("threshold", 1.0)), 1e-9)
-                window.update(
-                    {
-                        "anomaly": True,
-                        "anomaly_score": round(probability / threshold, 4),
-                        "changed_features": ["mdsc_dysarthria_probability"],
-                        "changed_domains": ["mdsc"],
-                        "feature_scores": {
-                            "mdsc_dysarthria_probability": round(
-                                probability / threshold, 4
-                            )
-                        },
-                        "domain_scores": {
-                            "mdsc": round(probability / threshold, 4)
-                        },
-                    }
-                )
-                self.recent_anomalies.append(True)
-                self.recommend_guided_check = True
-                if self.suspected_since is None:
-                    self.suspected_since = now
-                self.assessment = "suspected_change"
-                self.latest_window = window
-                return
-
+                mdsc_score = probability / threshold
             features = {
                 name: float(value)
                 for name, value in analysis.get("features", {}).items()
                 if name in PASSIVE_FEATURES and np.isfinite(float(value))
             }
-            if len(self.baseline_samples) < self.config.baseline_windows:
+            if (
+                trigger_reason is None
+                and len(self.baseline_samples) < self.config.baseline_windows
+            ):
                 self.baseline_samples.append(features)
                 self.baseline_samples = self.baseline_samples[
                     -max(
@@ -568,7 +623,7 @@ class PassiveSpeechMonitor:
                     else "calibrating"
                 )
                 save_baseline = True
-            else:
+            elif trigger_reason is None:
                 feature_scores = _feature_scores(
                     features,
                     self.baseline_samples,
@@ -590,16 +645,33 @@ class PassiveSpeechMonitor:
                     )
                     for domain, names in FEATURE_DOMAINS.items()
                 }
+                # MDSC is a supportive domain in passive monitoring.  It cannot
+                # trigger by itself because the guided fixed-phrase check uses
+                # the same model family; requiring another changed acoustic
+                # domain and sustained votes prevents circular self-confirmation.
+                if mdsc_anomaly:
+                    domain_scores["mdsc"] = mdsc_score
+                    feature_scores["mdsc_dysarthria_probability"] = mdsc_score
                 changed_domains = sorted(
                     domain
                     for domain, score in domain_scores.items()
-                    if score >= self.config.anomaly_z_threshold
+                    if (
+                        domain == "mdsc"
+                        or score >= self.config.anomaly_z_threshold
+                    )
                 )
                 anomaly = (
                     len(changed_domains)
                     >= max(1, int(self.config.min_abnormal_domains))
                 )
                 self.recent_anomalies.append(anomaly)
+                self.vote_windows.append({
+                    "window_id": analysis.get("window_id"),
+                    "capture_started_at": analysis.get("capture_started_at"),
+                    "capture_finished_at": analysis.get("capture_finished_at"),
+                    "decision_evaluated_at": now,
+                    "anomaly": anomaly,
+                })
                 votes = int(sum(self.recent_anomalies))
                 sustained = (
                     len(self.recent_anomalies)
@@ -611,6 +683,7 @@ class PassiveSpeechMonitor:
                     if self.suspected_since is None:
                         self.suspected_since = now
                     self.assessment = "suspected_change"
+                    trigger_reason = "passive_acoustic_change_trigger"
                 elif anomaly:
                     self.suspected_since = None
                     self.assessment = "observing_change"
@@ -625,11 +698,19 @@ class PassiveSpeechMonitor:
                         "changed_domains": changed_domains,
                         "feature_scores": _rounded(feature_scores),
                         "domain_scores": _rounded(domain_scores),
+                        "vote_windows": [dict(record) for record in self.vote_windows],
+                        "anomaly_votes": votes,
                     }
                 )
                 self.latest_window = window
         if save_baseline:
             self._save_baseline(generation)
+        if trigger_reason is not None and self.on_trigger is not None:
+            try:
+                self.on_trigger(trigger_reason)
+            except Exception as exc:
+                with self.lock:
+                    self.last_error = f"trigger callback failed: {exc}"
 
     def _with_mdsc_prediction(
         self, analysis: dict[str, Any], wav_path: str | Path
@@ -654,7 +735,34 @@ class PassiveSpeechMonitor:
                 "mdsc_dysarthria_threshold": prediction.threshold,
             },
             "mdsc": mdsc,
+            "_speaker_embedding": list(prediction.embedding),
         }
+
+    def _load_speaker(self) -> None:
+        try:
+            payload = json.loads(self.speaker_path.read_text(encoding="utf-8"))
+            vector = np.asarray(payload["embedding"], dtype=np.float64)
+            if vector.ndim == 1 and vector.size and np.isfinite(vector).all():
+                self.speaker_embedding = vector
+        except (OSError, ValueError, TypeError, KeyError):
+            self.speaker_embedding = None
+
+    def _save_speaker(self) -> None:
+        if self.speaker_embedding is None:
+            return
+        temporary = self.speaker_path.with_suffix(".tmp")
+        temporary.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "embedding": self.speaker_embedding.tolist(),
+                    "threshold": self.config.speaker_cosine_threshold,
+                },
+                separators=(",", ":"),
+            ),
+            encoding="utf-8",
+        )
+        temporary.replace(self.speaker_path)
 
     def _load_baseline(self) -> None:
         try:

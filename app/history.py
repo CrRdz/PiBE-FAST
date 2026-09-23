@@ -45,6 +45,8 @@ class AbnormalHistoryStore:
             attempt = int(report["attempt"])
         except (KeyError, TypeError, ValueError):
             return None
+        if report.get("session_id") and report.get("revision"):
+            return f"{report['session_id']}:{component}:{report['revision']}"
         return f"{completed_at:.4f}:{component}:{attempt}"
 
     def save_positive_report(
@@ -57,7 +59,10 @@ class AbnormalHistoryStore:
         """Persist a positive report once and attach frame/audio evidence."""
 
         item = report.get("item")
-        if not isinstance(item, Mapping) or item.get("status") != "positive":
+        if not isinstance(item, Mapping):
+            return None
+        positive = item.get("status") == "positive" or item.get("reported_functional_problem") is True
+        if not positive and report.get("kind") != "symptom_correction":
             return None
         event_key = self.report_key(report)
         if event_key is None:
@@ -73,7 +78,9 @@ class AbnormalHistoryStore:
             separators=(",", ":"),
             sort_keys=True,
         )
-        details = item.get("details")
+        details = dict(item.get("details") or {})
+        if report.get("session_id"):
+            details["evidence_report"] = dict(report)
         details_json = json.dumps(
             details if isinstance(details, Mapping) else {},
             ensure_ascii=False,
@@ -104,12 +111,13 @@ class AbnormalHistoryStore:
                             details_json, new_or_sudden, onset_time, completed_at,
                             captured_at
                         )
-                        VALUES (?, ?, ?, 'positive', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             event_key,
                             component,
                             attempt,
+                            "positive" if positive else "corrected",
                             str(report.get("decision", "warning")),
                             str(item.get("reason", "unknown")),
                             _optional_text(item.get("affected_side")),

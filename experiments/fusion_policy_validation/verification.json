@@ -1,0 +1,13 @@
+{
+  "pages": {
+    "en": 7,
+    "zh": 6
+  },
+  "unit_tests_passed": 171,
+  "synthetic_policy_cases_passed": 3125,
+  "historical_paths_recovered": 0,
+  "historical_comparator_parameters_recovered": false,
+  "real_final_alert_benefit_established": false,
+  "visual_qa": "All pages inspected, no clipping or overlap",
+  "source_workbook_sha256": "59bee5086661ed4043b2ab14288fe1b8551eef781711304a819cd370b76097dd"
+}

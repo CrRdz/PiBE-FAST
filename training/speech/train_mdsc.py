@@ -83,6 +83,57 @@ def _bootstrap_intervals(
     }
 
 
+def _cluster_bootstrap_intervals(
+    labels: np.ndarray,
+    probabilities: np.ndarray,
+    subjects: np.ndarray,
+    threshold: float,
+    *,
+    seed: int,
+    replicates: int,
+) -> dict[str, list[float]]:
+    """Recording-level intervals with speakers as the resampling unit."""
+
+    rng = np.random.default_rng(seed)
+    unique_subjects = np.asarray(sorted(set(str(value) for value in subjects)))
+    subject_indices = {
+        subject: np.flatnonzero(subjects == subject) for subject in unique_subjects
+    }
+    collected = {
+        name: []
+        for name in (
+            "sensitivity",
+            "specificity",
+            "balanced_accuracy",
+            "roc_auc",
+            "brier_score",
+        )
+    }
+    for _ in range(max(0, replicates)):
+        sampled_subjects = rng.choice(
+            unique_subjects, size=len(unique_subjects), replace=True
+        )
+        sampled_indices = np.concatenate(
+            [subject_indices[str(subject)] for subject in sampled_subjects]
+        )
+        sampled_labels = labels[sampled_indices]
+        if len(set(sampled_labels.tolist())) < 2:
+            continue
+        values = _metrics(
+            sampled_labels, probabilities[sampled_indices], threshold
+        )
+        for name in collected:
+            collected[name].append(values[name])
+    return {
+        name: [
+            float(np.percentile(values, 2.5)),
+            float(np.percentile(values, 97.5)),
+        ]
+        for name, values in collected.items()
+        if values
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--features", required=True, type=Path)
@@ -141,8 +192,8 @@ def main() -> int:
         labels[development], out_of_fold, subjects[development]
     )
     oof_threshold, _ = select_threshold(
-        oof_speaker_labels,
-        oof_speaker_probabilities,
+        labels[development],
+        out_of_fold,
         target_sensitivity=args.target_sensitivity,
     )
     # Freeze the deployable model on train speakers, calibrate its threshold on
@@ -152,9 +203,9 @@ def main() -> int:
     validation_speaker_labels, validation_speaker_probabilities, _ = _speaker_average(
         labels[validation], validation_probabilities, subjects[validation]
     )
-    threshold, _ = select_threshold(
-        validation_speaker_labels,
-        validation_speaker_probabilities,
+    threshold, threshold_selection_metrics = select_threshold(
+        labels[validation],
+        validation_probabilities,
         target_sensitivity=args.target_sensitivity,
     )
     test_probabilities = fitted_all.predict_probability(matrix[test])
@@ -180,9 +231,19 @@ def main() -> int:
         "folds": args.folds,
         "seed": args.seed,
         "target_sensitivity": args.target_sensitivity,
+        "threshold_selection_unit": "recording",
+        "threshold_selection_metrics": threshold_selection_metrics,
         "oof_decision_threshold": oof_threshold,
         "decision_threshold": threshold,
         "oof_sample_metrics": _metrics(labels[development], out_of_fold, oof_threshold),
+        "oof_sample_cluster_95pct_intervals": _cluster_bootstrap_intervals(
+            labels[development],
+            out_of_fold,
+            subjects[development],
+            oof_threshold,
+            seed=args.seed + 50,
+            replicates=args.bootstrap_replicates,
+        ),
         "oof_speaker_metrics": _metrics(oof_speaker_labels, oof_speaker_probabilities, oof_threshold),
         "oof_speaker_95pct_intervals": _bootstrap_intervals(
             oof_speaker_labels,
@@ -192,10 +253,26 @@ def main() -> int:
             replicates=args.bootstrap_replicates,
         ),
         "validation_sample_metrics": _metrics(labels[validation], validation_probabilities, threshold),
+        "validation_sample_cluster_95pct_intervals": _cluster_bootstrap_intervals(
+            labels[validation],
+            validation_probabilities,
+            subjects[validation],
+            threshold,
+            seed=args.seed + 150,
+            replicates=args.bootstrap_replicates,
+        ),
         "validation_speaker_metrics": _metrics(
             validation_speaker_labels, validation_speaker_probabilities, threshold
         ),
         "held_out_test_sample_metrics": _metrics(labels[test], test_probabilities, threshold),
+        "held_out_test_sample_cluster_95pct_intervals": _cluster_bootstrap_intervals(
+            labels[test],
+            test_probabilities,
+            subjects[test],
+            threshold,
+            seed=args.seed + 250,
+            replicates=args.bootstrap_replicates,
+        ),
         "held_out_test_speaker_metrics": _metrics(test_speaker_labels, test_speaker_probabilities, threshold),
         "held_out_test_speaker_95pct_intervals": _bootstrap_intervals(
             test_speaker_labels,
@@ -209,6 +286,7 @@ def main() -> int:
         "warnings": [
             "Research-only internal MDSC validation; not clinical validation.",
             "The positive label represents chronic dysarthria in MDSC, not acute stroke or acute change.",
+            "The deployable threshold is selected and evaluated at the recording level; uncertainty intervals resample speakers.",
             "Runtime inference contributes to the Speech screening status but is not an acute-stroke diagnosis.",
         ],
     }

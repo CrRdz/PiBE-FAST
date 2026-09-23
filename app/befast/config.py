@@ -24,6 +24,7 @@ class BefastConfig:
     # 样本数和有效帧比例同时达标，才允许输出阴性或阳性结果。
     arm_min_valid_samples: int = 20
     arm_min_valid_fraction: float = 0.55
+    arm_min_endpoint_samples: int = 6
     # 完成门控：必须从自然下垂开始、双臂横向抬至肩高、保持、再放下。
     arm_start_wrist_below_shoulder: float = 0.45
     arm_raise_wrist_height_tolerance: float = 0.42
@@ -43,9 +44,10 @@ class BefastConfig:
     # 只分析随后保持注视的低帧率终点，不把它描述成扫视速度/潜伏期测量。
     eye_target_seconds: float = 2.0
     eye_settle_seconds: float = 0.5
-    # 下列固定质量门槛缺少目标设备健康受试者数据，默认不参与有效性判定；
-    # 保留配置只用于预先声明的离线消融和旧数据复现。
-    eye_enable_unvalidated_quality_gates: bool = False
+    # 下列门槛仅判断工程测量是否可用，不判断疾病阳性/阴性。由于自动 E
+    # 已明确排除在最终安全状态之外，默认启用采集质量门控以拒绝明显无效记录；
+    # 数值仍需目标设备数据复核，不能解释为临床 cutoff。
+    eye_enable_unvalidated_quality_gates: bool = True
     eye_min_samples_per_trial: int = 5
     eye_min_valid_fraction_per_trial: float = 0.60
     # 实际视频帧尺寸可用时，同时要求每只眼有足够像素；7.5% 脸宽规则不再
@@ -114,4 +116,4 @@ class BefastConfig:
     # Frozen threshold exported by models/mdsc_dysarthria_v1.json. Individual
     # S reports retain their model-specific threshold; this is the fallback for
     # older reports that include the probability but not threshold metadata.
-    fusion_speech_mdsc_probability_reference: float = 0.8078592037937518
+    fusion_speech_mdsc_probability_reference: float = 0.7352820324592312

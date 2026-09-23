@@ -1,0 +1,37 @@
+{
+  "scope": "bounded synthetic software configurations; no hardware or clinical experiment",
+  "checks": 263,
+  "passed": 263,
+  "groups": {
+    "E completion": 6,
+    "Nullable baseline": 27,
+    "Report persistence": 18,
+    "Evidence identity": 18,
+    "Reset isolation": 18,
+    "Speech ordering": 36,
+    "Stale result rejection": 3,
+    "Stale result isolation": 3,
+    "Measurement preservation": 3,
+    "Undefined severity": 4,
+    "All-modal retry retention": 45,
+    "All-modal corrections": 45,
+    "All-modal measurements": 15,
+    "Versioned corrections": 5,
+    "Historical snapshot isolation": 5,
+    "Persistent correction audit": 5,
+    "Concurrent symptom updates": 5,
+    "Standing safety exemption": 2
+  },
+  "source_sha256": {
+    "scripts/verify_workflow_contracts.py": "71a44755173ea18b5719fa3b3ed099c8596402f705f0755472a28004bb3e0f82",
+    "app/befast/session.py": "390472ecad9b3c498877d5894a0a908d2cea0e070364c31e6261cb56f4bcde16",
+    "app/befast/report.py": "4bc2bdbdeaa2f4667ffe6d32960c23f30d786dd2b227f833f2c954115584abd3",
+    "app/befast/urgency.py": "807d7b1609e4bce1252ff062b3e33b5f51b6e9f793c944a9026c43613656aae1",
+    "app/befast/fusion.py": "6666e03fed2e5285d70edad7abfbe0e5442fa1b6fa1b9a1379704b53c322ee92",
+    "app/speech_audio.py": "f058b8869a1af201d6cb609a6a284ecb6fe20d86fdd21fdef2289009cc9a2666",
+    "app/web.py": "d96c78a85fc803dec04af19475193f5e911d679fd1de05f0e0f2cb61b5343dda",
+    "app/history.py": "96f5f38097b04cdbd463a5d14798e805e7b938f384bad352d14980c6f1fe96fd",
+    "app/befast/balance.py": "e39ae8586925a663b04ba5fdd1b7cdab4018f04fdcc61f3232b4a3982b649afd",
+    "tests/test_evidence_lifecycle.py": "f62ff4af4ba241db6d8a7fe9a2fb8e26a7f0ad0cd401a80901171d101c4037a5"
+  }
+}

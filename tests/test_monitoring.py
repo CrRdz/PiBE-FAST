@@ -71,6 +71,43 @@ class PassiveMonitorTest(unittest.TestCase):
         self.assertFalse(monitor.should_infer(10.0))
         self.assertFalse(monitor.snapshot("standby", "standby_camera_only")["enabled"])
 
+    def test_normal_activity_and_absence_invalidate_passive_balance_candidate(self):
+        balance_config = BefastConfig(
+            balance_warmup_seconds=0.0,
+            balance_capture_seconds=1.0,
+            balance_min_valid_samples=2,
+            balance_min_valid_fraction=0.5,
+            balance_baseline_windows=2,
+        )
+        monitor = PassiveMonitor(
+            PassiveMonitoringConfig(inference_fps=10.0),
+            balance_config=balance_config,
+        )
+
+        self.assertFalse(
+            monitor.update(0.0, self.pose(), self.standing_keypoints())
+        )
+        self.assertIsNotNone(monitor.balance_screen.start_ts)
+        for index, pose_name in enumerate(("sitting", "walking", "bending"), 1):
+            pose = PoseClassification(
+                pose=pose_name,
+                confidence=0.9,
+                quality=0.8,
+                metrics={"center_y": 0.5, "torso_vertical_degrees": 20.0},
+            )
+            self.assertFalse(
+                monitor.update(float(index), pose, self.standing_keypoints())
+            )
+            self.assertIsNone(monitor.balance_screen.start_ts)
+            self.assertEqual(
+                monitor.balance_screen.baseline.snapshot()["windows"], 0
+            )
+            monitor.update(index + 0.1, self.pose(), self.standing_keypoints())
+
+        self.assertFalse(monitor.update(5.0, self.pose(), None))
+        self.assertIsNone(monitor.balance_screen.start_ts)
+        self.assertEqual(monitor.balance_screen.baseline.snapshot()["windows"], 0)
+
     def test_continuous_standing_builds_baseline_then_triggers_on_sway_change(self):
         balance_config = BefastConfig(
             balance_warmup_seconds=0.0,

@@ -460,3 +460,10 @@ button:focus-visible, select:focus-visible, input:focus-visible {
   .start-assurances span:nth-child(2) { display: none; }
   .controls { flex-wrap: wrap; }
 }
+
+/* Evidence controls share the surrounding light theme. */
+.functional-support { color: var(--loam); background: var(--paper-deep); border-color: var(--sand); }
+.functional-support select { color: var(--loam); background: var(--paper); border: 1px solid var(--sand); border-radius: 8px; }
+#functionalReportState { color: #733e31; background: #f7e9e4; }
+
+#symptomCorrectionReason { color: var(--loam); background: var(--paper); border: 1px solid var(--sand); padding: 10px; margin: 8px; border-radius: 8px; width: min(420px, 90%); }

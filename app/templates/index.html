@@ -23,7 +23,7 @@
     body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter, system-ui, -apple-system, "PingFang SC", sans-serif; }
     button, input, select { font: inherit; }
     button { cursor: pointer; }
-    .app { min-height: 100vh; display: grid; grid-template-rows: auto auto 1fr; }
+    .app { min-height: 100vh; display: grid; grid-template-rows: auto auto auto auto 1fr; }
     .topbar { height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 0 22px; border-bottom: 1px solid #18212a; background: #090e14; }
     .brand { display: flex; align-items: center; font-weight: 760; letter-spacing: -.02em; }
     .brand-sub { color: var(--muted); font-size: .76rem; font-weight: 520; letter-spacing: .01em; }
@@ -38,6 +38,9 @@
     .language button { min-width: 52px; padding: 6px 10px; border: 0; border-radius: 6px; color: #8fa0af; background: transparent; }
     .language button.active { color: #071018; background: #d9efff; font-weight: 750; }
     .emergency { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 38px; padding: 8px 18px; color: #ffd8da; background: #451a1f; border-bottom: 1px solid #713039; text-align: center; font-size: .88rem; }
+    .functional-support { margin: 0; padding: 12px 22px; background: #101820; border-bottom: 1px solid #31414d; }
+    .functional-support p { margin: 0 0 8px; }
+    .functional-support select { max-width: 100%; padding: 8px; color: var(--text); background: #18232d; margin: 0 8px 8px 0; }
     .workspace { min-height: calc(100vh - 102px); display: grid; grid-template-columns: minmax(0, 1fr) 340px; overflow: hidden; background: #020304; }
     .video-stage { position: relative; min-width: 0; height: calc(100vh - 102px); overflow: hidden; background: #020304; }
     .video { width: 100%; height: 100%; display: block; object-fit: contain; object-position: left center; background: #020304; }
@@ -292,6 +295,25 @@
     <div id="reactHeader"></div>
     <div id="emergencyText" class="emergency">⚠ 突然出现任何 BE-FAST 症状，请立即拨打 120，不要等待本 Demo 完成。</div>
 
+      <p id="functionalReportState" class="functional-support" role="alert" hidden></p>
+      <section id="symptomCorrectionForm" class="functional-support" hidden>
+        <label for="symptomCorrectionReason">更正原因 / Correction reason</label>
+        <input id="symptomCorrectionReason" type="text" required placeholder="说明为何是误报 / Explain the mistaken entry">
+        <button class="button" onclick="submitSymptomCorrection()">保存更正 / Save correction</button>
+        <button class="button ghost" onclick="cancelSymptomCorrection()">取消 / Cancel</button>
+        <p id="symptomCorrectionError" role="status"></p>
+      </section>
+      <section id="symptomEventList" class="functional-support" hidden></section>
+      <section id="functionalProblemPanel" class="functional-support" hidden>
+        <p id="functionalProblemText">如本人或照护者发现不能微笑、抬臂或说话，请报告症状；仅摄像头或录音失败不属于此项。</p>
+        <select id="functionalProblemOnset" aria-label="Symptom onset">
+          <option value="unknown">发生时间不确定 / Unknown onset</option>
+          <option value="new">新出现或突然发生 / New or sudden</option>
+          <option value="chronic">明确长期存在且未加重 / Longstanding, unchanged</option>
+        </select>
+        <button id="functionalProblemButton" class="button" onclick="reportFunctionalProblem()">报告当前项目的功能异常</button>
+      </section>
+
     <main id="workspace" class="workspace steps-hidden">
       <div class="video-stage">
       <img id="liveVideo" class="video" src="/video_feed" alt="实时摄像头画面">
@@ -430,7 +452,7 @@
           <label id="eyeProblemRow" class="check" hidden><input id="eye_problem" type="checkbox"><span id="eyeProblemLabel">突然视力下降、视野缺损、复视或眼睛偏向一侧</span></label>
           <label id="eyeDistanceRow" class="time-field" hidden><span id="eyeDistanceLabel">眼睛到屏幕距离（厘米）</span><input id="eye_viewing_distance_cm" type="number" min="20" max="150" step="1" value="50"></label>
           <label id="eyeScreenWidthRow" class="time-field" hidden><span id="eyeScreenWidthLabel">屏幕物理宽度（厘米）</span><input id="eye_screen_width_cm" type="number" min="5" max="100" step="0.1" value="31"></label>
-          <label class="check"><input id="new_or_sudden" type="checkbox"><span id="suddenLabel">以上任一异常是新出现或突然发生</span></label>
+          <label class="time-field"><span id="suddenLabel">异常发生情况</span><select id="new_or_sudden"><option value="unknown">不确定 / Unknown</option><option value="new">新发或突发 / New or sudden</option><option value="chronic">明确长期存在 / Longstanding</option></select></label>
           <label class="time-field"><span id="onsetLabel">首次发现异常时间（可留空）</span><input id="onset_time" type="datetime-local"></label>
         </div>
         <div class="sheet-actions"><button class="button ghost" onclick="openComponentMenu()" id="cancelButton">返回项目选择</button><button class="button primary" onclick="submitCurrentManual()" id="submitButton">继续</button></div>
@@ -449,7 +471,7 @@
         </div>
         <div class="speech-progress"><span id="speechProgressBar"></span></div>
         <div class="manual-grid">
-          <label class="check"><input id="speech_new_or_sudden" type="checkbox"><span id="speechSuddenLabel">言语变化是新出现或突然发生</span></label>
+          <label class="time-field"><span id="speechSuddenLabel">言语变化发生情况</span><select id="speech_new_or_sudden"><option value="unknown" id="speechOnsetUnknown">不确定</option><option value="new" id="speechOnsetNew">新出现或突然发生</option><option value="chronic" id="speechOnsetChronic">明确长期存在</option></select></label>
           <label class="time-field"><span id="speechOnsetLabel">首次发现异常时间（可留空）</span><input id="speech_onset_time" type="datetime-local"></label>
         </div>
         <div class="sheet-actions"><button class="button ghost" onclick="cancelSpeechCapture()" id="speechCancelButton">返回项目选择</button><button class="button primary" onclick="startSpeechCapture()" id="speechStartButton">开始录音</button></div>
@@ -496,7 +518,7 @@
         armPreviewHint:'双臂先自然下垂，不要提前抬起；保持稳定后系统会自动倒数。',
         armAutoReady:'下垂姿势已识别，再保持 {seconds} 秒将自动倒数。',
         armRetryHint:'刚才的动作没有完整识别，不会用于计算。请先自然放下双臂，系统会自动重新倒数。',
-        armFailureReasons:{arm_start_pose_not_observed:'开始记录后没有看到双臂自然下垂。',both_arms_were_not_raised:'没有在规定时间内完整抬起双臂。',both_arms_were_not_held_up:'双臂没有持续保持在肩膀高度。',both_arms_were_not_lowered:'保持结束后没有检测到双臂放下。'},
+        armFailureReasons:{arm_start_pose_not_observed:'开始记录后没有看到双臂自然下垂。',both_arms_were_not_raised:'没有在规定时间内完整抬起双臂。',both_arms_were_not_held_up:'保持阶段双臂未持续清晰入镜。',both_arms_were_not_lowered:'保持结束后没有检测到双臂放下。'},
         armCueRaise:'双臂从身体两侧缓慢抬到肩膀高度。', armCueHold:'保持双臂展开，系统正在比较左右高度和下落。', armCueLower:'保持完成，请自然放下双臂。',
         ready_balance: ['B · 安全准备', '必须有人在旁看护。确认安全后，让全身和脚踝进入画面并站立。'],
         balance: ['B · 保持自然站立约 30 秒', '看护者请在旁保护；有效窗口将与个人基线比较，感觉不稳立即停止。'],
@@ -504,13 +526,13 @@
         correct: '动作正确', adjust: '请调整动作', waiting: '等待动作识别', remainingSeconds:'约剩 {seconds} 秒', continueStage: '开始检测', retryStage: '重新检测本项', skipStage:'跳过本项', skipConfirm:'确定跳过当前检测吗？报告会标记为“已跳过”，不会视为正常结果。',
         safety: '已有人看护，可以安全站立', manualTitle: 'B · 平衡观察', manualText: '如果已经突然失去平衡或协调困难，请直接勾选，无需冒险站立；未发现时再继续安全站立检测。', balanceManualTitle:'B · 平衡观察', balanceManualText:'如果已经突然失去平衡或协调困难，请直接勾选，无需冒险站立；未发现时再继续安全站立检测。', eyeManualTitle:'E · 先确认视觉症状', eyeManualText:'若突然出现视力下降、黑蒙、视野缺损、复视或眼睛持续偏向一侧，请直接勾选；摄像头阴性不能排除这些症状。未发现时再进行重复眼动终点检查。', eyeProblemLabel:'突然视力下降、黑蒙、视野缺损、复视或眼睛偏向一侧', eyeSuddenLabel:'该视觉异常是新出现或突然发生', eyeDistanceLabel:'眼睛到屏幕距离（厘米）', eyeScreenWidthLabel:'屏幕物理宽度（厘米）',
         balanceLabel: '突然失去平衡或协调困难', suddenLabel: '该异常是新出现或突然发生', onsetLabel: '首次发现异常时间（可留空）', cancel: '返回项目选择', submit: '继续',
-        speechTitle:'S · 麦克风言语检测', speechText:'靠近树莓派麦克风，点击开始后完整复述下面的句子。录音与识别均在本地完成。', speechPromptLabel:'请复述', speechPromptDefault:'今天天气很好，我们一起去公园散步', speechSuddenLabel:'言语变化是新出现或突然发生', speechOnsetLabel:'首次发现异常时间（可留空）', speechCancel:'返回项目选择', speechStart:'开始录音', speechReady:'等待开始录音', speechReadyText:'系统将采集约 7 秒音频，并在树莓派本地分析。', speechRecording:'正在录音', speechRecordingText:'请完整复述提示句，不要让其他人同时说话。', speechAnalyzing:'正在本地分析', speechAnalyzingText:'正在检查音频质量、复述内容、语速和停顿。', speechCompleting:'正在生成报告', speechBackendMissing:'本地语音引擎尚未就绪', speechTranscriptLabel:'识别文本',
+        speechTitle:'S · 麦克风言语检测', speechText:'靠近本地计算机麦克风，点击开始后完整复述下面的句子。录音与分析均在本地计算机完成。', speechPromptLabel:'请复述', speechPromptDefault:'今天天气很好，我们一起去公园散步', speechOnsetUnknown:'不确定', speechOnsetNew:'新出现或突然发生', speechOnsetChronic:'明确长期存在', speechSuddenLabel:'言语变化发生情况', speechOnsetLabel:'首次发现异常时间（可留空）', speechCancel:'返回项目选择', speechStart:'开始录音', speechReady:'等待开始录音', speechReadyText:'系统将采集约 7 秒音频，并在本地计算机分析。', speechRecording:'正在录音', speechRecordingText:'请完整复述提示句，不要让其他人同时说话。', speechAnalyzing:'正在本地分析', speechAnalyzingText:'正在检查录音质量并计算构音障碍筛查概率；转写、语速和停顿仅供审计。', speechCompleting:'正在生成报告', speechBackendMissing:'本地语音引擎尚未就绪', speechTranscriptLabel:'识别文本',
         resultTitle: '检测结果', again: '再测一次', other:'其他项目', finish: '完成', reportAttempt:'{name} · 第 {attempt} 次', historyAttempt:'{code} 第{attempt}次',
-        decisions: {standby:'等待开始', emergency:'发现新发异常：立即拨打 120', warning:'发现异常，请确认是否突然出现', clear:'未见明显异常', incomplete:'数据不足或未完成'},
+        decisions: {standby:'等待开始', emergency:'发现异常或起病不明：立即拨打 120', warning:'发现明确的既往稳定体征，仍建议咨询医生', clear:'已完成项目未检测到明显体征；不能排除卒中', incomplete:'数据不足或未完成'},
         runtimeWaiting: '正在连接摄像头', live: '画面已连接', previewOnly: '画面已连接，部分模型未就绪', runtimeError: '摄像头或模型不可用', hostCamera: '主机', hostVideo: '本地视频', clientCamera:'当前设备', cameraSecureRequired:'当前地址不能调用手机摄像头。请通过 HTTPS 打开页面，或在运行服务的电脑上使用 localhost。', cameraPermissionDenied:'无法打开当前设备摄像头，请检查浏览器摄像头权限。', statuses: {positive:'发现异常', negative:'未见明显异常', insufficient:'数据质量不足', skipped:'已跳过', checking:'检测中', pending:'待检测'},
         itemNames: {B:'平衡', E:'眼动', F:'面部', A:'手臂', S:'言语'}, sides: {left:'左', right:'右', unknown:'侧别未确定'}, detailUnavailable: '尚无可解释的检测详情。',
-        resultReasons: {reported_balance_problem:'本人或照护者报告突然失去平衡或协调困难。', personal_balance_baseline_calibrating:'正在积累个人安静站立基线；校准完成前不会给出自动正常结论。', personal_balance_baseline_variability_not_estimable:'个人基线离散度为零，无法计算有依据的变化分数；本次不作自动判断。', sustained_trunk_orientation_change:'躯干持续侧倾方向相对个人基线发生明显变化。', increased_mediolateral_sway_velocity_and_range:'横向摆动平均速度和中央 90% 范围均相对个人基线明显增加。', no_sustained_change_from_personal_balance_baseline:'本次躯干方向和横向摆动与个人基线一致。', persistent_lateral_body_offset:'身体中心持续向{side}偏离双脚支撑中心。', large_standing_sway:'站立期间左右摆动范围超过旧版工程阈值。', no_clear_pose_based_balance_asymmetry:'旧版检测未发现明显持续侧偏或过大摆动。', stable_standing_pose_not_visible_long_enough:'全身、髋部或脚踝没有持续清晰入镜，无法完成站立平衡判断。', reduced_visual_target_response:'左右眼对屏幕左右目标的水平跟随幅度均不足。', asymmetric_eye_excursion:'{side}眼的水平移动范围明显小于另一只眼。', asymmetric_conjugate_gaze:'双眼跟随同一目标时运动不同步，存在共轭眼动不协调。', no_visible_eye_movement_abnormality:'本次未发现明显的水平眼动范围不足、左右不对称或双眼不同步。', face_or_irises_not_visible_long_enough:'面部或虹膜没有持续清晰可见，无法完成眼动判断。', head_moved_during_eye_test:'测试时头部移动过多，无法区分眼动和转头动作。', asymmetric_mouth_corner_movement:'微笑时{side}嘴角移动明显弱于另一侧。', asymmetric_smile_activation:'MediaPipe 表情特征显示{side}微笑激活明显较弱。', no_clear_smile_asymmetry:'本次中性表情与微笑对比未发现明显左右不对称。', face_not_visible_during_neutral_and_smile:'中性表情或微笑阶段面部未持续清晰入镜。', smile_expression_not_detected:'没有识别到足够明确的微笑动作，无法判断面部对称性。', persistent_arm_height_asymmetry:'保持平举时{side}手臂持续低于另一侧。', asymmetric_arm_drift:'保持过程中{side}手臂下落幅度明显更大。', no_clear_arm_asymmetry:'本次双臂平举未发现明显高度差或单侧下落。', arms_not_visible_long_enough:'双肩或双手腕没有持续清晰入镜，无法完成手臂判断。', both_arms_were_not_held_up:'未持续识别到双臂向前平举动作。', reported_speech_problem:'人工观察发现说话含混、复述错误或理解困难。', not_reported:'人工观察未报告明显言语异常。', not_checked:'尚未完成人工观察。', not_fully_checked:'该项目尚未完成自动检测和人工确认。', user_skipped:'使用者跳过了此项，本项没有产生检测结论。', checking:'正在采集并分析当前动作。', not_run:'该项目尚未检测。'},
-        reasons: {show_face_and_eyes:'请靠近一些，让双眼清晰可见', face_and_eyes_ready:'面部和双眼已识别', show_full_face:'请让完整面部进入画面', neutral_face_ready:'中性表情已识别', relax_face_first:'请先放松面部，不要微笑', smile_now:'请自然微笑', smile_detected:'微笑动作已识别', show_shoulders_and_wrists:'请让双肩和双手腕进入画面', raise_both_arms:'请将双臂向前抬起', arms_detected_hold_still:'双臂动作已识别，请保持', show_full_body_and_stand_safely:'请让全身和脚踝入镜，并在看护下站立', standing_pose_ready:'站立动作已识别，请保持', collecting_action:'正在开始采集', face_or_irises_not_visible_long_enough:'双眼未持续清晰可见，请重新调整', head_moved_during_eye_test:'头部移动过多，请保持头不动', face_not_visible_during_neutral_and_smile:'面部未持续清晰可见，请重新调整', smile_expression_not_detected:'没有识别到微笑，请重新尝试', arms_not_visible_long_enough:'双肩或手腕未持续入镜，请重新调整', both_arms_were_not_held_up:'没有识别到抬臂动作，请重新尝试', stable_standing_pose_not_visible_long_enough:'全身或脚踝未持续入镜，请重新调整'}
+        resultReasons: {reported_balance_problem:'本人或照护者报告突然失去平衡或协调困难。', personal_balance_baseline_calibrating:'正在积累个人安静站立基线；校准完成前不会给出自动正常结论。', personal_balance_baseline_variability_not_estimable:'个人基线离散度为零，无法计算有依据的变化分数；本次不作自动判断。', sustained_trunk_orientation_change:'躯干持续侧倾方向相对个人基线发生明显变化。', increased_mediolateral_sway_velocity_and_range:'横向摆动平均速度和中央 90% 范围均相对个人基线明显增加。', no_sustained_change_from_personal_balance_baseline:'本次躯干方向和横向摆动与个人基线一致。', persistent_lateral_body_offset:'身体中心持续向{side}偏离双脚支撑中心。', large_standing_sway:'站立期间左右摆动范围超过旧版工程阈值。', no_clear_pose_based_balance_asymmetry:'旧版检测未发现明显持续侧偏或过大摆动。', stable_standing_pose_not_visible_long_enough:'全身、髋部或脚踝没有持续清晰入镜，无法完成站立平衡判断。', reduced_visual_target_response:'左右眼对屏幕左右目标的水平跟随幅度均不足。', asymmetric_eye_excursion:'{side}眼的水平移动范围明显小于另一只眼。', asymmetric_conjugate_gaze:'双眼跟随同一目标时运动不同步，存在共轭眼动不协调。', no_visible_eye_movement_abnormality:'本次未发现明显的水平眼动范围不足、左右不对称或双眼不同步。', face_or_irises_not_visible_long_enough:'面部或虹膜没有持续清晰可见，无法完成眼动判断。', head_moved_during_eye_test:'测试时头部移动过多，无法区分眼动和转头动作。', asymmetric_mouth_corner_movement:'微笑时{side}嘴角移动明显弱于另一侧。', asymmetric_smile_activation:'MediaPipe 表情特征显示{side}微笑激活明显较弱。', no_clear_smile_asymmetry:'本次中性表情与微笑对比未发现明显左右不对称。', face_not_visible_during_neutral_and_smile:'中性表情或微笑阶段面部未持续清晰入镜。', smile_expression_not_detected:'没有识别到足够明确的微笑动作，无法判断面部对称性。', persistent_arm_height_asymmetry:'保持平举时{side}手臂持续低于另一侧。', asymmetric_arm_drift:'保持过程中{side}手臂下落幅度明显更大。', no_clear_arm_asymmetry:'本次双臂平举未发现明显高度差或单侧下落。', arm_hold_endpoint_not_visible:'保持开始或结束时双臂未清晰入镜，请调整位置后重试。', arms_not_visible_long_enough:'双肩或双手腕没有持续清晰入镜，无法完成手臂判断。', both_arms_were_not_held_up:'保持阶段双臂未持续清晰入镜。', reported_speech_problem:'人工观察发现说话含混、复述错误或理解困难。', not_reported:'人工观察未报告明显言语异常。', not_checked:'尚未完成人工观察。', not_fully_checked:'该项目尚未完成自动检测和人工确认。', user_skipped:'使用者跳过了此项，本项没有产生检测结论。', checking:'正在采集并分析当前动作。', not_run:'该项目尚未检测。'},
+        reasons: {show_face_and_eyes:'请靠近一些，让双眼清晰可见', face_and_eyes_ready:'面部和双眼已识别', show_full_face:'请让完整面部进入画面', neutral_face_ready:'中性表情已识别', relax_face_first:'请先放松面部，不要微笑', smile_now:'请自然微笑', smile_detected:'微笑动作已识别', show_shoulders_and_wrists:'请让双肩和双手腕进入画面', raise_both_arms:'请将双臂向前抬起', arms_detected_hold_still:'双臂动作已识别，请保持', show_full_body_and_stand_safely:'请让全身和脚踝入镜，并在看护下站立', standing_pose_ready:'站立动作已识别，请保持', collecting_action:'正在开始采集', face_or_irises_not_visible_long_enough:'双眼未持续清晰可见，请重新调整', head_moved_during_eye_test:'头部移动过多，请保持头不动', face_not_visible_during_neutral_and_smile:'面部未持续清晰可见，请重新调整', smile_expression_not_detected:'没有识别到微笑，请重新尝试', arms_not_visible_long_enough:'双肩或手腕未持续入镜，请重新调整', both_arms_were_not_held_up:'保持阶段双臂未持续清晰入镜，请调整后重试', stable_standing_pose_not_visible_long_enough:'全身或脚踝未持续入镜，请重新调整'}
       },
       en: {
         title: 'Pi BE-FAST Screening Demo', brandName:'Pi BE-FAST', sub: 'Camera-guided screening research prototype', emergency: '⚠ If any BE-FAST sign appears suddenly, call emergency services now. Do not wait for this demo.', cameraAlt: 'Live view from the selected camera', languageLabel: 'Language', progressLabel: 'Screening progress', eyeTargetLabel:'Eye-movement target', cameraLabel:'Camera', cameraSourceLabel:'Camera source', hostOption:'Host camera', autoHostOption:'Auto (E/F Mac · A/B phone)', faceHostCamera:'Mac front camera · E/F', poseHostCamera:'Phone camera · A/B', fallbackHostCamera:'Target unavailable · current camera fallback', clientOption:'Phone / this device',
@@ -538,7 +560,7 @@
         armPreviewHint:'Keep both arms naturally at your sides; do not raise them yet. Hold still and the countdown will start automatically.',
         armAutoReady:'Resting pose recognized. Hold for {seconds}s to start the countdown automatically.',
         armRetryHint:'The previous movement was not analyzed. Lower both arms naturally and the countdown will restart automatically.',
-        armFailureReasons:{arm_start_pose_not_observed:'Both arms were not seen resting at the sides after recording began.',both_arms_were_not_raised:'Both arms were not fully raised before the time limit.',both_arms_were_not_held_up:'Both arms were not held near shoulder height long enough.',both_arms_were_not_lowered:'Both arms were not lowered after the hold.'},
+        armFailureReasons:{arm_start_pose_not_observed:'Both arms were not seen resting at the sides after recording began.',both_arms_were_not_raised:'Both arms were not fully raised before the time limit.',both_arms_were_not_held_up:'Both arms were not continuously visible during the hold.',both_arms_were_not_lowered:'Both arms were not lowered after the hold.'},
         armCueRaise:'Slowly raise both arms sideways to shoulder height.', armCueHold:'Keep both arms extended while left/right height and drift are measured.', armCueLower:'The hold is complete. Lower both arms naturally.',
         ready_balance: ['B · Safety setup', 'A caregiver must be present. When safe, show your full body and ankles and stand up.'],
         balance: ['B · Stand naturally for about 30 seconds', 'Keep a caregiver nearby; valid windows are compared with the personal baseline. Stop immediately if unsteady.'],
@@ -546,13 +568,13 @@
         correct: 'Action recognized', adjust: 'Adjust your position or action', waiting: 'Waiting for the action', remainingSeconds:'about {seconds}s left', continueStage: 'Start this check', retryStage: 'Restart this check', skipStage:'Skip this check', skipConfirm:'Skip the current check? The report will mark it as skipped, not as a normal result.',
         safety: 'Caregiver present — safe to stand', manualTitle: 'B · Balance observation', manualText: 'If sudden loss of balance or coordination is already present, check the box and do not risk standing. Otherwise continue to the supported standing check.', balanceManualTitle:'B · Balance observation', balanceManualText:'If sudden loss of balance or coordination is already present, check the box and do not risk standing. Otherwise continue to the supported standing check.',
         balanceLabel: 'Sudden loss of balance or coordination', suddenLabel: 'This sign is new or sudden', onsetLabel: 'First-known abnormal time (optional)', cancel: 'Back to checks', submit: 'Continue',
-        speechTitle:'S · Microphone speech check', speechText:'Move near the Raspberry Pi microphone, then repeat the sentence after recording starts. Audio and recognition stay local.', speechPromptLabel:'Repeat this sentence', speechPromptDefault:'The sky is blue and we are walking in the park', speechSuddenLabel:'The speech change is new or sudden', speechOnsetLabel:'First-known abnormal time (optional)', speechCancel:'Back to checks', speechStart:'Start recording', speechReady:'Ready to record', speechReadyText:'The system records about 7 seconds and analyzes it locally on the Raspberry Pi.', speechRecording:'Recording', speechRecordingText:'Repeat the full sentence and keep other speakers quiet.', speechAnalyzing:'Analyzing locally', speechAnalyzingText:'Checking audio quality, repeated content, speaking rate, and pauses.', speechCompleting:'Creating report', speechBackendMissing:'Local speech engine is not ready', speechTranscriptLabel:'Transcript',
+        speechTitle:'S · Microphone speech check', speechText:'Move near the local-computer microphone, then repeat the sentence after recording starts. Recording and analysis stay on the local computer.', speechPromptLabel:'Repeat this sentence', speechPromptDefault:'The sky is blue and we are walking in the park', speechOnsetUnknown:'Unknown', speechOnsetNew:'New or sudden', speechOnsetChronic:'Explicitly longstanding', speechSuddenLabel:'Onset of the speech change', speechOnsetLabel:'First-known abnormal time (optional)', speechCancel:'Back to checks', speechStart:'Start recording', speechReady:'Ready to record', speechReadyText:'The system records about 7 seconds and analyzes it on the local computer.', speechRecording:'Recording', speechRecordingText:'Repeat the full sentence and keep other speakers quiet.', speechAnalyzing:'Analyzing locally', speechAnalyzingText:'Checking recording quality and dysarthria-screening probability; transcript, rate, and pauses are audit features only.', speechCompleting:'Creating report', speechBackendMissing:'Local speech engine is not ready', speechTranscriptLabel:'Transcript',
         resultTitle: 'Check result', again: 'Test again', other:'Other checks', finish: 'Done', reportAttempt:'{name} · attempt {attempt}', historyAttempt:'{code} #{attempt}',
-        decisions: {standby:'Waiting to start', emergency:'New sudden sign detected — call emergency services', warning:'Sign detected — confirm whether it was sudden', clear:'No obvious sign detected', incomplete:'Insufficient data or incomplete'},
+        decisions: {standby:'Waiting to start', emergency:'Sign detected with new or unknown onset — call emergency services', warning:'Known longstanding sign detected — seek clinical advice', clear:'No obvious sign in completed checks; stroke is not ruled out', incomplete:'Insufficient data or incomplete'},
         runtimeWaiting: 'Connecting camera', live: 'Video connected', previewOnly: 'Video connected; some models are unavailable', runtimeError: 'Camera or model unavailable', hostCamera: 'host', hostVideo: 'local video', clientCamera:'this device', cameraSecureRequired:'This address cannot open a phone camera. Use HTTPS, or use localhost on the machine running this service.', cameraPermissionDenied:'Unable to open this device camera. Check browser camera permission.', statuses: {positive:'specific sign detected', negative:'no obvious sign', insufficient:'insufficient data quality', skipped:'skipped', checking:'checking', pending:'pending'},
         itemNames: {B:'Balance', E:'Eyes', F:'Face', A:'Arms', S:'Speech'}, sides: {left:'left', right:'right', unknown:'undetermined side'}, detailUnavailable: 'No interpretable detection detail is available yet.',
-        resultReasons: {reported_balance_problem:'The person or caregiver reported sudden loss of balance or coordination.', personal_balance_baseline_calibrating:'The personal quiet-standing baseline is still being collected; no automatic normal result is issued before calibration.', personal_balance_baseline_variability_not_estimable:'Personal-baseline dispersion was zero, so an evidence-based change score could not be calculated; no automatic decision was made.', sustained_trunk_orientation_change:'Sustained trunk orientation changed substantially from the personal baseline.', increased_mediolateral_sway_velocity_and_range:'Both mean side-to-side sway velocity and the central 90% range increased substantially from the personal baseline.', no_sustained_change_from_personal_balance_baseline:'Trunk orientation and side-to-side sway matched the personal baseline in this window.', persistent_lateral_body_offset:'The body center remained displaced toward the {side} side relative to the foot-support center.', large_standing_sway:'Side-to-side standing sway exceeded the legacy engineering threshold.', no_clear_pose_based_balance_asymmetry:'The legacy check found no clear persistent lateral lean or excessive standing sway.', stable_standing_pose_not_visible_long_enough:'The full body, hips, or ankles were not continuously visible, so standing balance could not be assessed.', reduced_visual_target_response:'Both eyes showed insufficient horizontal movement while following the left/right screen targets.', asymmetric_eye_excursion:'The {side} eye had a clearly smaller horizontal movement range than the other eye.', asymmetric_conjugate_gaze:'The two eyes did not move together consistently while following the same target.', no_visible_eye_movement_abnormality:'No obvious reduction, left/right asymmetry, or binocular coordination problem was observed in horizontal eye movement.', face_or_irises_not_visible_long_enough:'The face or irises were not continuously visible, so eye movement could not be assessed.', head_moved_during_eye_test:'Head movement was too large to separate eye movement from head turning.', asymmetric_mouth_corner_movement:'The {side} mouth corner moved less than the other side during the smile.', asymmetric_smile_activation:'MediaPipe expression features showed weaker smile activation on the {side} side.', no_clear_smile_asymmetry:'The neutral-to-smile comparison showed no obvious left/right asymmetry.', face_not_visible_during_neutral_and_smile:'The face was not continuously visible during both neutral and smile phases.', smile_expression_not_detected:'No sufficiently clear smile was detected, so facial symmetry could not be assessed.', persistent_arm_height_asymmetry:'The {side} arm remained lower than the other arm during the hold.', asymmetric_arm_drift:'The {side} arm dropped more during the hold.', no_clear_arm_asymmetry:'No obvious persistent height difference or one-sided arm drift was observed.', arms_not_visible_long_enough:'Both shoulders or wrists were not continuously visible, so arm symmetry could not be assessed.', both_arms_were_not_held_up:'A sustained bilateral forward arm raise was not detected.', reported_speech_problem:'Manual observation found slurred speech, repetition errors, or difficulty understanding speech.', not_reported:'Manual observation did not report an obvious speech problem.', not_checked:'Manual observation has not been completed.', not_fully_checked:'Automated capture and manual confirmation are not both complete.', user_skipped:'The user skipped this check, so it produced no screening conclusion.', checking:'The current action is being captured and analyzed.', not_run:'This item has not been checked.'},
-        reasons: {show_face_and_eyes:'Move closer and keep both eyes visible', face_and_eyes_ready:'Face and eyes recognized', show_full_face:'Keep your full face inside the frame', neutral_face_ready:'Neutral expression recognized', relax_face_first:'Relax your face and do not smile yet', smile_now:'Smile naturally now', smile_detected:'Smile recognized', show_shoulders_and_wrists:'Keep both shoulders and wrists visible', raise_both_arms:'Raise both arms forward', arms_detected_hold_still:'Arm action recognized — keep holding', show_full_body_and_stand_safely:'Show your full body and ankles, then stand only with supervision', standing_pose_ready:'Standing pose recognized — hold still', collecting_action:'Starting capture', face_or_irises_not_visible_long_enough:'Eyes were not continuously visible — adjust and retry', head_moved_during_eye_test:'Too much head movement — keep your head still', face_not_visible_during_neutral_and_smile:'Face was not continuously visible — adjust and retry', smile_expression_not_detected:'No smile was detected — try again', arms_not_visible_long_enough:'Shoulders or wrists were not continuously visible — retry', both_arms_were_not_held_up:'The arm-raise action was not detected — retry', stable_standing_pose_not_visible_long_enough:'Full body or ankles were not continuously visible — retry'}
+        resultReasons: {reported_balance_problem:'The person or caregiver reported sudden loss of balance or coordination.', personal_balance_baseline_calibrating:'The personal quiet-standing baseline is still being collected; no automatic normal result is issued before calibration.', personal_balance_baseline_variability_not_estimable:'Personal-baseline dispersion was zero, so an evidence-based change score could not be calculated; no automatic decision was made.', sustained_trunk_orientation_change:'Sustained trunk orientation changed substantially from the personal baseline.', increased_mediolateral_sway_velocity_and_range:'Both mean side-to-side sway velocity and the central 90% range increased substantially from the personal baseline.', no_sustained_change_from_personal_balance_baseline:'Trunk orientation and side-to-side sway matched the personal baseline in this window.', persistent_lateral_body_offset:'The body center remained displaced toward the {side} side relative to the foot-support center.', large_standing_sway:'Side-to-side standing sway exceeded the legacy engineering threshold.', no_clear_pose_based_balance_asymmetry:'The legacy check found no clear persistent lateral lean or excessive standing sway.', stable_standing_pose_not_visible_long_enough:'The full body, hips, or ankles were not continuously visible, so standing balance could not be assessed.', reduced_visual_target_response:'Both eyes showed insufficient horizontal movement while following the left/right screen targets.', asymmetric_eye_excursion:'The {side} eye had a clearly smaller horizontal movement range than the other eye.', asymmetric_conjugate_gaze:'The two eyes did not move together consistently while following the same target.', no_visible_eye_movement_abnormality:'No obvious reduction, left/right asymmetry, or binocular coordination problem was observed in horizontal eye movement.', face_or_irises_not_visible_long_enough:'The face or irises were not continuously visible, so eye movement could not be assessed.', head_moved_during_eye_test:'Head movement was too large to separate eye movement from head turning.', asymmetric_mouth_corner_movement:'The {side} mouth corner moved less than the other side during the smile.', asymmetric_smile_activation:'MediaPipe expression features showed weaker smile activation on the {side} side.', no_clear_smile_asymmetry:'The neutral-to-smile comparison showed no obvious left/right asymmetry.', face_not_visible_during_neutral_and_smile:'The face was not continuously visible during both neutral and smile phases.', smile_expression_not_detected:'No sufficiently clear smile was detected, so facial symmetry could not be assessed.', persistent_arm_height_asymmetry:'The {side} arm remained lower than the other arm during the hold.', asymmetric_arm_drift:'The {side} arm dropped more during the hold.', no_clear_arm_asymmetry:'No obvious persistent height difference or one-sided arm drift was observed.', arm_hold_endpoint_not_visible:'The arms were not visible at the start or end of the hold. Adjust the camera and retry.', arms_not_visible_long_enough:'Both shoulders or wrists were not continuously visible, so arm symmetry could not be assessed.', both_arms_were_not_held_up:'Both arms were not continuously visible during the hold.', reported_speech_problem:'Manual observation found slurred speech, repetition errors, or difficulty understanding speech.', not_reported:'Manual observation did not report an obvious speech problem.', not_checked:'Manual observation has not been completed.', not_fully_checked:'Automated capture and manual confirmation are not both complete.', user_skipped:'The user skipped this check, so it produced no screening conclusion.', checking:'The current action is being captured and analyzed.', not_run:'This item has not been checked.'},
+        reasons: {show_face_and_eyes:'Move closer and keep both eyes visible', face_and_eyes_ready:'Face and eyes recognized', show_full_face:'Keep your full face inside the frame', neutral_face_ready:'Neutral expression recognized', relax_face_first:'Relax your face and do not smile yet', smile_now:'Smile naturally now', smile_detected:'Smile recognized', show_shoulders_and_wrists:'Keep both shoulders and wrists visible', raise_both_arms:'Raise both arms forward', arms_detected_hold_still:'Arm action recognized — keep holding', show_full_body_and_stand_safely:'Show your full body and ankles, then stand only with supervision', standing_pose_ready:'Standing pose recognized — hold still', collecting_action:'Starting capture', face_or_irises_not_visible_long_enough:'Eyes were not continuously visible — adjust and retry', head_moved_during_eye_test:'Too much head movement — keep your head still', face_not_visible_during_neutral_and_smile:'Face was not continuously visible — adjust and retry', smile_expression_not_detected:'No smile was detected — try again', arm_hold_endpoint_not_visible:'The arms were not visible at the start or end of the hold. Adjust the camera and retry.', arms_not_visible_long_enough:'Shoulders or wrists were not continuously visible — retry', both_arms_were_not_held_up:'Both arms were not continuously visible — adjust and retry', stable_standing_pose_not_visible_long_enough:'Full body or ankles were not continuously visible — retry'}
       }
     };
 
@@ -652,7 +674,10 @@
         speech_content_mismatch:'识别文本与提示句差异较大，可能存在复述错误或言语不清。',
         speech_delivery_irregular:'本次复述的语速或停顿比例超出当前工程阈值。',
         mdsc_dysarthria_detected:'MDSC 构音障碍模型概率达到当前判定阈值。',
-        no_clear_speech_abnormality:'本次录音的 MDSC 概率、复述内容、语速和停顿未见明显异常。',
+        mdsc_dysarthria_not_detected:'MDSC 构音障碍模型概率低于当前判定阈值。',
+        dysarthria_model_unavailable:'构音障碍模型不可用，本次不能形成 S 判定。',
+        dysarthria_model_failed:'构音障碍模型运行失败，本次不能形成 S 判定。',
+        no_clear_speech_abnormality:'本次录音的审计特征未见明显异常。',
         microphone_unavailable:'树莓派麦克风采集不可用，请检查 ALSA 设备和 arecord。',
         speech_processing_failed:'本地录音或识别处理失败，本次没有形成有效结论。',
         recording_speech:'正在采集麦克风音频。'
@@ -667,8 +692,11 @@
         speech_content_mismatch:'The transcript differed substantially from the prompt, suggesting a repetition error or unclear speech.',
         speech_delivery_irregular:'Speaking rate or pause proportion exceeded the current engineering threshold.',
         mdsc_dysarthria_detected:'The MDSC dysarthria-model probability reached its decision threshold.',
-        no_clear_speech_abnormality:'No obvious issue was found in the MDSC probability, repeated content, speaking rate, or pauses.',
-        microphone_unavailable:'Raspberry Pi microphone capture is unavailable. Check ALSA and arecord.',
+        mdsc_dysarthria_not_detected:'The MDSC dysarthria-model probability was below its decision threshold.',
+        dysarthria_model_unavailable:'The dysarthria model is unavailable, so this S check is insufficient.',
+        dysarthria_model_failed:'The dysarthria model failed, so this S check is insufficient.',
+        no_clear_speech_abnormality:'No obvious issue was found in the audit features.',
+        microphone_unavailable:'Local-computer microphone capture is unavailable. Check the configured audio backend.',
         speech_processing_failed:'Local recording or recognition failed, so this attempt has no valid conclusion.',
         recording_speech:'Microphone audio is being captured.'
       }
@@ -756,6 +784,8 @@
     let clientCaptureActive = false;
     let cameraErrorMessage = '';
     let selectedReport = null;
+    let pendingCorrectionEventId = null;
+    let correctionBusy = false;
     let persistentHistoryOpen = false;
     let speechModeMenuOpen = false;
     let passiveSpeechOpen = false;
@@ -951,7 +981,7 @@
         eyeScreenWidthLabel:t.eyeScreenWidthLabel || '', onsetLabel:t.onsetLabel,
         cancelButton:t.cancel, submitButton:t.submit,
         speechTitle:t.speechTitle, speechText:t.speechText,
-        speechPromptLabel:t.speechPromptLabel, speechSuddenLabel:t.speechSuddenLabel,
+        speechOnsetUnknown:t.speechOnsetUnknown, speechOnsetNew:t.speechOnsetNew, speechOnsetChronic:t.speechOnsetChronic, speechPromptLabel:t.speechPromptLabel, speechSuddenLabel:t.speechSuddenLabel,
         speechOnsetLabel:t.speechOnsetLabel, speechCancelButton:t.speechCancel,
         speechStartButton:t.speechStart, resultTitle:t.resultTitle, againButton:t.again,
         otherButton:t.other, finishButton:t.finish
@@ -1272,9 +1302,9 @@
         await postJson('/api/befast/component', {component:code});
         document.getElementById('balance_problem').checked = false;
         document.getElementById('eye_problem').checked = false;
-        document.getElementById('new_or_sudden').checked = false;
+        document.getElementById('new_or_sudden').value = 'unknown';
         document.getElementById('onset_time').value = '';
-        document.getElementById('speech_new_or_sudden').checked = false;
+        document.getElementById('speech_new_or_sudden').value = 'unknown';
         document.getElementById('speech_onset_time').value = '';
         await refresh();
       } catch (error) {
@@ -1378,7 +1408,7 @@
       await postJson('/api/befast/manual-item', {
         component:eyeManual ? 'E' : 'B',
         problem,
-        new_or_sudden: document.getElementById('new_or_sudden').checked,
+        new_or_sudden: ({new:true, chronic:false, unknown:null})[document.getElementById('new_or_sudden').value],
         onset_time: document.getElementById('onset_time').value || null,
         viewing_distance_cm:eyeManual ? viewingDistance : null,
         screen_width_cm:eyeManual ? screenWidth : null,
@@ -1395,7 +1425,7 @@
       try {
         const payload = await postJson('/api/speech/start', {
           language,
-          new_or_sudden:document.getElementById('speech_new_or_sudden').checked,
+          new_or_sudden:({new:true, chronic:false, unknown:null})[document.getElementById('speech_new_or_sudden').value],
           onset_time:document.getElementById('speech_onset_time').value || null
         });
         latest = {...latest, speech:payload.speech, befast:payload.befast};
@@ -1580,13 +1610,14 @@
       const agreement = Number(aggregate.arm_face_laterality_agreement || 0);
       const agreementText = agreement > 0 ? t.fusionConsistent
         : (agreement < 0 ? t.fusionConflict : t.fusionUnavailable);
-      summary.textContent = `${t.fusionReliable}: ${Number(aggregate.reliable_domain_count || 0)} · ${t.fusionTopTwo}: ${Number(aggregate.mean_top_two_domain_severity || 0).toFixed(2)} · ${t.fusionAgreement}: ${agreementText}`;
+      summary.textContent = `${t.fusionReliable}: ${Number(aggregate.reliable_domain_count || 0)} · ${t.fusionTopTwo}: ${aggregate.mean_top_two_domain_severity == null ? t.fusionUnavailable : Number(aggregate.mean_top_two_domain_severity).toFixed(2)} · ${t.fusionAgreement}: ${agreementText}`;
       for (const code of ['B', 'E', 'F', 'A', 'S']) {
         const isMissing = Boolean(missing[code]);
+        const severityMissing = severity[code] == null;
         const domainSeverity = Number(severity[code] || 0);
         const domainQuality = Number(quality[code] || 0);
         const row = document.createElement('div');
-        row.className = `factor-row ${fusionState(domainSeverity, isMissing)}`;
+        row.className = `factor-row ${fusionState(domainSeverity, isMissing || severityMissing)}`;
         const head = document.createElement('div');
         head.className = 'factor-row-head';
         const name = document.createElement('span');
@@ -1594,12 +1625,12 @@
         name.textContent = `${code} · ${text[language].itemNames[code]}`;
         const value = document.createElement('span');
         value.className = 'factor-row-value';
-        value.textContent = isMissing ? t.fusionUnavailable : domainSeverity.toFixed(2);
+        value.textContent = isMissing || severityMissing ? t.fusionUnavailable : domainSeverity.toFixed(2);
         const rule = document.createElement('small');
         rule.className = 'factor-row-rule';
         rule.textContent = isMissing
           ? t.fusionMissing
-          : `${t.fusionSeverity}: ${domainSeverity.toFixed(2)} · ${t.fusionQuality}: ${(domainQuality * 100).toFixed(0)}%`;
+          : `${t.fusionSeverity}: ${severityMissing ? t.fusionUnavailable : domainSeverity.toFixed(2)} · ${t.fusionQuality}: ${(domainQuality * 100).toFixed(0)}%`;
         head.append(name, value);
         row.append(head, rule);
         list.appendChild(row);
@@ -1808,6 +1839,17 @@
       }
     }
 
+    async function reportFunctionalProblem() {
+      const component = (latest.befast || {}).active_component;
+      if (!['F','A','S'].includes(component)) return;
+      const onset = document.getElementById('functionalProblemOnset').value;
+      await postJson('/api/befast/functional-problem', {
+        component, reported_problem:true,
+        new_or_sudden:onset === 'unknown' ? null : onset === 'new'
+      });
+      await refresh();
+    }
+
     async function skipCurrentStage() {
       const t = text[language];
       if (transitionBusy || !window.confirm(t.skipConfirm)) return;
@@ -1878,7 +1920,8 @@
         button.className = report.item?.status || '';
         button.textContent = t.historyAttempt
           .replace('{code}', report.component)
-          .replace('{attempt}', report.attempt);
+          .replace('{attempt}', report.attempt)
+          + (language === 'en' ? ' · Revision ' : ' · 修订 ') + (report.revision || 1);
         button.onclick = () => viewReport(report.id);
         history.appendChild(button);
       }
@@ -1997,6 +2040,14 @@
         const reason = document.createElement('div');
         reason.className = 'history-record-reason';
         reason.textContent = resultDetail(record, t);
+        const evidenceReport = record.details?.evidence_report;
+        if (evidenceReport) {
+          attempt.textContent += ` · ${language === 'en' ? 'Revision' : '修订'} ${evidenceReport.revision}`;
+          if (evidenceReport.kind === 'symptom_correction') {
+            const reasons = (evidenceReport.item.symptom_evidence || []).filter(e => e.active === false).map(e => e.correction_reason);
+            reason.textContent = (language === 'en' ? 'Symptom report correction: ' : '症状报告更正：') + reasons.join(' / ');
+          }
+        }
 
         const completedAt = new Date(Number(record.completed_at) * 1000);
         const detectedAt = Number.isNaN(completedAt.getTime())
@@ -2028,6 +2079,36 @@
       }
     }
 
+    function correctSymptom(eventId) {
+      pendingCorrectionEventId = eventId;
+      document.getElementById('symptomCorrectionForm').hidden = false;
+      document.getElementById('symptomCorrectionReason').value = '';
+      document.getElementById('symptomCorrectionError').textContent = '';
+      document.getElementById('symptomCorrectionReason').focus();
+    }
+
+    function cancelSymptomCorrection() {
+      pendingCorrectionEventId = null;
+      document.getElementById('symptomCorrectionForm').hidden = true;
+    }
+
+    async function submitSymptomCorrection() {
+      const reason = document.getElementById('symptomCorrectionReason').value.trim();
+      if (!pendingCorrectionEventId || correctionBusy) return;
+      if (!reason) {
+        document.getElementById('symptomCorrectionError').textContent = language === 'en' ? 'A reason is required.' : '请填写更正原因。';
+        return;
+      }
+      correctionBusy = true;
+      try {
+        await postJson('/api/befast/symptom-correction', {event_id:pendingCorrectionEventId, reason});
+        cancelSymptomCorrection(); selectedReport = null;
+        await refresh();
+      } catch (error) {
+        document.getElementById('symptomCorrectionError').textContent = error.message;
+      } finally { correctionBusy = false; }
+    }
+
     function renderSingleReport(report, t) {
       const decision = report?.decision || 'incomplete';
       const decisionEl = document.getElementById('decision');
@@ -2042,11 +2123,16 @@
       document.getElementById('reportMeta').textContent = t.reportAttempt
         .replace('{name}', `${itemCode} · ${t.itemNames[itemCode]}`)
         .replace('{attempt}', report.attempt);
+      const newer = ((latest.befast || {}).reports || []).some(r => r.component === itemCode && r.revision > report.revision);
+      document.getElementById('reportMeta').textContent += ` · ${language === 'en' ? 'Revision' : '修订'} ${report.revision || 1}`
+        + (newer ? (language === 'en' ? ' · Historical snapshot; newer evidence exists' : ' · 历史快照，已有更新证据') : '');
       const node = document.createElement('div');
       node.className = `result concise ${item.status}`;
       const detailNode = document.createElement('span');
       detailNode.className = 'result-detail';
       detailNode.textContent = resultDetail(item, t);
+      if (item.reported_functional_problem) detailNode.textContent += language === 'en'
+        ? ' | An active symptom report also contributes to urgency.' : ' ｜存在独立症状报告，已计入紧急程度。';
       node.appendChild(detailNode);
       if (item.details?.transcript) {
         const transcript = document.createElement('span');
@@ -2062,6 +2148,34 @@
       const t = text[language];
       const runtime = status.runtime || {};
       const befast = status.befast || {mode:'standby',stage:'idle',guidance:{}};
+      document.getElementById('functionalProblemPanel').hidden = befast.mode !== 'screening' || !['F','A','S'].includes(befast.active_component);
+      document.getElementById('functionalProblemText').textContent = language === 'en'
+        ? 'Report a noticed difficulty smiling, raising an arm, or speaking for the selected check. Camera or recording failure alone is not a symptom report.'
+        : '如本人或照护者发现不能微笑、抬臂或说话，请报告当前项目的症状；仅摄像头或录音失败不属于此项。';
+      document.getElementById('functionalProblemButton').textContent = language === 'en' ? 'Report functional difficulty for this check' : '报告当前项目的功能异常';
+      const functionalAlert = document.getElementById('functionalReportState');
+      functionalAlert.hidden = befast.mode !== 'screening' || !Object.values(befast.items || {}).some(item => item.reported_functional_problem === true);
+      functionalAlert.textContent = (language === 'en' ? 'Reported symptom: ' : '已报告症状：')
+        + (t.decisions[befast.decision] || befast.decision)
+        + (language === 'en' ? ' | Acquisition: ' : ' ｜采集完整性：')
+        + (befast.completeness === 'complete' ? (language === 'en' ? 'complete' : '已完成') : (language === 'en' ? 'incomplete' : '未完成'));
+      const eventList = document.getElementById('symptomEventList');
+      eventList.replaceChildren();
+      const events = Object.entries(befast.items || {}).flatMap(([code,item]) =>
+        (item.symptom_evidence || []).filter(e => e.active !== false).map(e => ({...e,code})));
+      eventList.hidden = befast.mode !== 'screening' || events.length === 0;
+      if (pendingCorrectionEventId && !events.some(e => e.event_id === pendingCorrectionEventId)) cancelSymptomCorrection();
+      for (const event of events) {
+        const row = document.createElement('p');
+        const onset = event.new_or_sudden === true ? (language === 'en' ? 'new/sudden' : '新发/突发')
+          : event.new_or_sudden === false ? (language === 'en' ? 'longstanding' : '长期存在')
+          : (language === 'en' ? 'unknown onset' : '起病时间未知');
+        row.textContent = `${event.code} · ${onset} `;
+        const button = document.createElement('button'); button.className = 'button ghost';
+        button.textContent = language === 'en' ? 'Correct an erroneous report' : '更正误报';
+        button.onclick = () => correctSymptom(event.event_id);
+        row.appendChild(button); eventList.appendChild(row);
+      }
       const standby = befast.mode !== 'screening';
       const manualBalance = befast.stage === 'manual_balance';
       const manualEyes = befast.stage === 'manual_eyes';

@@ -1,0 +1,7 @@
+{
+  "command": ".venv/bin/python -m unittest discover -s tests -q",
+  "tests": 159,
+  "returncode": 0,
+  "date": "2026-09-09T18:26:23.494775+08:00",
+  "output": "----------------------------------------------------------------------\nRan 159 tests in 0.719s\n\nOK\n"
+}

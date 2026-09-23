@@ -11,6 +11,7 @@ import numpy as np
 from flask import Flask, Response, jsonify, render_template, request, send_file
 
 from app.befast import BefastSession
+from app.edge_trigger_queue import EdgeTriggerQueue
 from app.history import AbnormalHistoryStore, BEFAST_COMPONENTS
 from app.passive_speech import EVIDENCE_VERSION, PassiveSpeechMonitor
 from app.speech_audio import SpeechCaptureService
@@ -250,6 +251,7 @@ def create_app(
     history_store: AbnormalHistoryStore | None = None,
     speech_service: SpeechCaptureService | None = None,
     passive_speech_monitor: PassiveSpeechMonitor | None = None,
+    trigger_queue: EdgeTriggerQueue | None = None,
 ) -> Flask:
     app = Flask(__name__)
     speech_coordination_lock = threading.Lock()
@@ -297,7 +299,8 @@ def create_app(
 
     @app.after_request
     def configure_client_sensor_access(response: Response) -> Response:
-        # Speech uses the Pi-attached ALSA microphone, not the browser microphone.
+        # Guided S uses the microphone attached to the local-computer service,
+        # not a browser microphone. Passive S is a separate Pi-side process.
         response.headers["Permissions-Policy"] = "camera=(self), microphone=()"
         return response
 
@@ -321,6 +324,8 @@ def create_app(
             status["befast"] = screen
         if speech_service is not None:
             status["speech"] = speech_service.snapshot()
+        if trigger_queue is not None:
+            status["edge_triggers"] = trigger_queue.evaluate_timeouts()
         status["passive_speech"] = (
             passive_speech_monitor.snapshot()
             if passive_speech_monitor is not None
@@ -481,8 +486,37 @@ def create_app(
         reason = str(payload.get("reason", "screen_requested")).strip()
         if not reason or len(reason) > 120:
             return jsonify({"error": "reason must contain 1..120 characters"}), 400
-        befast_session.start_screening(source=source, reason=reason)
-        return jsonify({"befast": befast_session.snapshot()})
+        record = None
+        if trigger_queue is not None and source in {"scheduled", "passive"}:
+            record = trigger_queue.enqueue(source, reason)
+            record = trigger_queue.mark_delivery_attempt(record["id"])
+        befast_session.start_screening(
+            source=source,
+            reason=reason,
+            trigger_id=record["id"] if record else None,
+        )
+        return jsonify(
+            {
+                "befast": befast_session.snapshot(),
+                "edge_trigger": record,
+            }
+        )
+
+    @app.get("/api/monitoring/triggers")
+    def api_monitoring_triggers() -> Response:
+        if trigger_queue is None:
+            return jsonify({"error": "edge trigger queue is unavailable"}), 503
+        return jsonify({"unresolved": trigger_queue.evaluate_timeouts()})
+
+    @app.post("/api/monitoring/triggers/<record_id>/acknowledge")
+    def api_monitoring_trigger_acknowledge(record_id: str) -> Response:
+        if trigger_queue is None:
+            return jsonify({"error": "edge trigger queue is unavailable"}), 503
+        try:
+            record = trigger_queue.acknowledge(record_id)
+        except KeyError:
+            return jsonify({"error": "edge trigger not found"}), 404
+        return jsonify({"edge_trigger": record})
 
     @app.post("/api/monitoring/standby")
     def api_monitoring_standby() -> Response:
@@ -491,8 +525,45 @@ def create_app(
         if speech_service is not None:
             speech_service.cancel()
         restore_passive_after_guided()
+        current = befast_session.snapshot().get("trigger")
+        acknowledged = None
+        if trigger_queue is not None and isinstance(current, Mapping) and current.get("id"):
+            try:
+                acknowledged = trigger_queue.acknowledge(str(current["id"]))
+            except KeyError:
+                app.logger.warning("Current trigger is absent from the durable queue")
         befast_session.reset()
-        return jsonify({"befast": befast_session.snapshot()})
+        return jsonify(
+            {"befast": befast_session.snapshot(), "acknowledged_trigger": acknowledged}
+        )
+
+    @app.post("/api/balance/baseline/confirm")
+    def api_balance_baseline_confirm() -> Response:
+        if befast_session is None:
+            return jsonify({"error": "BE-FAST session is unavailable"}), 503
+        payload = request.get_json(silent=True) or {}
+        if payload.get("symptom_free") is not True:
+            return jsonify({"error": "symptom_free must be explicitly true"}), 400
+        try:
+            baseline = befast_session.balance_screen.baseline.confirm_enrollment(
+                subject_id=str(payload.get("subject_id", "")),
+                device_id=str(payload.get("device_id", "")),
+                camera_fingerprint=str(payload.get("camera_fingerprint", "")),
+            )
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        return jsonify({"balance_baseline": baseline})
+
+    @app.post("/api/speech/passive/speaker-enrollment/start")
+    def api_passive_speaker_enrollment() -> Response:
+        if passive_speech_monitor is None:
+            return jsonify({"error": "passive speech monitor is unavailable"}), 503
+        payload = request.get_json(silent=True) or {}
+        if payload.get("consent") is not True:
+            return jsonify({"error": "consent must be explicitly true"}), 400
+        return jsonify(
+            {"passive_speech": passive_speech_monitor.start_speaker_enrollment()}
+        )
 
     @app.post("/api/befast/stage")
     def api_befast_stage() -> Response:
@@ -550,6 +621,38 @@ def create_app(
             {"skipped": skipped, "befast": befast_session.snapshot()}
         )
 
+    @app.post("/api/befast/functional-problem")
+    def api_befast_functional_problem() -> Response:
+        if befast_session is None:
+            return jsonify({"error": "BE-FAST session is unavailable"}), 503
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict) or payload.get("reported_problem") is not True:
+            return jsonify({"error": "explicit reported_problem=true required"}), 400
+        try:
+            befast_session.report_functional_problem(
+                payload.get("component", ""), payload.get("new_or_sudden")
+            )
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        screen = befast_session.snapshot()
+        persist_current_positive({**screen, "current_report": screen["reports"][-1]})
+        return jsonify({"befast": screen})
+
+    @app.post("/api/befast/symptom-correction")
+    def api_befast_symptom_correction() -> Response:
+        if befast_session is None:
+            return jsonify({"error": "BE-FAST session is unavailable"}), 503
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return jsonify({"error": "correction payload required"}), 400
+        try:
+            befast_session.retract_symptom(payload.get("event_id"), payload.get("reason"))
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        screen = befast_session.snapshot()
+        persist_current_positive({**screen, "current_report": screen["reports"][-1]})
+        return jsonify({"befast": screen})
+
     @app.post("/api/befast/manual-item")
     def api_befast_manual_item() -> Response:
         if befast_session is None:
@@ -557,9 +660,11 @@ def create_app(
         payload = request.get_json(silent=True) or {}
         invalid = [
             key
-            for key in ("problem", "new_or_sudden")
+            for key in ("problem",)
             if not isinstance(payload.get(key), bool)
         ]
+        if "new_or_sudden" not in payload or (payload["new_or_sudden"] is not None and not isinstance(payload["new_or_sudden"], bool)):
+            invalid.append("new_or_sudden")
         if invalid:
             return jsonify(
                 {"error": f"boolean fields required: {', '.join(invalid)}"}
@@ -580,6 +685,29 @@ def create_app(
             return jsonify({"error": str(exc)}), 400
         screen = befast_session.snapshot()
         persist_current_positive(screen)
+        return jsonify({"befast": screen})
+
+    @app.post("/api/befast/onset")
+    def api_befast_component_onset() -> Response:
+        """Record onset for one sign without overwriting other components."""
+
+        if befast_session is None:
+            return jsonify({"error": "BE-FAST session is unavailable"}), 503
+        payload = request.get_json(silent=True) or {}
+        sudden = payload.get("new_or_sudden")
+        if not isinstance(sudden, bool):
+            return jsonify({"error": "new_or_sudden must be a boolean"}), 400
+        try:
+            befast_session.set_component_onset(
+                str(payload.get("component", "")),
+                sudden,
+                payload.get("onset_time"),
+            )
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
+        screen = befast_session.snapshot()
+        if screen["reports"]:
+            persist_current_positive({**screen, "current_report": screen["reports"][-1]})
         return jsonify({"befast": screen})
 
     @app.get("/api/speech/status")
@@ -622,11 +750,14 @@ def create_app(
             return jsonify({"error": "speech screening is unavailable"}), 503
         payload = request.get_json(silent=True) or {}
         sudden = payload.get("new_or_sudden")
-        if not isinstance(sudden, bool):
-            return jsonify({"error": "new_or_sudden must be a boolean"}), 400
+        if "new_or_sudden" not in payload or (sudden is not None and not isinstance(sudden, bool)):
+            return jsonify({"error": "new_or_sudden must be boolean or null"}), 400
         language = str(payload.get("language", "zh")).strip().lower()
         if language not in {"zh", "en"}:
             return jsonify({"error": "language must be 'zh' or 'en'"}), 400
+        if befast_session.snapshot().get("stage") != "speech_ready":
+            return jsonify({"error": "select the S component before recording speech"}), 409
+        attempt_id = None
         passive_paused = False
         should_resume_passive = False
         try:
@@ -647,20 +778,25 @@ def create_app(
                                 )
                             }
                         ), 409
+            attempt_id = befast_session.start_speech_recording()
             speech_service.start(
                 language=language,
                 new_or_sudden=sudden,
                 onset_time=payload.get("onset_time"),
+                speech_attempt_id=attempt_id,
             )
-            befast_session.start_speech_recording()
             remember_guided_passive_pause(should_resume_passive)
         except ValueError as exc:
             speech_service.cancel()
+            if attempt_id is not None and befast_session.speech_attempt_id == attempt_id:
+                befast_session.prepare_component("S")
             if should_resume_passive and passive_speech_monitor is not None:
                 passive_speech_monitor.resume()
             return jsonify({"error": str(exc)}), 409
         except Exception:
             speech_service.cancel()
+            if attempt_id is not None and befast_session.speech_attempt_id == attempt_id:
+                befast_session.prepare_component("S")
             if should_resume_passive and passive_speech_monitor is not None:
                 passive_speech_monitor.resume()
             raise
@@ -740,7 +876,10 @@ def create_app(
             )
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
-        return jsonify({"befast": befast_session.snapshot()})
+        screen = befast_session.snapshot()
+        if screen["reports"]:
+            persist_current_positive({**screen, "current_report": screen["reports"][-1]})
+        return jsonify({"befast": screen})
 
     @app.post("/api/befast/reset")
     def api_befast_reset() -> Response:

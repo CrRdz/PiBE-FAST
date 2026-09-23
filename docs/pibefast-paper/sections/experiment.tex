@@ -1,0 +1,111 @@
+\section{Evaluation}
+\label{sec:experiment_results}
+We separate participant observations of sign response and triggering from
+current software verification of evidence handling. Historical repeated measures,
+held-out speech tests, and deployment records characterize component behavior.
+
+\paperinput{sections/validation-study}
+
+\subsection{Historical Healthy-Participant Measurements}
+Forty healthy participants completed five visits each, yielding 200 sessions
+and 800 B/E/F/A records. Each module had 196 analyzable results, one positive
+(0.51\%), and four insufficient outcomes (2.0\% of attempts).
+Figure~\ref{fig:healthy} reports ICC(1,1) for one recorded output per module,
+with participant-bootstrap intervals (5,000 resamples; seed 203).
+B/E/F/A estimates were 0.140/0.266/0.784/0.679, indicating limited B/E
+repeatability relative to between-participant variation.
+The outputs were trunk-orientation change, binocular directional asymmetry,
+mouth-corner delta, and arm-level difference, respectively.
+These component outcomes do not estimate the current workflow's false-alert
+probability. Balance baseline linkage and Face shoulder-width normalization
+versus interocular normalization in the implementation require reconciliation.
+The source of the historical E positive label (questionnaire or automatic
+output) is unspecified; current automatic E classification is disabled. These
+statistics describe historical repeatability, not current threshold reliability.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.88\columnwidth]{healthy-repeatability.pdf}
+\caption{Repeatability of one selected output per component, with 196 eligible measurements each. Bars show participant-bootstrap 95\% intervals for ICC(1,1).}
+\label{fig:healthy}
+\end{figure}
+\subsection{Speaker-Independent Speech Evaluation}
+The Mandarin Dysarthria Speech Corpus (MDSC) contains 18,630 recordings from 46 Mandarin speakers: 21 with dysarthria
+and 25 controls \cite{gao2024mdsc}. Speaker-disjoint training, validation, and
+test sets contained 33/7/6 speakers and 13,365/2,835/2,430 recordings.
+The logistic model used Log-Mel, temporal, energy, and spectral descriptors. Its threshold was frozen at 0.735282 using validation
+sensitivity of at least 0.90 and maximal specificity. Intervals resampled speakers.
+
+Table~\ref{tab:model_performance} reports held-out results. Sensitivity fell
+from 90.04\% in validation to 67.24\% in testing, while specificity rose from
+81.36\% to 98.85\%. One speaker accounted for 313 of 398 misses
+(Fig.~\ref{fig:speakers}). Only six independent speakers contributed to testing,
+explaining the wide uncertainty despite 2,430 recordings. These results concern
+prompted dysarthric speech in quiet conditions; household and acute-stroke
+performance remain untested.
+
+\begin{table}[htbp]
+\centering\footnotesize
+\caption{Held-out speech results: 2,430 recordings from six unseen speakers.
+Intervals resample speakers, not individual recordings.}
+\label{tab:model_performance}
+\begin{tabular}{@{}lrr@{}}\toprule
+Metric & Estimate & 95\% interval \\\midrule
+Sensitivity & 67.24\% & 22.7--94.8\% \\
+Specificity & 98.85\% & 98.0--99.8\% \\
+Balanced accuracy & 83.05\% & 60.7--96.9\% \\
+ROC--AUC & 0.9573 & --- \\
+Brier score & 0.0983 & 0.022--0.227 \\
+\bottomrule\end{tabular}
+\end{table}
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.88\columnwidth]{mdsc-speaker-results.pdf}
+\caption{Held-out speech performance at the frozen threshold, with 405 recordings per speaker. Control bars show specificity; dysarthric bars show sensitivity.}
+\label{fig:speakers}
+\end{figure}
+\subsection{Pi--PC Deployment Pilot}
+\label{sec:pipc_pilot}
+Eight runs with two participants totaled 13~h, including one 8-h run,
+with 99 events and 780 resource samples. The setup linked a 4-GB Raspberry
+Pi~4, Camera V2, and ReSpeaker microphone HAT to an Intel NUC~13 Pro
+with a Logitech C920. The pilot used the repository implementation.
+Earlier and later runs showed Balance target counts of 4/7 and 6/7,
+and Speech counts of 1/2 and 2/2. Negative-interval triggers were 2/11 and
+1/11 for Balance, and 2/7 and 1/7 for Speech. Uncontrolled configuration
+changes and two participants limit this comparison to a descriptive observation.
+Supporting materials retain scenario counts.
+
+During the 8-h run, CPU utilization averaged 43.1\%, RAM 1500~MB,
+and temperature 69.4$^\circ$C (maximum 83.4$^\circ$C;
+Fig.~\ref{fig:resources}). Records included one unavailability flag,
+two data-loss flags, and one restart. Sampling coverage therefore does not
+establish uninterrupted operation. Twenty logged \textit{soon} outcomes remain
+unmapped to the current \textit{urgent} rule. Speech timing lacks capture-window
+alignment, and the guided Balance record describes a questionnaire rather than
+30-s standing acquisition. These records were not used to validate urgency
+agreement or automatic-check latency. External alert delivery was not configured.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.72\textwidth]{resource-trace.pdf}
+\caption{CPU and temperature sampled every 60~s during the 8-h run. Crosses mark offline records; dotted lines mark data loss; traces break at offline records.}
+\label{fig:resources}
+\end{figure*}
+\subsection{Decision-Fusion and Interaction Verification}
+An independent append-only reference agreed with the implementation across
+1,800 F/A/S transitions involving measurements, retries, symptoms, and corrections;
+previous report snapshots remained unchanged. In 15 constructed cases across
+B/E/F/A/S, removing symptom retention, snapshot isolation, or correction history
+broke the corresponding contract; the full implementation passed all cases.
+These constructed removals isolate failure modes.
+
+Four API regression scenarios additionally passed, with 24 requests recorded:
+late audio after a symptom report, stale audio after reset, symptom correction
+and persistent history readback, and B/E retry with unknown onset. They exercise
+production API, session, reporting, and storage code using synthetic audio and
+stub recognition, without participant sensing. Traces and source hashes accompany the supporting materials.
+
+The reducer matched all $5^5=3,125$ specified evidence combinations.
+Complete-first suppression differs in 2,070 cases by construction, not measured
+benefit. Supporting materials retain the fixtures and protocols.

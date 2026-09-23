@@ -129,6 +129,7 @@ class BefastSessionTest(unittest.TestCase):
             arm_lower_timeout_seconds=0.7,
             arm_pose_sustain_seconds=0.1,
             arm_min_valid_samples=3,
+            arm_min_endpoint_samples=1,
             arm_min_valid_fraction=0.5,
             balance_warmup_seconds=0.1,
             balance_capture_seconds=0.8,
@@ -483,6 +484,22 @@ class BefastSessionTest(unittest.TestCase):
             )
             self.assertTrue(restored.ready)
 
+    def test_balance_baseline_requires_confirmed_bound_context(self):
+        baseline = PersonalBalanceBaseline(
+            BefastConfig(balance_baseline_windows=2),
+            require_confirmation=True,
+        )
+        sample = {
+            "median_trunk_roll_degrees": 0.0,
+            "ml_sway_mean_velocity": 0.01,
+            "ml_sway_p95_range": 0.02,
+        }
+        self.assertEqual(baseline.assess(sample)["status"], "enrollment_required")
+        baseline.confirm_enrollment(
+            subject_id="p1", device_id="pi1", camera_fingerprint="cam1"
+        )
+        self.assertEqual(baseline.assess(sample)["status"], "calibrating")
+
     def test_automated_face_asymmetry_with_sudden_onset_is_emergency(self):
         self.run_face_screen(
             lambda ts: face_observation(
@@ -531,17 +548,19 @@ class BefastSessionTest(unittest.TestCase):
             new_or_sudden=False,
         )
         self.session.prepare_component("S", now=3.3)
-        self.session.start_speech_recording(now=3.4)
+        attempt = self.session.start_speech_recording(now=3.4)
         self.session.submit_speech_result(
             MotionResult(
                 status="negative",
                 reason="no_clear_speech_abnormality",
                 quality=0.9,
+                details={"speech_attempt_id": attempt},
             ),
             new_or_sudden=False,
             now=3.5,
         )
 
+        self.session.submit_component_observation("E", False, False)
         result = self.session.snapshot()
 
         self.assertEqual(result["decision"], "clear")
@@ -562,9 +581,9 @@ class BefastSessionTest(unittest.TestCase):
     def test_absent_target_following_is_insufficient(self):
         result = self.run_eye_screen(lambda _: face_observation(gaze_ratio=0.5))
 
-        self.assertEqual(result["items"]["E"]["status"], "insufficient")
+        self.assertEqual(result["items"]["E"]["camera_measurement"]["status"], "insufficient")
         self.assertEqual(
-            result["items"]["E"]["reason"],
+            result["items"]["E"]["camera_measurement"]["reason"],
             "visual_target_following_not_demonstrated",
         )
 
@@ -582,9 +601,9 @@ class BefastSessionTest(unittest.TestCase):
             )
         )
 
-        self.assertEqual(result["items"]["E"]["status"], "negative")
+        self.assertEqual(result["items"]["E"]["camera_measurement"]["status"], "negative")
         self.assertEqual(
-            result["items"]["E"]["metrics"]["coordinate_orientation"],
+            result["items"]["E"]["camera_measurement"]["metrics"]["coordinate_orientation"],
             -1.0,
         )
 
@@ -607,14 +626,14 @@ class BefastSessionTest(unittest.TestCase):
             )
         )
 
-        self.assertEqual(result["items"]["E"]["status"], "insufficient")
+        self.assertEqual(result["items"]["E"]["camera_measurement"]["status"], "insufficient")
         self.assertEqual(
-            result["items"]["E"]["reason"],
+            result["items"]["E"]["camera_measurement"]["reason"],
             "eye_metrics_recorded_for_validation",
         )
         self.assertIn(
             "binocular_directional_asymmetry",
-            result["items"]["E"]["metrics"],
+            result["items"]["E"]["camera_measurement"]["metrics"],
         )
 
     def test_opposite_target_following_is_not_inferred_as_camera_mirroring(self):
@@ -629,9 +648,9 @@ class BefastSessionTest(unittest.TestCase):
             )
         )
 
-        self.assertEqual(result["items"]["E"]["status"], "insufficient")
+        self.assertEqual(result["items"]["E"]["camera_measurement"]["status"], "insufficient")
         self.assertEqual(
-            result["items"]["E"]["reason"],
+            result["items"]["E"]["camera_measurement"]["reason"],
             "visual_target_following_not_demonstrated",
         )
 
@@ -649,9 +668,9 @@ class BefastSessionTest(unittest.TestCase):
 
         result = self.run_eye_screen(observation)
 
-        self.assertEqual(result["items"]["E"]["status"], "negative")
+        self.assertEqual(result["items"]["E"]["camera_measurement"]["status"], "negative")
         self.assertGreater(
-            result["items"]["E"]["metrics"][
+            result["items"]["E"]["camera_measurement"]["metrics"][
                 "left_left_repeat_relative_spread"
             ],
             0.50,
@@ -670,9 +689,9 @@ class BefastSessionTest(unittest.TestCase):
             )
         )
 
-        self.assertEqual(result["items"]["E"]["status"], "insufficient")
+        self.assertEqual(result["items"]["E"]["camera_measurement"]["status"], "insufficient")
         self.assertEqual(
-            result["items"]["E"]["reason"],
+            result["items"]["E"]["camera_measurement"]["reason"],
             "head_pose_not_available_during_eye_test",
         )
 
@@ -697,8 +716,8 @@ class BefastSessionTest(unittest.TestCase):
             )
         )
 
-        self.assertEqual(result["items"]["E"]["status"], "insufficient")
-        self.assertEqual(result["items"]["E"]["reason"], "head_moved_during_eye_test")
+        self.assertEqual(result["items"]["E"]["camera_measurement"]["status"], "insufficient")
+        self.assertEqual(result["items"]["E"]["camera_measurement"]["reason"], "head_moved_during_eye_test")
 
     def test_conjugate_rest_gaze_deviation_is_positive(self):
         result = self.run_eye_screen(
@@ -712,13 +731,13 @@ class BefastSessionTest(unittest.TestCase):
             )
         )
 
-        self.assertEqual(result["items"]["E"]["status"], "positive")
+        self.assertEqual(result["items"]["E"]["camera_measurement"]["status"], "positive")
         self.assertEqual(
-            result["items"]["E"]["reason"],
+            result["items"]["E"]["camera_measurement"]["reason"],
             "conjugate_rest_gaze_deviation",
         )
         self.assertGreaterEqual(
-            result["items"]["E"]["metrics"][
+            result["items"]["E"]["camera_measurement"]["metrics"][
                 "conjugate_rest_gaze_deviation_degrees"
             ],
             12.0,
@@ -736,9 +755,9 @@ class BefastSessionTest(unittest.TestCase):
             )
         )
 
-        self.assertEqual(result["items"]["E"]["status"], "positive")
+        self.assertEqual(result["items"]["E"]["camera_measurement"]["status"], "positive")
         self.assertEqual(
-            result["items"]["E"]["reason"],
+            result["items"]["E"]["camera_measurement"]["reason"],
             "bilateral_directional_gaze_restriction",
         )
 
@@ -755,9 +774,9 @@ class BefastSessionTest(unittest.TestCase):
             )
         )
 
-        self.assertEqual(result["items"]["E"]["status"], "positive")
+        self.assertEqual(result["items"]["E"]["camera_measurement"]["status"], "positive")
         self.assertEqual(
-            result["items"]["E"]["reason"],
+            result["items"]["E"]["camera_measurement"]["reason"],
             "binocular_directional_gaze_hypometria",
         )
 
@@ -774,11 +793,11 @@ class BefastSessionTest(unittest.TestCase):
         )
 
         self.assertEqual(
-            result["items"]["E"]["reason"],
+            result["items"]["E"]["camera_measurement"]["reason"],
             "visual_target_following_not_demonstrated",
         )
         self.assertLess(
-            result["items"]["E"]["metrics"]["minimum_response_snr"],
+            result["items"]["E"]["camera_measurement"]["metrics"]["minimum_response_snr"],
             self.config.eye_response_snr_threshold,
         )
 
@@ -804,12 +823,12 @@ class BefastSessionTest(unittest.TestCase):
 
         result = self.run_eye_screen(observation)
 
-        self.assertEqual(result["items"]["E"]["status"], "positive")
+        self.assertEqual(result["items"]["E"]["camera_measurement"]["status"], "positive")
         self.assertEqual(
-            result["items"]["E"]["reason"],
+            result["items"]["E"]["camera_measurement"]["reason"],
             "possible_binocular_endpoint_dysconjugacy",
         )
-        metrics = result["items"]["E"]["metrics"]
+        metrics = result["items"]["E"]["camera_measurement"]["metrics"]
         self.assertGreater(metrics["left_conjugacy_relative_error"], 0.35)
         self.assertAlmostEqual(metrics["right_conjugacy_relative_error"], 0.0)
 
@@ -835,9 +854,9 @@ class BefastSessionTest(unittest.TestCase):
 
         result = self.run_eye_screen(observation)
 
-        self.assertEqual(result["items"]["E"]["status"], "positive")
+        self.assertEqual(result["items"]["E"]["camera_measurement"]["status"], "positive")
         self.assertEqual(
-            result["items"]["E"]["reason"],
+            result["items"]["E"]["camera_measurement"]["reason"],
             "possible_disconjugate_gaze_restriction",
         )
 
@@ -863,9 +882,9 @@ class BefastSessionTest(unittest.TestCase):
 
         result = self.run_eye_screen(observation)
 
-        self.assertEqual(result["items"]["E"]["status"], "negative")
+        self.assertEqual(result["items"]["E"]["camera_measurement"]["status"], "negative")
         self.assertGreater(
-            result["items"]["E"]["metrics"]["inter_eye_range_asymmetry"],
+            result["items"]["E"]["camera_measurement"]["metrics"]["inter_eye_range_asymmetry"],
             0.20,
         )
 
@@ -952,8 +971,10 @@ class BefastSessionTest(unittest.TestCase):
             snapshot = self.session.snapshot(now=float(index + 1))
             self.assertEqual(skipped, check)
             self.assertEqual(snapshot["stage"], next_stage)
-            self.assertEqual(snapshot["items"][item_code]["status"], "skipped")
-            self.assertEqual(snapshot["items"][item_code]["reason"], "user_skipped")
+            item = snapshot["items"][item_code]
+            measurement = item.get("camera_measurement", item)
+            self.assertEqual(measurement["status"], "skipped")
+            self.assertEqual(measurement["reason"], "user_skipped")
 
         self.session.submit_manual(
             {"balance_problem": False},
@@ -1010,13 +1031,13 @@ class BefastSessionTest(unittest.TestCase):
 
     def test_speech_component_produces_its_own_report(self):
         self.session.prepare_component("S", now=1.0)
-        self.session.start_speech_recording(now=1.5)
+        attempt = self.session.start_speech_recording(now=1.5)
         self.session.submit_speech_result(
             MotionResult(
                 status="positive",
                 reason="speech_content_mismatch",
                 quality=0.88,
-                details={"transcript": "今天天气"},
+                details={"transcript": "今天天气", "speech_attempt_id": attempt},
             ),
             new_or_sudden=True,
             onset_time="2026-07-24T10:30",

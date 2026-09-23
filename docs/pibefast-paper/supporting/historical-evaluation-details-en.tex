@@ -1,0 +1,143 @@
+\section{Evaluation}
+\label{sec:experiment_results}
+We ask whether the prototype responds to scripted warning signs, how often it
+triggers during reference-negative observation, and how healthy participants
+complete repeated checks. Speech, deployment, and software tests provide
+supporting evidence. Each dataset retains its own participants and protocol.
+\textit{[Author input required: ethics approval or exemption and consent coverage
+for the 30-participant study, 40-participant dataset, and two-person pilot.]}
+
+
+\paperinput{sections/validation-study}
+
+\subsection{Healthy-Participant Outcomes and Repeatability}
+The repeatability analysis included 40 healthy participants with five visits each, comprising 200 sessions and 800 B/E/F/A records. Each module has 196 analyzable records,
+one recorded positive, and four insufficient outcomes: acquisition yield is
+196/200 (98.0\%), positive proportion among analyzable outcomes is 1/196
+(0.51\%), and insufficient proportion is 4/200 (2.0\%). These describe repeated
+component checks, not the current complete workflow's false-alert probability. Figure~\ref{fig:healthy}
+reports the one-way random-effects single-measure intraclass correlation coefficient, ICC(1,1), excluding insufficient
+measurements and retaining unequal repeat counts. Participant-cluster bootstrap
+intervals use 5,000 resamples (seed 203). B/E/F/A estimates are
+0.140/0.266/0.784/0.679. Absolute within-participant residual standard deviations (SDs) are
+0.289/0.0427/0.00736/0.0279. These estimates concern one recorded output per module: B trunk-orientation change (engineering score), E binocular directional asymmetry (proportion), F mouth-corner delta, and A level difference (both shoulder-width ratios).
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.88\columnwidth]{healthy-repeatability.pdf}
+\caption{Repeatability of one selected output per component, with 196 eligible measurements each. Bars show participant-bootstrap 95\% intervals for ICC(1,1).}
+\label{fig:healthy}
+\end{figure}
+
+The low B/E ICCs indicate limited repeatability relative to between-participant
+variation in this sample. A low positive proportion alone does not establish
+threshold sensitivity. Acquisition documentation, B baseline linkage, and the
+F shoulder-width normalization in the dataset versus interocular normalization in the implementation require
+reconciliation. One exported metric per module cannot reconstruct the complete
+runtime decisions. The full audit includes complete-case ICC(2,1) as a
+sensitivity analysis; the primary estimates use ICC(1,1).
+
+\subsection{Speaker-Independent Speech Evaluation}
+The MDSC corpus contains 18,630 recordings from 46 Mandarin speakers, including
+21 dysarthric and 25 control speakers \cite{gao2024mdsc}. Speaker-disjoint
+training, validation, and test partitions contain 13,365/2,835/2,430 recordings
+from 33/7/6 speakers. The model uses 40-bin Log-Mel means and standard deviations
+with ten temporal, energy, and spectral descriptors. Five-fold speaker-grouped evaluation assessed the 40-speaker development set (training plus validation). The deployed standardized logistic regression was fitted on the 33 training speakers, with threshold selection on the seven validation speakers. The highest validation threshold satisfying sensitivity
+at least 0.90 while maximizing specificity was selected and frozen at 0.735282.
+Threshold selection targeted recording-level sensitivity; each validation speaker contributed 405 recordings.
+
+\begin{table}[htbp]
+\centering\footnotesize
+\caption{Held-out speech results: 2,430 recordings from six unseen speakers.
+Intervals resample speakers, not individual recordings.}
+\label{tab:model_performance}
+\begin{tabular}{@{}lrr@{}}\toprule
+Metric & Estimate & 95\% interval \\\midrule
+Sensitivity & 67.24\% & 22.7--94.8\% \\
+Specificity & 98.85\% & 98.0--99.8\% \\
+Balanced accuracy & 83.05\% & 60.7--96.9\% \\
+ROC--AUC & 0.9573 & --- \\
+Brier score & 0.0983 & 0.022--0.227 \\
+\bottomrule\end{tabular}
+\end{table}
+
+Table~\ref{tab:model_performance} corresponds to 817 true positives, 398 false
+negatives, 1,201 true negatives, and 14 false positives. Validation sensitivity
+and specificity were 90.04\% and 81.36\%; the test results showed lower sensitivity
+and higher specificity. One dysarthric speaker accounted for 313 of the 398 misses
+(Fig.~\ref{fig:speakers}).
+At the speaker-mean operating point, two of three dysarthric speakers and all
+three controls were detected correctly. The six independent test speakers yielded wide sensitivity uncertainty despite the large recording count. These results characterize chronic dysarthria in prompted quiet recordings; transfer to acute-stroke detection and household speech requires separate evaluation.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.88\columnwidth]{mdsc-speaker-results.pdf}
+\caption{Held-out speech performance at the frozen threshold, with 405 recordings per speaker. Control bars show specificity; dysarthric bars show sensitivity.}
+\label{fig:speakers}
+\end{figure}
+
+
+\subsection{Pi--PC Deployment Pilot}
+\label{sec:pipc_pilot}
+We conducted eight pilot runs with two participants from 22 August to 5 September 2026, recording 99 events and 780 resource samples.
+The runs totaled 13~h, including one 8-h run. The setup used a 4-GB Raspberry Pi~4, Camera V2, and ReSpeaker two-microphone HAT, linked to an Intel NUC~13 Pro with a Logitech C920. Passive B operated at 16 frames/s, with 10-s speech windows and 60-s resource sampling. Resource records cover the expected 60-s sampling points in each half-open run interval, including 480 in the 8-h run. The analysis retains failed outcomes.
+
+The pilot used the repository implementation. Runs were grouped chronologically into earlier and later configurations. Their comparison is descriptive because configuration changes were not controlled independently. Each group includes 34 events and 2.25~h.
+Figure~\ref{fig:pilot_counts} separates the trigger paths: B detected 4/7 and 6/7
+scripted positives, and S detected 1/2 and 2/2. Triggers among negative intervals
+were 2/11 and 1/11 for B, and 2/7 and 1/7 for S. Three no-component negative
+intervals per group had no triggers. Four sway intervals per group retain their
+\textit{protocol\_defined} labels and are excluded from binary denominators.
+Recovery and 8-h runs have different scenario mixes and remain separate.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.90\textwidth]{pilot-counts.pdf}
+\caption{Pilot trigger counts by component and chronological group. Labels show triggered/total intervals in a descriptive comparison involving two participants.}
+\label{fig:pilot_counts}
+\end{figure*}
+
+Twenty new-onset positive outcomes were logged with the urgency label \textit{soon}, while the
+current rule outputs \textit{urgent} for equivalent eligible evidence. We retain
+\textit{soon} as an unmapped source label and do not count these rows as tests
+of urgency-rule agreement. Likewise, a recorded S onset-to-trigger interval of
+0.437~s lacks the capture boundaries and prior votes needed to relate it to the
+sequential-window protocol. S timestamp differences were retained for traceability and excluded from detection-latency estimates. The four jointly detected
+fall scenario pairs have earlier/later median timestamp differences of 1.913
+and 0.913~s; their selection and differing run conditions support only a
+conditional description. The disconnect record gives 668.722~s from trigger to
+PC receipt and is analyzed separately from ordinary operation.
+
+In the 8-h run (Fig.~\ref{fig:resources}), sampled Pi CPU utilization averaged 43.1\%, RAM 1500~MB,
+temperature 69.4$^\circ$C (maximum 83.4$^\circ$C), and power 3.52~W.
+One row flagged Pi unavailability, two flagged data loss, and the restart counter
+reached one. Complete row coverage does not imply uninterrupted sensing;
+power instrumentation is unspecified, so these are sample summaries rather
+than energy estimates. The recovery run includes separate guided
+B/E/F/A/S records and marks external alert delivery as not configured. The guided
+records describe interaction completion. For example, B spans 9.358~s from
+prompt to final state, with a user-reported outcome; this endpoint is distinct
+from the 30-s automatic standing acquisition defined in Section~\ref{subsec:balance}.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.90\textwidth]{resource-trace.pdf}
+\caption{CPU and temperature sampled every 60~s during the 8-h run. Crosses mark offline records; dotted lines mark data loss; traces break at offline records.}
+\label{fig:resources}
+\end{figure*}
+
+
+\subsection{Supporting Workflow Verification}
+The repository passed 171 tests. An independent append-only event-log reference
+agreed across 1,800 transition checks from 20 seeded 30-operation sequences
+replayed for F/A/S. Measurements were injected at the internal result boundary;
+the checks assess state handling, not sensor detection. Prior report snapshots
+remained unchanged. Separate bounded cases cover B/E questionnaire behavior.
+
+Five synthetic arm trajectories returned negative for stable hold and brief
+middle occlusion, positive for sudden and gradual lowering, and insufficient
+for a missing late endpoint. They verify that post-entry lowering remains
+measurable evidence. Removing symptom retention, snapshot isolation, or
+correction history broke each of 15 targeted cases; Full satisfied all 15.
+These checks support the interaction mechanisms used by the warning workflow.
+Detailed cases and reproducible seeds are retained in the supporting artifacts.

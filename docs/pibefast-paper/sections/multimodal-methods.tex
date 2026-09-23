@@ -1,430 +1,112 @@
-\section{Multimodal BE-FAST Methods}
+\section{Multimodal Measurements}
 \label{sec:methods}
+Each task applies acquisition-quality and completion gates before interpreting measurements. For sampled tasks, $q_{\mathrm{valid}}=N_{\mathrm{valid}}/N_{\mathrm{captured}}$ uses counts within the component-specific analysis window. Missing landmarks and incomplete actions produce unavailable measurements, with explicit masks in the research representation. The operating points below define the engineering measurement protocol.
 
-\subsection{Common Measurement and Quality Methods}
-\label{subsec:common_methods}
-
-Pose and face quality outputs have different meanings, so modality-specific
-criteria are retained rather than collapsed into one confidence score. For
-MoveNet-based modules, a timestamped observation is
-$\mathcal{P}^{\mathrm{pose}}_t=\{(x_{t,k},y_{t,k},c_{t,k})\}$, where $c_{t,k}$
-is the detector score for body landmark $k$. A feature accepts a pose frame
-only if all required landmarks satisfy
-$c_{t,k}\geq c_{\min}^{\mathrm{pose}}$ and its body scale is non-degenerate.
-Thus, $c_{\min}^{\mathrm{pose}}$ is an acquisition gate, not a calibrated
-probability of landmark correctness.
-
-MediaPipe instead returns face landmarks
-$\mathcal{P}^{\mathrm{face}}_t=\{(x_{t,k},y_{t,k},z_{t,k})\}$; $z_{t,k}$ is a
-relative depth coordinate, not landmark confidence; detection, presence, and
-tracking thresholds operate at model level. An eye or face frame is accepted
-only when a face and all required indices are returned and task-specific
-geometric, pixel-scale, pose, and temporal-stability gates pass. Invalid
-coordinates are discarded, not imputed. If $N_v$ of $N$ acquired frames pass
-the complete feature-specific rule, trial quality includes
-
-\begin{equation}
-q_{\mathrm{valid}}=N_v/N.
-\label{eq:valid_fraction}
-\end{equation}
-
-Decisions require both $N_v\geq N_{\min}$ and
-$q_{\mathrm{valid}}\geq q_{\min}$, ensuring sufficient absolute evidence and
-preventing invalid frames from dominating long windows. Both thresholds are
-calibrated for the deployed camera.
-
-Image-plane body distances are divided by shoulder width $d_s$. Face
-coordinates are centred between the outer eye corners, aligned to their axis,
-and divided by interocular distance $d_i$; iris displacement is additionally
-normalized within each palpebral fissure. These similarity normalizations
-reduce translation, in-plane roll, and uniform-scale effects, but not
-perspective or out-of-plane rotation. The eye module estimates within-trial
-pitch, yaw, and roll ranges from the MediaPipe canonical-face transform and
-rejects excessive head rotation. Eye-axis alignment reduces face-module roll,
-while pitch and yaw remain potential sources of variation.
-
-All decisions use temporal windows. For a valid scalar sequence $X=\{x_t\}$,
-the median and median absolute deviation (MAD) are
-
-\begin{equation}
-\widetilde{x}=\operatorname{median}(X),\quad
-\operatorname{MAD}(X)=\operatorname{median}|x_t-\widetilde{x}|,
-\label{eq:robust_statistics}
-\end{equation}
-
-with $\operatorname{IQR}(X)=Q_{0.75}(X)-Q_{0.25}(X)$
-\cite{iglewicz1993outliers}. Ratio metrics use $\epsilon=10^{-9}$ solely for
-numerical stability. Quantiles follow an empirical nearest-index rule for
-reproducible short sequences. Medians and percentile ranges limit the influence
-of anomalous trials and extreme frames, respectively.
-
-All components use the same four-state semantics:
-
-\begin{itemize}
-    \item \textit{positive}: a new symptom is reported or a quality-qualified
-    measurement meets a prespecified warning rule;
-    \item \textit{negative}: a completed, quality-qualified task does not
-    satisfy the corresponding warning rule;
-    \item \textit{insufficient}: acquisition, visibility, action, or signal
-    quality prevents interpretation; and
-    \item \textit{skipped}: the user intentionally did not complete the task.
-\end{itemize}
-
-Only a valid negative counts as a completed negative measurement. Insufficient
-and skipped results remain missing during fusion and are never treated as
-normal. Positive results are screening warnings, not stroke diagnoses, and a
-negative camera result cannot exclude stroke.
-
-\subsection{Balance (B)}
+\subsection{Balance: Postural Stability}
 \label{subsec:balance}
+Passive B distinguishes stable standing from ordinary transitions such as
+sitting, walking, or bending before evaluating change. A separate descent and
+posture-change path can retain a fall-like trigger. Active B asks the user to
+stand naturally for 30~s after a 1.5-s warmup. A qualified window requires
+at least 30 valid samples and valid fraction at least 0.75. Shoulder, hip, and
+ankle geometry supplies trunk
+orientation, mediolateral motion, and central sway range. An active balance symptom exempts an unstarted standing attempt. A retry starts a new attempt; a failed earlier attempt remains incomplete in its historical report. Starting a standing task is blocked while a balance symptom remains active, including after an ordinary negative questionnaire answer. Only an explicit correction retracts that event.
 
-The balance module first asks about sudden imbalance, incoordination, or gait
-difficulty. A new symptom takes precedence, and an unsafe participant does not
-stand. Otherwise, with a caregiver nearby, the camera records a 30-s quiet-
-standing window. The first five qualified windows form a fixed personal
-baseline for subsequent comparisons.
-
-\paragraph{Protocol and measurements}
-The camera remains fixed in an approximately frontal view. MoveNet provides
-bilateral shoulder, hip, and ankle landmarks. Let $\mathbf{s}_t$,
-$\mathbf{h}_t$, and $\mathbf{a}_t$ denote the respective bilateral midpoints,
-and let $d_{s,t}$ be shoulder width. With image $x$ increasing rightward and
-$y$ downward, we define the image-plane trunk inclination $\theta_t$ in radians and
-the normalized horizontal position $u_t$ of the trunk centre relative to the
-ankle midpoint as
-
+Personal enrollment requires a symptom-free attestation and binds the baseline
+to subject, device, and camera identifiers. The first five qualified windows
+freeze the median $\mu_j$ and scale
+\begin{equation}
+\sigma_j=\max\{1.4826\operatorname{MAD}(X_j),
+\operatorname{IQR}(X_j)/1.349\}.
+\end{equation}
+Changing the enrollment context clears its samples. For trunk orientation $\theta$, lateral-motion
+velocity $v$, and central 90\% range $R$, define
 \begin{align}
-\theta_t=\operatorname{atan2}
-(s_{t,x}-h_{t,x},\ h_{t,y}-s_{t,y}),\\
-u_t=\frac{(s_{t,x}+h_{t,x})/2-a_{t,x}}{d_{s,t}}.
-\label{eq:trunk_angle}
+r_\theta&=\frac{|\theta-\mu_\theta|}{\sigma_\theta},\nonumber\\
+r_v&=\frac{\max(0,v-\mu_v)}{\sigma_v},\quad
+r_R=\frac{\max(0,R-\mu_R)}{\sigma_R}.
 \end{align}
+The rule is $r_\theta\geq3.5$ or both $r_v\geq3.5$ and $r_R\geq3.5$,
+using a modified-$Z$ reference \cite{iglewicz1993outliers}. Requiring both sway
+terms is intended to reduce landmark-jitter triggers. Zero change receives score zero, including at zero scale. Positive change at zero scale is unscorable. A scored positive rule takes precedence; otherwise, an unscorable domain yields insufficient evidence. Figure~\ref{fig:balance} shows acquisition before the
+personal baseline has been completed.
 
-Here $\operatorname{atan2}$ returns the angle directly in radians,
-$(s_{t,x}+h_{t,x})/2$ averages the shoulder and hip midpoints horizontally,
-and shoulder-width division makes displacement dimensionless. The frontal view
-lets image horizontal approximate the anatomical mediolateral axis;
-$\theta_t$ remains camera-relative, so repositioning requires
-recalibration. A valid window contains all six landmarks in at least $N_{\min}$
-standing frames and satisfies $q_{\mathrm{valid}}\geq q_{\min}$. We summarize it by
 
-\begin{align}
-\widetilde{\theta}&=\operatorname{median}(\theta_t),\\
-R_{90}&=Q_{0.95}(u)-Q_{0.05}(u),\\
-v_{\mathrm{ML}}&=
-\frac{\sum_{t=2}^{N_v}|u_t-u_{t-1}|}{t_{N_v}-t_1},
-\label{eq:balance_features}
-\end{align}
 
-$\widetilde{\theta}$ captures sustained inclination,
-$v_{\mathrm{ML}}$ captures time-normalized lateral motion, and $R_{90}$ captures
-the central 90\% sway range while suppressing extreme frames.
+\subsection{Eyes: Gaze Assessment}
+The E task repeats paired center--left and center--right target trials three
+times. Each target lasts 2~s, with the first 0.5~s reserved for settling. Normalized iris
+positions produce paired endpoint responses, range, directional asymmetry, and
+inter-eye differences. Each trial requires five valid samples and valid fraction at least 0.60; each eye must span at least 24 pixels when frame dimensions are available. Repeated responses, head pose, and endpoint dispersion further gate availability. The accompanying measurement protocol fixes these parameters and their definitions. These RGB outputs are
+research measurements: automatic E disease thresholds are disabled. A separate
+questionnaire records visual difficulty and its onset, even when camera
+acquisition fails.
 
-\paragraph{Personal-baseline decision}
-For $j\in\mathcal{J}_{B}=
-\{\widetilde{\theta},v_{\mathrm{ML}},R_{90}\}$, the five calibration
-windows define the robust centre and scale
+\subsection{Face: Facial Asymmetry}
+F compares a 2-s neutral phase with a 3-s smile phase, requiring at least five
+valid samples in each. Mouth-corner displacement is normalized
+by interocular width; its median change is interpreted alongside left--right
+smile activation. The trial requires valid fraction at least 0.50 and smile
+strength at least 0.22. Qualified asymmetry is positive when the absolute
+neutral-referenced geometric change reaches 0.075 or smile-activation difference
+reaches 0.24. Failure to establish the action produces insufficient evidence;
+users or caregivers can separately report inability to smile.
 
-\begin{align}
-\mu_j&=\operatorname{median}(X_j^{\mathrm{base}}),\\
-\sigma_j&=\max\left\{1.4826\operatorname{MAD}(X_j^{\mathrm{base}}),
-\frac{\operatorname{IQR}(X_j^{\mathrm{base}})}{1.349}\right\}.
-\label{eq:robust_scale}
-\end{align}
-
-Five windows form a short odd-length baseline, giving a unique median centre
-and allowing dispersion to be estimated while balancing calibration information
-against five 30-s tasks. The factors 1.4826 and 1.349 put MAD and IQR on a
-normal-consistent standard-deviation scale; taking the larger estimate limits
-score inflation from a short baseline.
-
-A later window yields
-
-\begin{align}
-r_{\theta}&=\frac{|\widetilde{\theta}_{\mathrm{current}}
--\mu_{\theta}|}{\sigma_{\theta}},\\
-r_v&=\frac{\max(0,v_{\mathrm{ML,current}}-\mu_v)}{\sigma_v},\\
-r_R&=\frac{\max(0,R_{90,\mathrm{current}}-\mu_R)}{\sigma_R}.
-\label{eq:balance_change_scores}
-\end{align}
-
-Inclination is tested in both directions, whereas sway is tested only for
-increases. We set $\tau=3.5$ from the Iglewicz--Hoaglin modified-$Z$ outlier
-rule \cite{iglewicz1993outliers}; with the conservative scale above, it selects
-marked departures from personal baseline:
-
-\begin{equation}
-\mathcal{D}_{B}^{\mathrm{camera}}=
-[r_{\theta}\geq\tau]\ \lor\
-\bigl([r_v\geq\tau]\land[r_R\geq\tau]\bigr).
-\label{eq:balance_decision}
-\end{equation}
-
-Requiring both sway velocity and range reduces alerts from local landmark
-jitter. Failed quality gates or undefined nonzero scores yield
-\textit{insufficient}; the first five qualified windows are
-\textit{calibrating}; later windows are positive when
-$\mathcal{D}_{B}^{\mathrm{camera}}$ holds and negative otherwise. The baseline
-remains frozen, while its length, threshold, and conjunction are calibrated in
-the target population.
-
-\paragraph{Interpretation and scope}
-The 30-s window and velocity feature follow quiet-standing studies
-\cite{aryan2023forceplate,ruhe2010cop}. They support contactless longitudinal
-measurement, provided camera placement, sampling, and stance remain consistent.
-Two-dimensional pose is not a complete balance examination, and a negative
-result does not exclude impairment or stroke
-\cite{yeung2014kinect,dai2021lateropulsion}; test--retest reliability is an
-explicit validation endpoint.
-
-\subsection{Eyes (E)}
-\label{subsec:eyes}
-
-We use the pretrained MediaPipe Face Landmarker to extract iris and eye-corner
-landmarks \cite{bazarevsky2020mediapipeiris,google2022facemeshmodelcard}.
-Before roll correction, separately normalized $x/y$ coordinates are mapped to
-an isotropic, frame-width-based plane; outer-canthus distance provides geometric
-scale.
-
-Sudden visual loss, field loss, diplopia, or sustained gaze deviation takes
-priority over camera findings. Otherwise, a rest--centre--lateral sequence gives
-three responses per side in reversed order. Three supports a median while
-tolerating one atypical trial; the first response is retained for the repetition
-ablation. Each lateral endpoint is paired with its preceding centre to reduce
-drift. Target timing, viewing geometry, achieved angle $A_{\mathrm{ach}}$, and
-the fixed camera-mirroring convention are recorded with the trial.
-
-For eye $e$, horizontal iris position within the palpebral fissure is
-
-\begin{equation}
-g_{e,t}=\frac{x_{e,t}^{\mathrm{iris}}-x_{e,t}^{\min}}
-{x_{e,t}^{\max}-x_{e,t}^{\min}}.
-\label{eq:gaze_normalization}
-\end{equation}
-
-Here $g$ denotes normalized horizontal iris position. Let
-$j\in\{1,2,3\}$ index repetitions, $d\in\{-1,+1\}$ denote target direction,
-and $s_c\in\{-1,+1\}$ be the prespecified camera-coordinate convention. The
-paired signed response is
-
-\begin{equation}
-r_{e,d,j}=s_c d\left(\widetilde{g}_{e,d,j}-
-\widetilde{g}_{e,c(d,j)}\right),
-\label{eq:eye_response}
-\end{equation}
-
-where $c(d,j)$ is the preceding centre and a correct response is positive.
-Endpoints use the median; sample count, eye width, and MAD remain continuous
-quality variables. Amplitude is
-$a_{e,d}=\max\{0,\operatorname{median}_j r_{e,d,j}\}$ and binocular response is
-$b_d=(a_{L,d}+a_{R,d})/2$. Directional asymmetry and direction-specific
-binocular endpoint discordance are
-
-\begin{align}
-A_{\mathrm{dir}}&=\frac{|b_{-1}-b_{+1}|}
-{\max(b_{-1},b_{+1},\epsilon)},\\
-C_d&=\frac{|a_{L,d}-a_{R,d}|}
-{\max(a_{L,d},a_{R,d},\epsilon)}.
-\label{eq:eye_asymmetry_conjugacy}
-\end{align}
-
-$C_d$ compares the eyes within each target direction. Resting bias is expressed
-as a task-calibrated angular proxy:
-
-\begin{equation}
-\theta^{\mathrm{proxy}}_{e}=s_c
-\frac{g_{e,\mathrm{rest}}-\operatorname{median}(g_{e,\mathrm{centre}})}
-{|g_{e,+1}-g_{e,-1}|}\,2A_{\mathrm{ach}}.
-\label{eq:eye_rest_proxy}
-\end{equation}
-
-The factor two is the span from $-A_{\mathrm{ach}}$ to $+A_{\mathrm{ach}}$.
-Assuming accurate fixation and locally linear iris response,
-$\theta^{\mathrm{proxy}}_e$ is task-specific; it, $A_{\mathrm{dir}}$, and $C_d$
-are validated as continuous phenotypes, separately from imaging gaze angles.
-
-Quality records include sample count, valid-frame fraction, eye width, endpoint
-MAD, head-pose coverage and range, and between-repeat dispersion. Missing
-landmarks or an uncomputable endpoint yields \textit{insufficient}; otherwise
-the continuous metrics enter the healthy-participant failure and repeatability
-analyses. Sudden visual symptoms independently raise the E warning.
-
-Stroke can involve conjugate deviation and directional ocular hypokinesia
-\cite{singer2006gaze,kudo2021eyemovement}. Because sampling rate affects saccade
-detection even at 60 versus 120~Hz \cite{leube2017sampling}, this low-rate task
-reports stable endpoints; latency, velocity, pursuit gain, and nystagmus require
-comparison with clinical video-oculography.
-
-\subsection{Face (F)}
-\label{subsec:face}
-
-We similarly use the pretrained MediaPipe Face Landmarker to extract facial
-landmarks and expression blendshape scores
-\cite{google2022facemeshmodelcard}. The face task compares a prompted smile with
-the participant's neutral expression. After eye-axis alignment and interocular
-normalization, mouth-corner height is
-
-\begin{equation}
-m_t=\frac{y_{t,\mathrm{left\ corner}}-
-y_{t,\mathrm{right\ corner}}}{d_{i,t}}.
-\label{eq:mouth_corner_difference}
-\end{equation}
-
-and its neutral-referenced change is
-
-\begin{equation}
-\Delta m=\operatorname{median}(m_t^{\mathrm{smile}})-
-\operatorname{median}(m_t^{\mathrm{neutral}}).
-\label{eq:mouth_corner_delta}
-\end{equation}
-
-MediaPipe smile blendshapes add $\Delta a=a_R-a_L$ and action strength
-$a_{\max}=\max(a_L,a_R)$, where $a_L,a_R\in[0,1]$ are the left and right
-mouth-smile activation scores \cite{google2022facemeshmodelcard}. The current
-implementation uses $a_{\max}\geq0.22$ to confirm a measurable smile, followed
-by engineering warning references of $|\Delta m|\geq0.075$ interocular units or
-$|\Delta a|\geq0.24$. The value 0.22 gates action completion; 0.075 and 0.24 act
-on the geometric and model-score paths, respectively, giving both paths explicit,
-reproducible boundaries.
-
-Insufficient frames, small face scale, or $a_{\max}<0.22$ yields
-\textit{insufficient}, preventing an absent smile from becoming asymmetry. In an
-approximately frontal view, either engineering reference crossing raises a
-warning; the sign gives the visibly weaker side. All three values are normalized
-implementation parameters; target-population experiments use continuous
-$\Delta m$, $\Delta a$, and $a_{\max}$ to estimate and independently validate
-operating points. Neutral referencing reduces, but does not remove, confounding
-from stable anatomical or habitual asymmetry.
-
-\subsection{Arms (A)}
+\subsection{Arms: Arm Drift}
 \label{subsec:arms}
-
-The BE-FAST observation of bilateral arm raising and unilateral drift provides
-the clinical-action basis for the arm task \cite{aroor2017befast}. MoveNet capture
-follows a fixed sequence: both arms start lowered, rise to approximately
-shoulder-height lateral extension, hold for 5~s, and return. Five seconds defines
-the technical hold window, providing a stable sequence and first-versus-last-third
-drift comparison while limiting task burden; an incomplete sequence is
-\textit{insufficient}.
-
-Let $d_{s,t}$ denote the Euclidean distance between the two shoulder landmarks.
-For side $e\in\{L,R\}$, normalized wrist height and lateral reach are
-
+The A task follows a lower--raise--hold--return sequence, with a 5-s hold near
+shoulder height (Fig.~\ref{fig:arms}). Bilateral visibility and phase completion
+are required, with at least 20 visible hold samples and hold-phase valid fraction at least
+0.55. The raised-pose gate applies when entering the hold phase. During the
+hold, all frames with measurable shoulder, elbow, and wrist landmarks are
+retained, including lowered-arm poses. Early and late segments occupy the first
+and last thirds of the 5-s interval, with at least six visible samples in each.
+An unavailable endpoint produces insufficient evidence. With image $y$ increasing downward, shoulder-width-normalized
+wrist height is $h_{e,t}=(y_{wrist,e,t}-y_{shoulder,e,t})/w_{shoulder}$.
+We separate persistent asymmetry from progressive lowering:
 \begin{align}
-h_{e,t}&=\frac{y_{e,t}^{\mathrm{wrist}}-
-y_{e,t}^{\mathrm{shoulder}}}{d_{s,t}},
-\label{eq:arm_height}\\
-r_{e,t}&=\frac{|x_{e,t}^{\mathrm{wrist}}-
-x_{e,t}^{\mathrm{shoulder}}|}{d_{s,t}}.
-\label{eq:arm_reach}
+D&=\operatorname{median}_t(h_{L,t}-h_{R,t}),\\
+\delta_e&=\operatorname{median}(h_e^{late})-
+\operatorname{median}(h_e^{early}),\quad
+\Delta=\delta_L-\delta_R.
 \end{align}
+A qualified trial is positive when $|D|\geq0.30$ or $|\Delta|\geq0.22$.
+Anatomical labels assume an unmirrored inference frame; positive differences
+indicate a lower left arm. Technical inability to obtain this trial remains
+separate from a reported inability to raise an arm.
 
-Because image $y$ increases downward, larger $h_{e,t}$ means a lower wrist.
-The start gate is $h_{L,t},h_{R,t}\geq0.45$; within 8~s, the raise gate requires
-$h_{L,t},h_{R,t}\leq0.42$, elbow angles $\geq125^{\circ}$, and
-$r_{L,t},r_{R,t}\geq0.45$ for 0.45~s. Hold analysis requires 20 valid frames,
-a valid fraction $\geq0.55$, and continued gate compliance; both wrists then
-return to the lowered start position within 5~s. These values define action and
-quality gates: the initial 0.45 confirms that both wrists are below the shoulders;
-0.42, $125^{\circ}$, and 0.45 constrain wrist height, elbow extension, and lateral
-reach; 0.45~s rejects transient crossings; 20 frames and 0.55 provide absolute
-sample support and relative coverage; and 8~s and 5~s bound interaction timeouts.
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.80\columnwidth]{arms-demonstration.jpg}
+\caption{Bilateral arm-raise demonstration with live landmark feedback on the local computer.}
+\label{fig:arms}
+\end{figure}
 
-For accepted hold frames, the instantaneous bilateral level difference is
-$D_t=h_{L,t}-h_{R,t}$ and the persistent level feature is
-$\widetilde D=\operatorname{median}_t(D_t)$. Drift compares the first and last
-thirds of the hold:
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.80\columnwidth]{balance-demonstration.jpg}
+\caption{Balance acquisition with landmark feedback; baseline-relative scores remain unavailable during enrollment (0/5 windows).}
+\label{fig:balance}
+\end{figure}
 
-\begin{align}
-\delta_e&=\operatorname{median}(h_{e}^{\mathrm{late}})-
-\operatorname{median}(h_{e}^{\mathrm{early}}),\\
-\Delta_{\mathrm{drift}}&=\delta_L-\delta_R.
-\label{eq:arm_drift}
-\end{align}
+\subsection{Speech: Audio Assessment}
+Passive S compares qualified audio windows with an enrolled personal baseline.
+The default loop acquires an 8-s window, analyzes it, then waits 1~s; this is
+sequential window processing. Three abnormal votes are required among the last
+five qualified windows. From an empty vote history at a window boundary, three
+8-s captures and two 1-s waits require at least 26~s plus processing.
+A target-speaker gate uses three enrollment windows and a cosine-similarity
+reference of 0.70. The classifier probability contributes only one anomaly domain; a
+trigger additionally requires another changed acoustic domain. The diagnostic
+output links votes to window identifiers, capture boundaries, and analysis and
+decision times for subsequent timing audits. The passive gate and the active check share classifier evidence; the active
+check adds a new prompted recording and onset information.
 
-A qualified trial is positive when $|\widetilde D|\geq0.30$ or
-$|\Delta_{\mathrm{drift}}|\geq0.22$. These prespecified engineering references,
-expressed in shoulder-width-normalized units, apply to persistent level and
-within-hold drift and provide reproducible software-boundary inputs. If both
-cross, the larger reference-normalized magnitude determines laterality; positive
-denotes a lower or more-dropping left wrist. Continuous and binary results are
-both retained so target-population data can re-estimate and independently
-validate the operating points.
-
-\subsection{Speech}
-\label{subsec:speech}
-
-The speech module adopts a two-level strategy combining passive natural-speech
-monitoring with triggered active assessment. Passive monitoring evaluates
-temporal, phonatory, articulatory, and resonance-related changes relative to an
-individual's baseline, while active assessment uses a fixed sentence to obtain
-more structured evidence after an abnormality signal.
-
-\begin{center}
-  \includegraphics[width=0.84\columnwidth]{\paperroot figures/speech-architecture-original.png}
-\end{center}
-
-For passive natural speech, valid speech segments are represented using
-lightweight acoustic descriptors. The current implementation uses a
-90-dimensional representation consisting of 40-bin Log-Mel means and standard
-deviations together with ten temporal, energy, and spectral descriptors. A
-standardized logistic regression model maps the representation to a
-dysarthria-related probability:
-
-\begin{equation}
-p=\sigma\left(\mathbf{w}^{T}\mathbf{z}+b\right),\quad
-z_i=\frac{x_i-\mu_i}{s_i}.
-\end{equation}
-
-Where $\mu_i$ and $s_i$ are estimated from the training data. The model is
-trained on control and dysarthric Mandarin speech from the MDSC dataset and is
-used directly in the Speech screening decision. The exported model threshold is
-$\tau_{\mathrm{M}}=0.807859$. For quality-qualified passive speech,
-$p\geq\tau_{\mathrm{M}}$ immediately triggers the active assessment and the
-window is excluded from the personal baseline. To account for inter-speaker
-variability, the remaining acoustic changes are interpreted relative to the
-individual's baseline.
-
-For active fixed-sentence assessment, triggered speech first passes an
-audio-quality gate to exclude recordings with insufficient duration, excessive
-low-level signal, or clipping. The valid segment is then transcribed offline
-using a locally deployed Whisper-based system. When a reference sentence is
-available, transcription discrepancy is quantified by Character Error Rate
-(CER):
-
-\begin{equation}
-CER=\frac{S+D+I}{N}.
-\end{equation}
-
-where $(S)$, $(D)$, and $(I)$ denote substitution, deletion, and insertion
-errors, and $(N)$ is the number of reference characters. Speech delivery is
-further characterized by pause fraction and speech rate:
-
-\begin{equation}
-PF=\frac{T_{pause}}{T_{total}},\quad
-CPS=\frac{N_{char}}{T_{speech}}.
-\end{equation}
-
-The MDSC model is also applied to the quality-qualified guided recording. In the
-current implementation, the Speech result is abnormal when
-$p\geq\tau_{\mathrm{M}}$, CER $\geq 0.35$, pause fraction $\geq 0.55$, or CPS is
-outside 1--8. These thresholds are system-level screening rules and are not
-independent clinical diagnostic criteria. Overall, the two-level design
-combines MDSC-based dysarthria detection, individualized continuous monitoring,
-and structured speech assessment in the formal Speech decision.
-
-\begin{center}
-  \footnotesize
-  \setlength{\tabcolsep}{3pt}
-  \begin{tabular}{@{}p{0.30\columnwidth}p{0.25\columnwidth}p{0.34\columnwidth}@{}}
-    \textbf{Criterion} & \textbf{Threshold} & \textbf{Interpretation} \\[5pt]
-    MDSC probability & $\geq 0.807859$ & Dysarthria pattern \\[5pt]
-    Character Error Rate & $\geq 0.35$ & Speech content mismatch \\[5pt]
-    Pause fraction & $\geq 0.55$ & Irregular speech delivery \\[5pt]
-    Speech rate & $< 1$ CPS or $> 8$ CPS & Irregular speech delivery
-  \end{tabular}
-\end{center}
-
-
-\subsection{Digital Medical Record Analysis}
-\label{subsec:medical_record}
+Active S acquires a new 7-s, 16-kHz mono recording of a fixed Mandarin sentence.
+After duration, level, clipping, and voice-content gates, a frozen logistic
+classifier trained on MDSC supplies dysarthria probability. A value at or above 0.735282
+is the direct S positive criterion. Local Whisper transcription supplies
+character error rate (CER), speaking rate, and pause descriptors for audit; these
+features do not override the classifier. Dysarthria is not stroke-specific,
+so measurement onset and independent symptom reports remain necessary inputs
+to the urgency rule.

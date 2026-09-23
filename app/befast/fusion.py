@@ -1,4 +1,4 @@
-"""Quality-gated, feature-level BE-FAST fusion for research observation.
+"""Quality-annotated, feature-level BE-FAST representation for research.
 
 This module deliberately produces an inspectable feature vector rather than a
 diagnostic prediction.  It preserves the established component decisions and
@@ -15,7 +15,7 @@ from typing import Any, Mapping
 from .config import BefastConfig
 
 
-FEATURE_FUSION_VERSION = "befast-feature-fusion-v2"
+FEATURE_FUSION_VERSION = "befast-feature-fusion-v5"
 COMPONENTS = ("B", "E", "F", "A", "S")
 
 # The vector is deliberately fixed-length.  Missing modality values are zeroed
@@ -41,10 +41,14 @@ FUSION_FEATURE_NAMES = (
     "S_pause_fraction",
     "S_mdsc_dysarthria_probability",
 )
-FUSION_MODEL_FEATURE_NAMES = (
+LEGACY_FUSION_MODEL_FEATURE_NAMES = (
     *FUSION_FEATURE_NAMES,
     *(f"quality_{component}" for component in COMPONENTS),
     *(f"missing_{component}" for component in COMPONENTS),
+)
+FUSION_MODEL_FEATURE_NAMES = (
+    *LEGACY_FUSION_MODEL_FEATURE_NAMES,
+    *(f"missing_{name}" for name in FUSION_FEATURE_NAMES),
 )
 
 
@@ -52,18 +56,32 @@ def build_feature_fusion(
     items: Mapping[str, Mapping[str, Any]],
     config: BefastConfig,
 ) -> dict[str, Any]:
-    """Build a fixed, quality-gated feature vector from completed report items.
+    """Build a fixed, quality-annotated feature vector from report items.
 
     ``raw_features`` retains continuous metrics as emitted by each component.
-    ``gated_features`` multiplies every domain by its quality value.  Consumers
-    must retain ``quality`` and ``missing`` alongside the vector so zero remains
-    distinguishable from an unavailable observation.
+    ``gated_features`` is a quality-weighted inspection view, not a calibrated
+    uncertainty correction.  The trainable ``model_vector`` keeps raw values,
+    quality, and missingness separate so measurement magnitude is not silently
+    conflated with acquisition quality.
     """
 
+    items = {code: item.get("camera_measurement", item) for code, item in items.items()}
     raw_features = _raw_features(items)
     available = {
         component: _has_measurement(items.get(component, {}))
         for component in COMPONENTS
+    }
+    feature_missing = {
+        name: not available[name[0]] or not _finite_metric(
+            _metrics(items.get(name[0], {})), name[2:]
+        )
+        for name in FUSION_FEATURE_NAMES
+    }
+    # Retain invalid measurements in component records for audit, never as
+    # unmasked model inputs. Partial modalities use a separate mask per feature.
+    raw_features = {
+        name: 0.0 if feature_missing[name] else value
+        for name, value in raw_features.items()
     }
     quality = {
         component: _quality(component, items.get(component, {}), config)
@@ -80,21 +98,35 @@ def build_feature_fusion(
     severities = _domain_severities(
         raw_features, quality, available, config, mdsc_threshold
     )
+    required_severity_features = {
+        "B": ("trunk_orientation_change_score", "mediolateral_sway_change_score"),
+        "E": ("binocular_directional_asymmetry", "max_conjugacy_error", "conjugate_rest_gaze_deviation_degrees"),
+        "F": ("mouth_corner_delta", "smile_score_difference"),
+        "A": ("level_difference", "drift_difference"),
+        "S": ("mdsc_dysarthria_probability",),
+    }
+    severity_available = {
+        code: available[code] and quality[code] > 0 and
+        all(not feature_missing[f"{code}_{name}"] for name in names) and
+        (code != "E" or config.eye_enable_unvalidated_warning_thresholds)
+        for code, names in required_severity_features.items()
+    }
     present_severities = [
         severity
         for component, severity in severities.items()
-        if available[component]
+        if severity_available[component]
     ]
     ranked = sorted(present_severities, reverse=True)
     top_two = ranked[:2]
-    lateral = _arm_face_laterality(raw_features, severities)
+    lateral = (_arm_face_laterality(raw_features, severities)
+               if severity_available["A"] and severity_available["F"] else None)
 
     return {
         "version": FEATURE_FUSION_VERSION,
         "mode": "research_only_no_decision",
         "status": (
             "ready"
-            if present_severities
+            if any(available.values())
             else "awaiting_completed_measurement"
         ),
         "component_order": list(COMPONENTS),
@@ -106,22 +138,32 @@ def build_feature_fusion(
         "gated_vector": [gated_features[name] for name in FUSION_FEATURE_NAMES],
         "quality": quality,
         "missing": missing,
-        # ``model_vector`` is the ready-to-train early-fusion vector.  A zero
-        # feature remains distinguishable from unavailable data by its tail.
+        "feature_missing": feature_missing,
+        "legacy_model_feature_names": list(LEGACY_FUSION_MODEL_FEATURE_NAMES),
+        "legacy_model_vector": [
+            *[raw_features[name] for name in FUSION_FEATURE_NAMES],
+            *[quality[component] for component in COMPONENTS],
+            *[float(missing[component]) for component in COMPONENTS],
+        ],
+        "legacy_model_warning": "29D export cannot encode within-modality missingness",
+        # Keep magnitude and quality as separate covariates. A zero feature
+        # remains distinguishable from unavailable data by the missing tail.
         "model_vector": [
-            *[gated_features[name] for name in FUSION_FEATURE_NAMES],
+            *[raw_features[name] for name in FUSION_FEATURE_NAMES],
             *[quality[component] for component in COMPONENTS],
             *[1.0 if missing[component] else 0.0 for component in COMPONENTS],
+            *[float(feature_missing[name]) for name in FUSION_FEATURE_NAMES],
         ],
-        "domain_severity": severities,
+        "domain_severity": {code: value if severity_available[code] else None for code, value in severities.items()},
+        "severity_available": severity_available,
         "aggregate": {
             "reliable_domain_count": sum(
-                quality[component] > 0.0 for component in COMPONENTS
+                severity_available[component] for component in COMPONENTS
             ),
-            "max_domain_severity": _round(max(present_severities, default=0.0)),
+            "max_domain_severity": _round(max(present_severities)) if present_severities else None,
             "mean_top_two_domain_severity": _round(
-                sum(top_two) / len(top_two) if top_two else 0.0
-            ),
+                sum(top_two) / len(top_two)
+            ) if top_two else None,
             "arm_face_laterality_agreement": lateral,
         },
     }
@@ -226,20 +268,9 @@ def _domain_severities(
                 config.arm_drift_difference_threshold,
             ),
         ),
-        "S": max(
-            _scale(
-                features["S_character_error_rate"],
-                config.fusion_speech_character_error_rate_reference,
-            ),
-            _scale(
-                features["S_pause_fraction"],
-                config.fusion_speech_pause_fraction_reference,
-            ),
-            _speech_rate_severity(features["S_characters_per_second"], config),
-            _scale(
-                features["S_mdsc_dysarthria_probability"],
-                mdsc_threshold,
-            ),
+        "S": _scale(
+            features["S_mdsc_dysarthria_probability"],
+            mdsc_threshold,
         ),
     }
     return {
@@ -304,7 +335,10 @@ def _has_measurement(item: Mapping[str, Any]) -> bool:
     """Manual-only items intentionally do not masquerade as sensor features."""
 
     return (
-        str(item.get("status", "")) in {"positive", "negative"}
+        (
+            str(item.get("acquisition_status", "")) == "measured"
+            or str(item.get("status", "")) in {"positive", "negative"}
+        )
         and bool(_metrics(item))
         and _bounded(item.get("quality"), default=0.0) > 0.0
     )
@@ -334,6 +368,13 @@ def _metric(metrics: Mapping[str, Any], name: str) -> float:
     except (TypeError, ValueError):
         return 0.0
     return _round(number) if isfinite(number) else 0.0
+
+
+def _finite_metric(metrics: Mapping[str, Any], name: str) -> bool:
+    try:
+        return name in metrics and isfinite(float(metrics[name]))
+    except (TypeError, ValueError):
+        return False
 
 
 def _bounded(value: Any, default: float = 0.0) -> float:

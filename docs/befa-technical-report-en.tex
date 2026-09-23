@@ -28,7 +28,7 @@
 \maketitle
 
 \begin{abstract}
-PiBE-FAST is a Raspberry Pi--oriented research prototype for multimodal early screening of acute stroke warning signs. This report describes the Balance (B), Eyes (E), Face (F), Arms (A), and Speech (S) components and the quality-gated feature-fusion layer. The implementation combines MoveNet body keypoints, MediaPipe Face Landmarker facial and iris landmarks, local microphone audio, offline whisper.cpp transcription, standardized short tasks, temporal aggregation, explicit quality gates, and conservative rule-based decisions. Speech has two layers: natural-speech change monitoring against a personal acoustic baseline and a guided fixed-phrase confirmation. The guided layer also records a shadow-only 90-dimensional log-Mel representation trained on the official Mandarin Dysarthria Speech Corpus (MDSC), without changing the S or urgency decision. Inference runs on a local edge host and guidance and reports are exposed through a Flask/React web interface. The fusion layer converts completed B/E/F/A/S measurements into a fixed 28-dimensional research vector while preserving quality and missingness. It produces no diagnosis and does not replace the established component or urgency decisions. The design gives priority to sudden symptoms reported by the user or caregiver, separates a valid negative result from insufficient data, and does not convert engineering thresholds into a stroke probability. The current software demonstrates a reproducible measurement workflow and testable feature definitions; it has not yet established clinical diagnostic validity. It must not delay emergency assessment when sudden neurological symptoms are present.
+PiBE-FAST is a Raspberry Pi--oriented research prototype for multimodal early screening of acute stroke warning signs. This report describes the Balance (B), Eyes (E), Face (F), Arms (A), and Speech (S) components and the quality-gated feature-fusion layer. The implementation combines MoveNet body keypoints, MediaPipe Face Landmarker facial and iris landmarks, local microphone audio, offline whisper.cpp transcription, standardized short tasks, temporal aggregation, explicit quality gates, and conservative rule-based decisions. Speech has two layers: natural-speech change monitoring against a personal acoustic baseline and a guided fixed-phrase confirmation. The guided layer also applies a 90-dimensional log-Mel representation trained on the official Mandarin Dysarthria Speech Corpus (MDSC) as a provisional chronic-dysarthria S-component signal. Inference runs on a local edge host and guidance and reports are exposed through a Flask/React web interface. The fusion layer converts B/E/F/A/S measurements into a fixed 29-dimensional research vector while preserving quality and missingness. It produces no stroke diagnosis and does not replace the urgency decision. The design gives priority to sudden symptoms reported by the user or caregiver, separates a valid negative result from insufficient data, and does not convert engineering thresholds into a stroke probability. The current software demonstrates a reproducible measurement workflow and testable feature definitions; it has not yet established clinical diagnostic validity. It must not delay emergency assessment when sudden neurological symptoms are present.
 \end{abstract}
 
 \textbf{Keywords:} BE-FAST; stroke warning signs; Raspberry Pi; pose estimation; facial landmarks; eye movement; speech analysis; edge computing; multimodal fusion.
@@ -389,7 +389,7 @@ The guided layer additionally loads \texttt{models/mdsc\_dysarthria\_v1.json}. M
 
 The representation uses 40-bin log-Mel energies from 25-ms frames with a 10-ms shift. Per-bin means and standard deviations contribute 80 values; duration, RMS level, voiced and pause fractions, mean pause duration, energy variability, spectral flux, zero-crossing rate, and spectral-centroid mean and standard deviation contribute 10 more. A standardized logistic-regression model therefore operates on 90 features and is exported as a compact JSON artifact requiring only NumPy at runtime.
 
-Speakers were assigned with a fixed seed to 33 training, 7 validation, and 6 completely held-out test participants, separately by class. No speaker occurs in more than one split. Five-fold speaker-grouped predictions on the 40 development speakers provide an out-of-fold audit. The deployable coefficients are fitted only on the 33 training speakers; the decision threshold, 0.807859, is selected only from mean probabilities for the 7 validation speakers. The test speakers are used once for the final report. Table~\ref{tab:mdsc-results} reports both recording- and speaker-level results.
+Speakers were assigned with a fixed seed to 33 training, 7 validation, and 6 completely held-out test participants, separately by class. No speaker occurs in more than one split. Five-fold speaker-grouped predictions on the 40 development speakers provide an out-of-fold audit. The deployable coefficients are fitted only on the 33 training speakers; because deployment classifies individual recordings, the decision threshold, 0.735282, is selected from recording-level probabilities for the 7 validation speakers. The test speakers are used once for the final report. Table~\ref{tab:mdsc-results} reports both recording- and speaker-level results.
 
 \begin{table}[htbp]
 \centering
@@ -400,15 +400,15 @@ Speakers were assigned with a fixed seed to 33 training, 7 validation, and 6 com
 \toprule
 Evaluation unit & ROC-AUC & Sens. & Spec. & Bal. acc. & Brier \\
 \midrule
-Development OOF recordings ($n=16{,}200$) & 0.8241 & 0.7956 & 0.6655 & 0.7306 & 0.1942 \\
-Development OOF speakers ($n=40$) & 0.9015 & 0.9444 & 0.5909 & 0.7677 & 0.1272 \\
-Held-out recordings ($n=2{,}430$) & 0.9573 & 0.6444 & 0.9926 & 0.8185 & 0.0983 \\
+Development OOF recordings ($n=16{,}200$) & 0.8241 & 0.9000 & 0.4502 & 0.6751 & 0.1942 \\
+Development OOF speakers ($n=40$) & 0.9015 & 1.0000 & 0.0909 & 0.5455 & 0.1272 \\
+Held-out recordings ($n=2{,}430$) & 0.9573 & 0.6724 & 0.9885 & 0.8305 & 0.0983 \\
 Held-out speakers ($n=6$) & 1.0000 & 0.6667 & 1.0000 & 0.8333 & 0.0577 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Speaker-level bootstrap intervals resample speakers rather than recordings. With only six test speakers, the held-out sensitivity interval is 0.0--1.0; the apparent speaker-level ROC-AUC of 1.0 is correspondingly unstable. These values are an internal research baseline, not clinical performance. On the development Mac, 100 real-WAV inference calls had a median of 0.96 ms and a 95th percentile of 1.33 ms; these are not Raspberry Pi M5 measurements.
+Recording-level uncertainty was estimated by resampling whole speakers rather than individual recordings. With only six test speakers, the 95\% intervals are 0.227--0.948 for sensitivity, 0.980--0.998 for specificity, and 0.607--0.969 for balanced accuracy; the speaker-level sensitivity interval remains 0.0--1.0 and the apparent speaker-level ROC-AUC of 1.0 is correspondingly unstable. These values are an internal research baseline, not clinical performance. On the development Mac, 100 real-WAV inference calls had a median of 0.96 ms and a 95th percentile of 1.33 ms; these are not Raspberry Pi M5 measurements.
 
 At runtime the model adds \path{shadow_dysarthria_probability}, its frozen threshold, model version, and an explicit \path{dysarthria_representation_not_acute_stroke} role to the guided S report. Model absence, validation failure, or inference failure leaves Whisper, quality gates, the existing S result, fusion, and emergency logic unchanged. The representation does not vote in passive natural-speech monitoring. Target-microphone M5 work remains outstanding: the frozen model must be tested prospectively across quiet 20-cm, quiet 1-m, and household-noise conditions, with a 30-minute stability run, latency and memory reporting, and no threshold adjustment from shadow participants.
 
@@ -416,13 +416,13 @@ At runtime the model adds \path{shadow_dysarthria_probability}, its frozen thres
 
 The guided request records whether the observed speech problem is new or sudden and may store an onset time. A positive S result combined with sudden onset is handled by the existing T logic as an emergency result. The speech report source is \path{microphone+offline_asr}.
 
-Routine passive WAV files are deleted after feature extraction; the passive baseline stores numeric features rather than daily raw speech. Guided temporary audio is deleted after report handling. If configured event history preserves a positive event, it must do so under the project's explicit retention and consent policy. The 28-dimensional fusion layer uses only three metrics from a completed guided S report---CER, characters per second, and pause fraction. Passive trigger votes are not inserted into the model vector.
+Routine passive WAV files are deleted after feature extraction; the passive baseline stores numeric features rather than daily raw speech. Guided temporary audio is deleted after report handling. If configured event history preserves a positive event, it must do so under the project's explicit retention and consent policy. The 29-dimensional representation uses four metrics from a completed guided S report---CER, characters per second, pause fraction, and MDSC dysarthria probability. Passive trigger votes are not inserted into the model vector.
 
 \subsection{Limitations and validation requirements}
 
 The passive monitor has no speaker verification and has not been validated for open-microphone household conditions. The guided layer depends partly on ASR and evaluates a fixed phrase rather than a speech-language pathologist's examination. MDSC validation does not close this gap because its positive label is chronic dysarthria rather than acute stroke and its acquisition protocol does not match the target microphone. Validation must include acute stroke, stroke mimics, pre-existing dysarthria or aphasia, healthy controls, dialects, ages, sexes, microphone distances, competing speakers, television, and respiratory illness. Data must be split by participant, and reference standards should include blinded speech-language assessment, neurological diagnosis, and onset time. Sensitivity, specificity, PPV, NPV, calibration, confidence intervals, insufficient-data rates, and baseline drift should be reported.
 
-\section{Quality-Gated Feature Fusion}
+\section{Quality-Annotated Feature Fusion}
 
 \subsection{Purpose and safety boundary}
 
@@ -508,7 +508,7 @@ These aggregates are descriptors only. No cutoff on their values is connected to
 
 \subsection{Testing and future model use}
 
-Dedicated tests verify feature order and vector length, quality multiplication, component-specific quality rules, missing masks, normalized severity, A/F agreement, and the treatment of manual-only reports as missing sensor data. Before the 28-dimensional vector is used to train a predictive model, data must be split by subject, preprocessing and feature order must be versioned, missing-data mechanisms must be studied, and calibration plus independent external validation must be completed. The fusion version must be stored with every training example and inference output.
+Dedicated tests verify feature order and vector length, quality multiplication, component-specific quality rules, missing masks, normalized severity, A/F agreement, and the treatment of manual-only reports as missing sensor data. Before the 29-dimensional vector is used to train a predictive model, data must be split by subject, preprocessing and feature order must be versioned, missing-data mechanisms must be studied, and calibration plus independent external validation must be completed. The fusion version must be stored with every training example and inference output.
 
 \section{Integration, Reporting, and Privacy}
 
@@ -542,7 +542,7 @@ The repository contains automated tests for BE-FAST geometry and decisions, sess
   \item absence or failure of optional models and hardware.
 \end{itemize}
 
-At the August 2026 implementation snapshot, all 122 automated repository tests pass, including shared speech-representation extraction, model loading, speaker-safe manifest generation, and shadow-only failure isolation. Passing these tests demonstrates consistency with the coded specification, not clinical accuracy.
+At the September 2026 implementation snapshot, all 126 automated repository tests pass, including shared speech-representation extraction, model loading, speaker-safe manifest generation, and shadow-only failure isolation. Passing these tests demonstrates consistency with the coded specification, not clinical accuracy.
 
 \subsection{Engineering evaluation}
 
@@ -562,7 +562,7 @@ The most important interpretation boundary is: \emph{negative means no target vi
 
 \section{Conclusion and Future Work}
 
-PiBE-FAST implements B, E, F, A, and S as transparent temporal measurements rather than single-frame or single-score diagnosis. B compares trunk orientation and mediolateral motion with a personal robust baseline; E combines repeated paired endpoints with head-motion and noise gates; F compares smile motion against a neutral facial baseline; A requires a complete bilateral action before evaluating level and drift; and S separates sustained personal acoustic change from a locally transcribed fixed-phrase confirmation. The guided S report now also carries a speaker-safe, internally evaluated MDSC dysarthria representation in shadow mode. The fusion layer preserves completed continuous measurements in a quality-gated 28-dimensional research representation without changing the safety decision. Stage-based scheduling makes the design suitable for further Raspberry Pi evaluation, while structured result states and explicit missing masks preserve uncertainty.
+PiBE-FAST implements B, E, F, A, and S as transparent temporal measurements rather than single-frame or single-score diagnosis. B compares trunk orientation and mediolateral motion with a personal robust baseline; E combines repeated paired endpoints while recording unvalidated head-motion and noise quantities; F compares smile motion against a neutral facial baseline; A requires a complete bilateral action before evaluating level and drift; and S separates sustained personal acoustic change from a locally transcribed fixed-phrase confirmation. The guided S report also carries a speaker-safe, internally evaluated MDSC chronic-dysarthria probability as a provisional S-component signal. The representation preserves measurements, quality values, and missingness as separate entries in a quality-annotated 29-dimensional vector without changing the independent urgency decision. Stage-based scheduling makes the design suitable for further Raspberry Pi evaluation, while structured result states and explicit missing masks preserve uncertainty.
 
 Future work should establish a device-specific acquisition protocol, collect ethically governed and clinically labelled data, quantify subgroup and hardware performance, recalibrate every research threshold, and validate the complete workflow prospectively. Until then, the system remains a research and demonstration prototype that supports---but never replaces---urgent professional assessment.
 

@@ -1,1 +1,17 @@
+\section{Introduction}
+BE-FAST organizes balance, eyes, face, arms, speech, and symptom-onset information to help recognize possible stroke warning signs \cite{aroor2017befast}. Translating these observations into a home sensing system requires both responsiveness to abnormal signs and restraint during ordinary activity. This work addresses warning signs present during monitoring and guided checks; predicting future stroke incidence is a different task.
 
+Home recordings contain normal movement, changing camera views, background speech, and incomplete actions. A useful warning workflow must distinguish evidence of an abnormal sign from insufficient acquisition. Low positive rates in healthy checks are informative only when considered alongside responses to target abnormalities and the burden of repeated checks. A passive trigger, a guided measurement, and a final user-facing alert therefore require separate evaluation.
+
+PiBE-FAST connects passive Balance and Speech monitoring on a Raspberry Pi with guided B/E/F/A/S checks on a local computer. Speech supplies audio evidence and BEFA supplies video evidence. Personal references characterize within-person change, while quality and action-completion gates determine whether a measurement can be interpreted. Independent symptom reports and onset information contribute to urgency even when sensing fails. Third-party medical-record processing belongs to the wider project and is outside the evaluated sensing workflow.
+
+Our contribution is an embodied monitoring-to-check prototype that connects
+AI-based perception with guided interaction and rule-based evidence handling.
+Three explicit contracts address conflicts in this workflow: incomplete sensing
+must not erase reported symptoms, retrying a measurement must preserve active
+symptoms, and correcting a report must retain its history. We evaluate these
+contracts through state-transition and API tests, and separately characterize
+recorded target responses, healthy measurements, and deployment behavior.
+Together, these establish an implemented evaluation platform for the abnormal-sign
+response--nuisance-triggering trade-off; the effect of guided checks on final
+alerts requires linked operational outcomes.

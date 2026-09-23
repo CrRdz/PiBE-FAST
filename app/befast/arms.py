@@ -113,6 +113,7 @@ class ArmDriftScreen:
         self.hold_capture_frames = 0
         self.hold_valid_frames = 0
         self.samples: list[tuple[float, float, float]] = []
+        self.sample_times: list[float] = []
         self.live_metrics: dict[str, float] = {}
         self.phase_completion_metrics: dict[str, dict[str, float]] = {}
 
@@ -317,8 +318,11 @@ class ArmDriftScreen:
                 self._fail(reason)
         elif phase == "hold":
             self.hold_capture_frames += 1
-            if metrics is not None and self._arms_raised(metrics):
+            # Raised pose gates entry into hold, not measurement eligibility.
+            # Otherwise the very lowering we measure disappears from the sample.
+            if metrics is not None:
                 self.hold_valid_frames += 1
+                self.sample_times.append(elapsed)
                 self.samples.append(
                     (
                         float(metrics["left_wrist_relative_y"]),
@@ -361,9 +365,23 @@ class ArmDriftScreen:
                 quality=valid_fraction,
             )
 
-        segment = max(1, len(self.samples) // 3)
-        first = self.samples[:segment]
-        last = self.samples[-segment:]
+        # Anchor endpoints to elapsed hold time; missing late frames must not
+        # cause an earlier visible segment to masquerade as the late endpoint.
+        duration = self.config.arm_hold_seconds
+        first = [value for ts, value in zip(self.sample_times, self.samples)
+                 if 0.0 <= ts <= duration / 3.0]
+        last = [value for ts, value in zip(self.sample_times, self.samples)
+                if 2.0 * duration / 3.0 <= ts <= duration]
+        minimum = max(1, self.config.arm_min_endpoint_samples)
+        if min(len(first), len(last)) < minimum:
+            return MotionResult(
+                status="insufficient", reason="arm_hold_endpoint_not_visible",
+                quality=valid_fraction,
+                metrics={"valid_samples": float(len(self.samples)),
+                         "valid_fraction": valid_fraction,
+                         "early_valid_samples": float(len(first)),
+                         "late_valid_samples": float(len(last))},
+            )
         initial_left = median(value[0] for value in first)
         initial_right = median(value[1] for value in first)
         final_left = median(value[0] for value in last)

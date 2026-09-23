@@ -1,12 +1,25 @@
 .DS_Store
 .env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
 .venv/
 .idea/
 node_modules/
 __pycache__/
 *.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+*.log
 /tmp/
 /output/
+/outputs/
+/artifacts/
 
 models/*.tflite
 models/*.task
@@ -35,4 +48,30 @@ training/manifests/*.local.csv
 *.jpg
 *.jpeg
 *.png
-!docs/pibefast-paper/figures/speech-architecture-original.png
+!docs/pibefast-paper/figures/arms-demonstration.jpg
+!docs/pibefast-paper/figures/balance-demonstration.jpg
+
+# Local cleanup manifests and one-off repository audits.
+/docs/REPOSITORY_STRUCTURE.md
+/docs/*cleanup*.json
+/docs/validation-update-*.md
+
+# Reproducible manuscript build outputs.
+/docs/pibefast-paper/build/
+/docs/pibefast-paper/main.pdf
+
+# Direct TeX runs may bypass build/. Keep these patterns manuscript-scoped:
+# experimental logs and published PDFs elsewhere remain visible to Git.
+/docs/pibefast-paper/*.aux
+/docs/pibefast-paper/*.bbl
+/docs/pibefast-paper/*.blg
+/docs/pibefast-paper/*.bcf
+/docs/pibefast-paper/*.dvi
+/docs/pibefast-paper/*.xdv
+/docs/pibefast-paper/*.fdb_latexmk
+/docs/pibefast-paper/*.fls
+/docs/pibefast-paper/*.log
+/docs/pibefast-paper/*.out
+/docs/pibefast-paper/*.toc
+/docs/pibefast-paper/*.run.xml
+/docs/pibefast-paper/*.synctex.gz

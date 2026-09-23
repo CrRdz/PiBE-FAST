@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 import threading
 import time
+from uuid import uuid4
 from typing import Any, Mapping, Sequence
 
 from app.face_landmarker import FaceObservation
@@ -18,7 +20,7 @@ from .guidance import face_guidance, guidance_value, pose_guidance
 from .report import build_report_items
 from .result import MotionResult
 from .stages import ACTIVE_STAGES, SKIP_FLOW, SKIP_STAGE_ALIASES, stage_prompt
-from .urgency import screening_decision
+from .urgency import screening_assessment
 
 
 class BefastSession:
@@ -67,6 +69,7 @@ class BefastSession:
         """在已经持锁时清空筛查状态，但保留调用方设置的 mode。"""
 
         # 四个自动项目重新置为未运行，人工项重新置为未提交。
+        self.session_id = uuid4().hex
         self.stage = "idle"
         self.stage_started_at: float | None = None
         self.eye_result = MotionResult()
@@ -75,6 +78,10 @@ class BefastSession:
         self.balance_result = MotionResult()
         self.speech_result = MotionResult()
         self.manual_complete = False
+        self.reported_functional_problems: dict[str, bool] = {}
+        self.symptom_evidence: dict[str, list[dict[str, Any]]] = {}
+        self.speech_attempt_id: str | None = None
+        self.required_components = ("B", "E", "F", "A", "S")
         self.manual_completed = {"B": False, "E": False, "S": False}
         self.manual: dict[str, bool | None] = {
             key: None for key in self.MANUAL_KEYS
@@ -82,6 +89,12 @@ class BefastSession:
         self.manual["eye_problem"] = None
         self.new_or_sudden: bool | None = None
         self.onset_time: str | None = None
+        self.component_onsets: dict[str, bool | None] = {
+            code: None for code in ("B", "E", "F", "A", "S")
+        }
+        self.component_onset_times: dict[str, str | None] = {
+            code: None for code in ("B", "E", "F", "A", "S")
+        }
         self.guidance: dict[str, Any] = {
             "ready": False,
             "status": "waiting",
@@ -104,6 +117,7 @@ class BefastSession:
         source: str = "user",
         reason: str = "manual_request",
         now: float | None = None,
+        trigger_id: str | None = None,
     ) -> None:
         """响应用户、定时任务或被动触发，打开全新的独立项目选择会话。"""
 
@@ -118,7 +132,13 @@ class BefastSession:
                 "reason": str(reason),
                 "triggered_at": round(ts, 4),
             }
+            if trigger_id:
+                self.trigger["id"] = str(trigger_id)
             self._set_guidance(False, "choose_component", ts)
+
+    def _has_active_symptom_locked(self, code: str) -> bool:
+        """Ordinary questionnaire answers do not retract earlier symptom events."""
+        return any(event.get("active", True) for event in self.symptom_evidence.get(code, []))
 
     def prepare_component(self, code: str, now: float | None = None) -> None:
         """选择一个独立 BE-FAST 项目，并只清空该项目本次采集的数据。"""
@@ -131,6 +151,7 @@ class BefastSession:
             self._ensure_screening_locked(ts, "component_api", "component_selected")
             self.current_report = None
             self.active_component = normalized
+            self.speech_attempt_id = None
             self.stage_started_at = None
             if normalized == "S":
                 self.speech_result = MotionResult()
@@ -197,6 +218,8 @@ class BefastSession:
                     "reason": "direct_stage_start",
                     "triggered_at": round(ts, 4),
                 }
+            if stage == "balance" and self._has_active_symptom_locked("B"):
+                raise ValueError("correct active balance symptom reports before starting a standing task")
             self.current_report = None
             self.active_component = self.STAGE_COMPONENTS[stage]
             self.stage = stage
@@ -248,7 +271,7 @@ class BefastSession:
         self,
         code: str,
         problem: bool,
-        new_or_sudden: bool,
+        new_or_sudden: bool | None,
         onset_time: str | None = None,
         viewing_distance_cm: float | None = None,
         screen_width_cm: float | None = None,
@@ -260,8 +283,8 @@ class BefastSession:
         normalized = str(code).strip().upper()
         if normalized not in {"B", "E"}:
             raise ValueError("manual component must be 'B' or 'E'")
-        if not isinstance(problem, bool) or not isinstance(new_or_sudden, bool):
-            raise ValueError("problem and new_or_sudden must be booleans")
+        if not isinstance(problem, bool) or (new_or_sudden is not None and not isinstance(new_or_sudden, bool)):
+            raise ValueError("problem must be boolean; onset must be boolean or null")
         ts = time.time() if now is None else float(now)
         with self.lock:
             self._ensure_screening_locked(
@@ -271,13 +294,23 @@ class BefastSession:
             manual_key = (
                 "balance_problem" if normalized == "B" else "eye_problem"
             )
+            if problem:
+                self._append_symptom_locked(normalized, new_or_sudden, ts)
             self.manual[manual_key] = problem
             self.manual_completed[normalized] = True
             self.manual_complete = self.manual_completed["B"]
             self.new_or_sudden = new_or_sudden
             self.onset_time = str(onset_time).strip() if onset_time else None
+            # A symptom answer supplies its own onset; it must not rewrite
+            # the onset already attached to an acquired positive measurement.
+            preserve_measurement_onset = (
+                normalized == "B" and self.balance_result.status == "positive"
+            )
+            if not preserve_measurement_onset:
+                self.component_onsets[normalized] = new_or_sudden
+                self.component_onset_times[normalized] = self.onset_time
 
-            if normalized == "B" and not problem and self.balance_result.status in {
+            if normalized == "B" and not self._has_active_symptom_locked("B") and not problem and self.balance_result.status in {
                 "not_run",
                 "checking",
             }:
@@ -305,7 +338,7 @@ class BefastSession:
             self.stage_started_at = None
             self._record_component_report_locked(normalized, ts)
 
-    def start_speech_recording(self, now: float | None = None) -> None:
+    def start_speech_recording(self, now: float | None = None) -> str:
         """Mark S as actively recording while the audio service runs."""
 
         ts = time.time() if now is None else float(now)
@@ -315,24 +348,26 @@ class BefastSession:
             self.speech_result = MotionResult(
                 status="checking", reason="recording_speech"
             )
+            self.speech_attempt_id = uuid4().hex
             self.stage = "speech_recording"
             self.stage_started_at = ts
             self._set_guidance(False, "recording_speech", ts)
+            return self.speech_attempt_id
 
     def submit_speech_result(
         self,
         result: MotionResult,
         *,
-        new_or_sudden: bool,
+        new_or_sudden: bool | None,
         onset_time: str | None = None,
         now: float | None = None,
     ) -> None:
-        """Finish S from microphone-derived audio and transcription features."""
+        """Finish S; recorded attempt IDs reject stale asynchronous results."""
 
         if result.status not in {"positive", "negative", "insufficient"}:
             raise ValueError("speech result must be positive, negative, or insufficient")
-        if not isinstance(new_or_sudden, bool):
-            raise ValueError("new_or_sudden must be a boolean")
+        if new_or_sudden is not None and not isinstance(new_or_sudden, bool):
+            raise ValueError("new_or_sudden must be boolean or null")
         ts = time.time() if now is None else float(now)
         with self.lock:
             if self.active_component != "S" or self.stage not in {
@@ -340,10 +375,16 @@ class BefastSession:
                 "speech_recording",
             }:
                 raise ValueError("no speech component is awaiting a result")
+            attempt = result.details.get("speech_attempt_id")
+            if (self.stage == "speech_recording" or attempt is not None) and attempt != self.speech_attempt_id:
+                raise ValueError("stale speech result")
+            self.speech_attempt_id = None
             self.speech_result = result
             self.manual_completed["S"] = True
             self.new_or_sudden = new_or_sudden
             self.onset_time = str(onset_time).strip() if onset_time else None
+            self.component_onsets["S"] = new_or_sudden
+            self.component_onset_times["S"] = self.onset_time
             self.stage = "report"
             self.stage_started_at = None
             self._set_guidance(False, result.reason, ts)
@@ -376,10 +417,16 @@ class BefastSession:
                 if not isinstance(value, bool):
                     raise ValueError(f"{key} must be a boolean")
                 self.manual[key] = value
+            if self.manual["balance_problem"] is True:
+                self._append_symptom_locked("B", new_or_sudden, time.time())
             self.manual_completed["B"] = True
             self.new_or_sudden = bool(new_or_sudden)
             self.onset_time = str(onset_time).strip() if onset_time else None
+            if self.balance_result.status != "positive":
+                self.component_onsets["B"] = self.new_or_sudden
+                self.component_onset_times["B"] = self.onset_time
             self.manual_complete = True
+            self._refresh_evidence_report_locked("B", "symptom_update")
             # 人工表单完成后进入汇总页，但不强行打断正在采样的自动阶段。
             if self.stage in {"idle", "ready_balance", "review"}:
                 self.stage = "review"
@@ -455,12 +502,23 @@ class BefastSession:
                 self.balance_result,
                 self.speech_result,
                 manual_completed=self.manual_completed,
+                reported_functional_problems=self.reported_functional_problems,
+                symptom_evidence=self.symptom_evidence,
             )
             if self.mode == "standby":
                 # 待机状态不运行最终判定，避免把未检查项目显示为 incomplete。
-                decision, reasons = "standby", ["waiting_for_screening_trigger"]
+                assessment = {
+                    "decision": "standby",
+                    "urgency": "none",
+                    "completeness": "not_started",
+                    "positive_components": [],
+                    "urgent_components": [],
+                    "reasons": ["waiting_for_screening_trigger"],
+                }
             else:
-                decision, reasons = screening_decision(items, self.new_or_sudden)
+                assessment = screening_assessment(items, self.component_onsets, self.required_components)
+            decision = str(assessment["decision"])
+            reasons = list(assessment["reasons"])
             elapsed = (
                 max(0.0, ts - self.stage_started_at)
                 if self.stage_started_at is not None
@@ -472,6 +530,15 @@ class BefastSession:
                 progress = self.arm_screen.progress(ts)
             snapshot = self._snapshot_payload(
                 items, decision, reasons, progress
+            )
+            snapshot["required_components"] = list(self.required_components)
+            snapshot["urgency"] = assessment["urgency"]
+            snapshot["completeness"] = assessment["completeness"]
+            snapshot["positive_components"] = list(
+                assessment["positive_components"]
+            )
+            snapshot["urgent_components"] = list(
+                assessment["urgent_components"]
             )
             if self.stage == "eyes":
                 # E 阶段额外告诉前端当前目标以及目标切换倒计时。
@@ -523,6 +590,7 @@ class BefastSession:
         """组装不依赖当前时间计算的快照公共字段。"""
 
         return {
+            "session_id": self.session_id,
             "mode": self.mode,
             "stage": self.stage,
             "prompt": stage_prompt(self.stage, self.mode),
@@ -533,6 +601,8 @@ class BefastSession:
             "items": items,
             "new_or_sudden": self.new_or_sudden,
             "onset_time": self.onset_time,
+            "component_onsets": dict(self.component_onsets),
+            "component_onset_times": dict(self.component_onset_times),
             "manual_complete": self.manual_complete,
             "manual_completed": dict(self.manual_completed),
             "screening_started_at": self.screening_started_at,
@@ -663,6 +733,16 @@ class BefastSession:
         """根据检查质量进入下一阶段，或转入对应的可重试状态。"""
 
         self.stage_started_at = None
+        if (
+            stage == "eyes"
+            and result.reason == "eye_metrics_recorded_for_validation"
+        ):
+            # 已完成且可测量的 E 记录属于 research-only：没有临床阈值时不
+            # 生成自动阴性/阳性，也不应把整轮引导流程锁在无限重试中。
+            self.stage = next_stage
+            self._set_guidance(False, f"prepare_{next_stage}", ts)
+            self._record_component_report_locked(self.STAGE_COMPONENTS[stage], ts)
+            return
         if result.status == "insufficient":
             # 质量不足不会前进；保留结果用于报告，同时清空检测器准备重试。
             self.retry_counts[stage] += 1
@@ -746,7 +826,7 @@ class BefastSession:
             "triggered_at": round(ts, 4),
         }
 
-    def _record_component_report_locked(self, code: str, ts: float) -> None:
+    def _record_component_report_locked(self, code: str, ts: float, kind: str = "acquisition") -> None:
         """把一次已经结束的单项结果加入历史，并设为当前报告。"""
 
         items = build_report_items(
@@ -758,41 +838,127 @@ class BefastSession:
             self.balance_result,
             self.speech_result,
             manual_completed=self.manual_completed,
+            reported_functional_problems=self.reported_functional_problems,
+            symptom_evidence=self.symptom_evidence,
         )
         item = items[code]
-        if item["status"] in {"pending", "checking"}:
+        if kind == "acquisition" and item["status"] in {"pending", "checking"}:
             self.current_report = None
             return
-        self.attempt_counts[code] += 1
+        if kind == "acquisition":
+            self.attempt_counts[code] += 1
         status = str(item["status"])
-        if status == "positive":
-            decision = "emergency" if self.new_or_sudden is True else "warning"
-        elif status == "negative":
-            decision = "clear"
+        if item.get("decision_eligible", True) is False:
+            decision = "research_only"
         else:
-            decision = "incomplete"
+            decision = screening_assessment({code: item}, self.component_onsets)["decision"]
+        previous = next((r for r in reversed(self.reports) if r["component"] == code), None)
+        assessment = screening_assessment({code: item}, self.component_onsets)
+        onsets = [e["new_or_sudden"] for e in item.get("symptom_evidence", []) if e.get("active", True)]
+        if item.get("measurement_status", item["status"]) == "positive":
+            onsets.append(self.component_onsets.get(code))
+        onset_summary = (True if True in onsets else None if None in onsets else False) if onsets else self.component_onsets.get(code)
         report = {
+            "session_id": self.session_id,
+            "kind": kind,
+            "revision": 1 if previous is None else previous["revision"] + 1,
+            "supersedes": None if previous is None else previous["id"],
+            "urgency": assessment["urgency"],
             "id": len(self.reports) + 1,
             "component": code,
             "attempt": self.attempt_counts[code],
             "completed_at": round(float(ts), 4),
             "decision": decision,
+            "completeness": screening_assessment({code: item}, self.component_onsets)["completeness"],
             "item": {
                 **item,
                 "metrics": dict(item.get("metrics", {})),
                 "details": dict(item.get("details", {})),
             },
-            "new_or_sudden": self.new_or_sudden,
-            "onset_time": self.onset_time,
+            "new_or_sudden": onset_summary,
+            "onset_time": self.component_onset_times.get(code),
         }
+        report = deepcopy(report)
         self.reports.append(report)
         self.current_report = report
+
+    def report_functional_problem(self, code: str, new_or_sudden: bool | None) -> None:
+        """Record an explicit symptom report without relabeling sensor failure.
+
+        Technical task failure alone never implies a reported symptom. Reports
+        persist across retries until the screening session is reset.
+        """
+        code = str(code).strip().upper()
+        if code not in {"F", "A", "S"}:
+            raise ValueError("functional report component must be F, A, or S")
+        if new_or_sudden is not None and not isinstance(new_or_sudden, bool):
+            raise ValueError("new_or_sudden must be boolean or null")
+        with self.lock:
+            self._ensure_screening_locked(time.time(), "symptom_report", "reported_functional_problem")
+            self._append_symptom_locked(code, new_or_sudden, time.time())
+            self._refresh_evidence_report_locked(code, "symptom_update")
+
+    def _append_symptom_locked(self, code: str, onset: bool | None, ts: float) -> None:
+        self.reported_functional_problems[code] = True
+        self.symptom_evidence.setdefault(code, []).append({
+            "event_id": uuid4().hex, "source": "user_or_caregiver",
+            "reported_at": ts, "new_or_sudden": onset, "active": True,
+        })
+
+    def _refresh_evidence_report_locked(self, code: str, kind: str) -> None:
+        current = self.current_report
+        self._record_component_report_locked(code, time.time(), kind)
+        # Record every update without covering an in-progress acquisition UI.
+        if current is None or current["component"] != code:
+            self.current_report = current
+
+    def retract_symptom(self, event_id: str, reason: str) -> None:
+        """Explicitly correct one report, retaining its original evidence and audit."""
+        if not isinstance(reason, str) or not reason.strip():
+            raise ValueError("a correction reason is required")
+        with self.lock:
+            for code, events in self.symptom_evidence.items():
+                event = next((e for e in events if e["event_id"] == event_id), None)
+                if event is None:
+                    continue
+                if not event["active"]:
+                    raise ValueError("symptom report already retracted")
+                event.update(active=False, retracted_at=time.time(), correction_reason=reason.strip())
+                self.reported_functional_problems[code] = any(e["active"] for e in events)
+                if code in {"B", "E"} and not self.reported_functional_problems[code]:
+                    self.manual["balance_problem" if code == "B" else "eye_problem"] = None
+                    self.manual_completed[code] = False
+                    self.manual_complete = self.manual_completed["B"]
+                self._refresh_evidence_report_locked(code, "symptom_correction")
+                return
+            raise ValueError("symptom event not found in current session")
+
+    def set_component_onset(
+        self,
+        code: str,
+        new_or_sudden: bool,
+        onset_time: str | None = None,
+    ) -> None:
+        """Attach onset to one component so mixed chronic/acute signs are representable."""
+
+        normalized = str(code).strip().upper()
+        if normalized not in {"B", "E", "F", "A", "S"}:
+            raise ValueError("component must be B, E, F, A, or S")
+        if not isinstance(new_or_sudden, bool):
+            raise ValueError("new_or_sudden must be a boolean")
+        with self.lock:
+            self.component_onsets[normalized] = new_or_sudden
+            self.component_onset_times[normalized] = (
+                str(onset_time).strip() if onset_time else None
+            )
+            # Preserve the legacy fields for existing UI/history consumers.
+            self.new_or_sudden = new_or_sudden
+            self.onset_time = self.component_onset_times[normalized]
+            if self.mode == "screening":
+                self._refresh_evidence_report_locked(normalized, "onset_update")
 
     @staticmethod
     def _copy_report(report: Mapping[str, Any]) -> dict[str, Any]:
         """复制报告中的嵌套结构，防止 API 调用方修改会话数据。"""
 
-        item = dict(report.get("item", {}))
-        item["metrics"] = dict(item.get("metrics", {}))
-        item["details"] = dict(item.get("details", {}))
-        return {**report, "item": item}
+        return deepcopy(dict(report))

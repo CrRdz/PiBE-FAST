@@ -36,6 +36,8 @@ def report_item(status: str, source: str, reason: str) -> dict[str, Any]:
 
     return {
         "status": status,
+        "acquisition_status": "not_applicable",
+        "interpretation_status": status,
         "source": source,
         "reason": reason,
         "affected_side": None,
@@ -55,4 +57,16 @@ def motion_report_item(result: MotionResult, source: str) -> dict[str, Any]:
     item = result.as_dict()
     item["status"] = status
     item["source"] = source
+    if status in {"positive", "negative"}:
+        item["acquisition_status"] = "measured"
+        item["interpretation_status"] = status
+    elif status == "skipped":
+        item["acquisition_status"] = "skipped"
+        item["interpretation_status"] = "not_available"
+    elif status == "insufficient":
+        item["acquisition_status"] = "failed_quality_gate"
+        item["interpretation_status"] = "not_available"
+    else:
+        item["acquisition_status"] = status
+        item["interpretation_status"] = "pending"
     return item
