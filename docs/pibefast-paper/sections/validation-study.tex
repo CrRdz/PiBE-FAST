@@ -1,0 +1,89 @@
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.84\textwidth]{validation-paired-outcomes.pdf}
+\caption{Paired outcomes and recorded trigger burden. (a) Full-minus-comparator
+differences with 95\% participant-bootstrap intervals; sample sizes appear beside
+each endpoint. (b) Participant rates over 29.164 reference-negative online hours.
+Lines connect the same participant; fixed horizontal offsets separate overlapping
+participants without altering rates.
+Rates describe the enumerated event set.}
+\label{fig:participant_outcomes}
+\end{figure*}
+
+\subsection{Scripted Checks, Simulated Signs, and Natural Use}
+\label{sec:participant_validation}
+We recorded 42 sessions from 30 participants between 17 August and 5 September
+2026. Session categories described the acquisition setting, not the event label.
+Six \textit{scripted-action} sessions involved routine instructed B/E/F/A/S checks
+without target symptoms. Seven \textit{simulated-positive} sessions included
+volunteers enacting facial droop, arm drift, trunk lean, or altered articulation.
+Five \textit{challenge} sessions combined simulated signs with difficult inputs,
+including occlusion, low light, background sound, incomplete actions, and disconnection.
+Twelve natural-use sessions measured ordinary-activity triggering; 12 repeat
+sessions assessed repeated measurements. The 38 annotated targets comprised
+28 events from simulated-positive sessions and 10 from challenge sessions.
+
+The recorded configuration, v1.3.0+frozen (Full), used a personal Balance baseline
+and quality gates. Two historical comparison labels denoted a population Balance reference
+(Population baseline) or disabled gates (No gates). All three shared 201 event
+IDs. Annotations were recorded as blinded to system outputs. We analysed paired
+event outcomes with 10,000 participant-cluster bootstrap resamples (seed 20260910)
+and pointwise 95\% intervals. The seed fixes resampling for reproducibility.
+Target response counted the recorded trigger label, without inferring passive
+detection or completed guided assessment. All 38 runtime paths remain unresolved;
+component names and acquisition timestamps do not establish their origin.
+Completeness indicated a completed
+measurement process linked to a report, independently of positivity.
+
+Full had recorded triggers for 35/38 targets (92.1\%) from 12 participants, versus 29/38 for
+Population baseline and 33/38 for No gates (Fig.~\ref{fig:participant_outcomes}).
+Face, Arms, Balance, and Speech counts were 9/10, 7/8, 10/11, and 9/9.
+The 15.8-percentage-point difference from Population baseline (95\% interval
+7.9--23.7) came entirely from six additional Balance detections.
+The difference from No gates was 5.3 points (0.0--14.7).
+Exact population-reference parameters and disabled rules remain unspecified,
+so these are descriptive contrasts between historical labels, not controlled
+ablations of the current implementation.
+
+Among 177 started measurements from 25 participants, 159 were reference-complete
+and 18 were incomplete, including two aborted attempts. All configurations
+retained the 159 complete inputs. Incorrect completions were 1/18 for Full,
+1/18 for Population baseline, and 15/18 for No gates. The Full-minus-No gates
+difference was $-77.8$ points ($-95.0$ to $-55.6$), describing a recorded completion difference. The unavailable gate configuration
+precludes attributing it to a specific quality rule.
+
+During 29.164 reference-negative online hours from 12 natural-use participants,
+Full, Population baseline, and No gates recorded 14, 20, and 19 false triggers
+(0.480, 0.686, and 0.651 per hour). Online availability was 92.8\%.
+These rates describe recorded triggers; complete capture coverage and linked
+check outcomes are needed to quantify final-alert burden. Full also retained
+two symptom-count shortfalls among 35 known target records and one incomplete
+correction history among nine cases. Three target symptom counts were unknown.
+All three Full urgency shortfalls occurred among missed targets; detected targets
+had no urgency-label mismatches. Supporting notes retain extended endpoint and timing definitions.
+
+Face reference values were recorded as the mean of two independent geometric
+annotations, with uncertainty listed as $\pm0.006$ but no statistical definition.
+The exported system values differed from these references by a mean absolute error (MAE)
+of 0.00452 interocular-width units (33 measurements, 22 participants;
+Fig.~\ref{fig:participant_reference}). The difference is comparable to the
+listed reference uncertainty and does not establish measurement accuracy.
+Eleven complete repeat pairs, separated
+by 11.2--15.6 days, yielded ICC(2,1)=0.935 (95\% interval 0.801--0.975);
+one participant lacked the first measurement. Eyes exported gaze offset had
+MAE 0.280$^\circ$ against desktop eye-tracker values (25 measurements,
+19 participants; system range 0.094--1.641$^\circ$). Its runtime output mapping
+remains unresolved, so this comparison does not establish angular accuracy.
+Automatic Eyes abnormality classification remained disabled.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.84\textwidth]{validation-reference-repeatability.pdf}
+\caption{Exported-value comparisons and Face repeatability.
+(a,b) System-minus-reference errors for Face mouth-corner change and Eyes gaze
+offset; dashed lines indicate zero difference. Eyes compares exported fields with
+unresolved runtime mapping. (c) Two system measurements for each
+of 11 participants with complete Face repeat pairs. Lines connect participants
+across visits.}
+\label{fig:participant_reference}
+\end{figure*}

@@ -1,5 +1,6 @@
 import React from 'react';
 import {createRoot} from 'react-dom/client';
+import {flushSync} from 'react-dom';
 
 const callLegacy = (name, ...args) => {
   const handler = window[name];
@@ -99,11 +100,11 @@ const mounts = [
   ['reactSidebar', <DataSidebar />]
 ];
 
-for (const [id, tree] of mounts) {
-  const target = document.getElementById(id);
-  if (target) createRoot(target).render(tree);
-}
-
-requestAnimationFrame(() => {
-  window.dispatchEvent(new Event('pibe-react-ready'));
+// Legacy renderers require every mount to be committed before the ready event.
+flushSync(() => {
+  for (const [id, tree] of mounts) {
+    const target = document.getElementById(id);
+    if (target) createRoot(target).render(tree);
+  }
 });
+window.dispatchEvent(new Event('pibe-react-ready'));

@@ -1,0 +1,21 @@
+\subsection{Workflow Contracts}
+The repository suite passed 171 tests, including 263 bounded configurations
+for missingness, symptom onset, retry, correction, and report history. An
+explicit-null reference agreed in 27 static F/A/S combinations. We extended the
+comparison to an independent append-only event-log reference that reconstructs
+measurement state, symptom activity, and urgency without invoking the production
+reducer. Seeds 0--19 each generated a 30-operation pseudorandom sequence. The same 20 sequences were replayed for F/A/S, yielding 60 component runs and 1,800 transition checks. Fixed seeds make the generated interactions reproducible; the checks are not independent participant observations. Operations include measurement updates,
+retries, symptom reports, and corrections. All transitions agreed in measurement
+state, event activity, and urgency; all previously emitted report snapshots remained
+unchanged. Measurement results are injected at the internal result boundary, so
+these trajectories evaluate state management rather than sensor performance.
+B/E questionnaire semantics are covered by the separate bounded configurations.
+
+
+Five synthetic landmark trajectories, initialized after entry into the hold phase, exercised the hold/return implementation:
+stable hold, sudden lowering, gradual lowering, brief middle occlusion, and
+missing late endpoint. The implementation returned negative, positive,
+positive, negative, and insufficient, respectively. Visible lowering remained
+in the measurement sequence after entry into the hold phase. A regression
+also verified that the passive-speech diagnostic trace associates anomaly votes
+with acquisition windows. Targeted removal of symptom retention, snapshot isolation, or correction history broke the corresponding contract in each of 15 constructed cases; the full implementation satisfied all 15. Each case isolates a mechanism under a specified failure-triggering interaction. The host-only 1,000-record queue recovery test is retained in the software artifacts.

@@ -1,0 +1,27 @@
+{
+  "scope": "Exhaustive synthetic policy states at the decision boundary. B/E states denote eligible symptom evidence, not automatic eye classification. Not real-world detection or alert-rate evidence.",
+  "states_per_component": [
+    "negative",
+    "insufficient",
+    "new_positive",
+    "longstanding_positive",
+    "unknown_positive"
+  ],
+  "components": [
+    "B",
+    "E",
+    "F",
+    "A",
+    "S"
+  ],
+  "cases": 3125,
+  "full_passed": 3125,
+  "complete_first_passed": 1055,
+  "withheld_urgency_cases": 2070,
+  "seed": null,
+  "comparator_definition": "Same urgency/completeness outputs as Full, but urgency forced to none while completeness is incomplete. No historical comparator is reconstructed.",
+  "source_sha256": {
+    "scripts/verify_fusion_policy.py": "2f54b4f17e1cf819f74afe226b8d5b6ee351f429bcfc72a2b68740aee97498e9",
+    "app/befast/urgency.py": "807d7b1609e4bce1252ff062b3e33b5f51b6e9f793c944a9026c43613656aae1"
+  }
+}

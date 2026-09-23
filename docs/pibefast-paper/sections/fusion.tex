@@ -1,76 +1,38 @@
-\begin{figure*}[!t]
-  \centering
-  \includegraphics[width=\textwidth]{\paperroot figures/fusion-architecture-en.pdf}
-  \caption{Quality-gated fusion and its safety boundary. Solid arrows show the
-  current workflow: 19 features pass through modality-specific quality gates
-  and combine with quality and missingness fields into a 29-dimensional
-  research representation. In parallel, the five component statuses produced
-  by their upstream modality-specific rules enter the lower safety path, which
-  determines user-facing urgency independently of the research vector. The
-  dashed branch marks a probability-model extension based on clinically labeled
-  subjects, calibration, and external evaluation.}
-  \label{fig:fusion_architecture}
-\end{figure*}
-
-\section{Quality-Gated Multimodal Fusion}
+\section{Multimodal Fusion}
 \label{sec:fusion}
+\textit{Decision-level fusion.}
+The deployed pathway combines eligible component outcomes, independent symptom
+reports, and onset metadata into urgency and completeness outputs.
+Passive B/S triggers request guided acquisition; they are distinct from this
+report assessment. Let $M_t$ contain current measurements and $S_t$ active
+symptom events. Urgency is \textit{urgent} when any eligible positive has new
+or unknown onset, \textit{warning} when all positives are explicitly longstanding,
+and \textit{none} when no eligible positive exists.
+Completeness independently requires a resolved outcome for every requested
+component. Thus a new symptom can remain urgent while another task is incomplete.
+A negative screen requires complete requested evidence without eligible positives.
 
-The fusion layer converts completed B/E/F/A/S measurements into a fixed research
-representation. It contains 19 continuous features, five modality-quality
-values, and five modality-missingness indicators, for a total of 29 dimensions;
-these counts come from the implementation's fixed feature list, the five
-BE-FAST modalities, and their per-modality missingness flags. The continuous
-subsets contain 2, 6, 3, 4, and 4 features for B, E, F, A, and S, respectively,
-as summarized in Fig.~\ref{fig:fusion_architecture}. Let
-$\mathbf{x}_m$ be the continuous feature subset and $q_m\in[0,1]$ the quality
-value for modality $m$. The module-reported valid-frame fraction or audio-quality
-support initializes $q_m$; where action completion applies, it is the minimum of
-that support and completion terms clipped to $[0,1]$. Thus, face quality also
-depends on $a_{\max}/0.22$, and arm quality also depends on completing the full
-action sequence. Quality-gated features are
+E supplies questionnaire evidence; camera eye geometry is research-only.
+B standing exemption applies only to an unstarted task with a reported balance
+problem. Retries replace measurements without erasing independent symptoms.
+Corrections require an event identifier and reason, preserving original onset
+and history; an ordinary negative answer does not retract an earlier symptom.
+After the last B/E symptom is corrected, its questionnaire awaits a new answer.
+Asynchronous speech results must match the current recording attempt.
+Reports retain immutable revisions; configured SQLite history persists positive,
+reported-functional-problem, and correction reports. These rules are checked
+separately from sensor accuracy in Section~\ref{sec:experiment_results}.
 
+\textit{Research feature fusion.}
+A separate 48-dimensional representation concatenates 19 measurements, five
+quality values, five component masks, and 19 feature masks:
 \begin{equation}
-\tilde{\mathbf{x}}_m=q_m\mathbf{x}_m.
-\label{eq:quality_gating}
+\mathbf z=[\mathbf x_B,\ldots,\mathbf x_S,
+q_B,\ldots,q_S,r_B,\ldots,r_S,h_1,\ldots,h_{19}].
 \end{equation}
-
-The research vector is
-
-\begin{equation}
-\mathbf{z}=[\tilde{\mathbf{x}}_B,\ldots,\tilde{\mathbf{x}}_S,
-q_B,\ldots,q_S,r_B,\ldots,r_S],
-\label{eq:fusion_vector}
-\end{equation}
-
-where $r_m=1$ denotes a missing modality. Retaining $q_m$ and $r_m$ distinguishes
-a zero-valued measurement from an unavailable observation. The fusion layer
-also produces domain severities, a top-two summary, and arm--face laterality
-agreement for domain comparison and multimodal research analysis.
-
-For each modality, a domain severity is computed symmetrically from its
-quality value and its available reference-normalized feature deviations:
-
-\begin{equation}
-d_m=q_m\min\!\left\{c,
-\max_{j\in\mathcal{J}_m}g_{m,j}(x_{m,j})\right\},
-\label{eq:domain_fusion_severity}
-\end{equation}
-
-where $\mathcal{J}_m$ indexes the modality's implemented severity features,
-$g_{m,j}$ maps a measurement to a nonnegative deviation relative to its
-prespecified engineering reference, and $c$ clips extreme values. These
-values form the modality-severity vector
-$\mathbf{d}=[d_B,d_E,d_F,d_A,d_S]$, from which the maximum domain severity and
-the mean of the two largest domain severities are calculated.
-
-As shown in Fig.~\ref{fig:fusion_architecture}, each B/E/F/A/S subsystem also
-produces a component status upstream using the modality-specific rules defined
-in Section~\ref{sec:methods}. An independent safety path combines those statuses
-with onset information: a positive finding with new or sudden onset is
-escalated; unclear onset produces a warning; valid negative results across all
-requested tasks produce a clear outcome; and insufficient or skipped tasks mark
-the screen incomplete. Future work will extend the research representation to a
-clinically interpretable probability model by prespecifying the prediction
-target and reference standard, using participant-disjoint development and
-evaluation data, and assessing discrimination, calibration, and clinical
-utility through representative external validation \cite{collins2024tripodai}.
+B/E/F/A/S contribute 2/6/3/4/4 measurements. Unavailable features are zeroed
+with masks set to one, distinguishing missingness from measured zero;
+original metrics remain in audit records. T supplies onset metadata rather
+than a sensor feature. This research vector and its severity summaries do not
+produce the evaluated decisions. The present integration is rule-based evidence
+fusion, with no demonstrated predictive gain from the research representation.

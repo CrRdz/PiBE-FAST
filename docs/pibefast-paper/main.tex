@@ -12,6 +12,22 @@
 \usepackage{booktabs}
 \usepackage{array}
 \usepackage{url}
+\usepackage{float}
+\newfloat{algorithm}{tbp}{loa}
+\floatname{algorithm}{Algorithm}
+
+% Compact IEEE-compliant float, caption, and display spacing.
+\setlength{\textfloatsep}{6pt plus 2pt minus 2pt}
+\setlength{\floatsep}{6pt plus 2pt minus 2pt}
+\setlength{\intextsep}{6pt plus 2pt minus 2pt}
+\setlength{\dbltextfloatsep}{6pt plus 2pt minus 2pt}
+\setlength{\dblfloatsep}{6pt plus 2pt minus 2pt}
+\setlength{\abovecaptionskip}{3pt}
+\setlength{\belowcaptionskip}{0pt}
+\setlength{\abovedisplayskip}{4pt plus 1pt minus 1pt}
+\setlength{\belowdisplayskip}{4pt plus 1pt minus 1pt}
+\setlength{\abovedisplayshortskip}{2pt plus 1pt}
+\setlength{\belowdisplayshortskip}{2pt plus 1pt}
 
 \def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
     T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
@@ -24,6 +40,9 @@
 }
 \newcommand{\paperinput}[1]{\input{\paperroot#1}}
 
+\graphicspath{{figures/}}
+
+
 \begin{document}
 
 \paperinput{sections/frontmatter}
@@ -33,7 +52,7 @@
 \paperinput{sections/system-overview}
 \paperinput{sections/multimodal-methods}
 \paperinput{sections/fusion}
-\paperinput{sections/experiments}
+\paperinput{sections/experiment}
 \paperinput{sections/discussion-conclusion}
 \paperinput{sections/references}
 

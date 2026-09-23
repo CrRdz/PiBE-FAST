@@ -1,0 +1,98 @@
+% Historical detail archive; current main text controls interpretation.
+% Comparator execution settings and runtime mappings have not been recovered.
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.88\textwidth]{validation-paired-outcomes.pdf}
+\caption{Paired outcomes and recorded trigger burden. (a) Full-minus-comparator
+differences with 95\% participant-bootstrap intervals; sample sizes appear beside
+each endpoint. (b) Participant rates over 29.164 reference-negative online hours.
+Lines connect the same participant; coincident observations are retained.
+Rates describe the enumerated event set.}
+\label{fig:participant_outcomes}
+\end{figure*}
+
+\subsection{Scripted Targets and Natural-Use Triggering}
+\label{sec:participant_validation}
+The study recorded 42 sessions from 30 participants between 17 August and
+5 September 2026: 12 natural-use, six scripted-action, seven simulated-positive,
+five challenge, and 12 repeat sessions. The recorded release,
+v1.3.0+frozen, used a personal Balance baseline and quality gates (Full).
+Two historical comparison labels shared all 201 event IDs: a population Balance reference
+replacing the personal baseline (Population baseline), and disabled quality
+gates (No gates). Reference annotations were recorded as blinded to system
+outputs. The 603 scheme-specific records were analysed by event, with
+participant-cluster percentile bootstrap intervals from 10,000 paired resamples
+(seed 20260910); rates are event-weighted and intervals are pointwise.
+Trigger detection denotes an event trigger. Its timestamp is the first trigger
+for detected events and the post-window negative decision for untriggered events.
+Completeness denotes process completion linked to the final report, independently
+of trigger status. These timestamps are not pooled as completed-check latency.
+
+
+
+Full recorded triggers for 35/38 scripted targets from 12 participants (92.1\%), compared
+with 29/38 for Population baseline and 33/38 for No gates.
+Its component counts were 9/10 Face, 7/8 Arms, 10/11 Balance, and 9/9 Speech.
+The recorded 15.8-point trigger-detection difference from Population baseline (95\% interval
+7.9--23.7) came entirely from six additional Balance detections.
+The difference from No gates was 5.3 points (0.0--14.7), retaining uncertainty
+about detection improvement (Fig.~\ref{fig:participant_outcomes}a).
+Among 18 reference-incomplete events from 13 participants, including two
+aborted attempts, incorrect completions were 1/18, 1/18, and 15/18, respectively.
+The Full-minus-No gates difference was $-77.8$ points ($-95.0$ to $-55.6$);
+the remaining Full error involved non-target speech.
+All three configurations marked all 159 reference-complete inputs as complete.
+Thus Full retained these inputs while recording fewer incorrect completions
+than No gates under the engineering reference protocol. The 177 started
+measurements involved 25 participants; 159 were reference-complete (89.8\%).
+
+
+
+Across 12 natural-use participants, the enumerated events contained 14/20/19
+false triggers for Full/Population baseline/No gates over 29.164 reference-negative
+online hours (0.480/0.686/0.651 per hour; Fig.~\ref{fig:participant_outcomes}b).
+These are recorded triggers, not a measured rate of final stroke alerts.
+Continuous-input replay and linked guided-check outcomes are needed to establish
+complete trigger coverage and subsequent alert burden. Online availability was 29.522/31.810 scheduled hours
+(92.8\%). Outputs below the event-specific reference urgency occurred in
+3/38, 9/38, and 5/38 targets, respectively, all among missed targets.
+Four targets had non-new-onset labels requiring \textit{warning}; the other
+34 required \textit{urgent}. Among detected targets, urgency-label mismatches
+were 0/35, 0/29, and 0/33. This conditional result excludes detection failures.
+Symptom counts were below reference in 2/35, 3/29, and 6/33 targets with known
+counts; the remaining 3, 9, and 5 counts were unknown. Correction histories
+were intact in 8/9, 8/9, and 6/9 cases. These record-level failures do not
+identify whether submission, state handling, export, or persistence failed.
+
+Figure~\ref{fig:participant_reference} shows exported-value differences and
+within-participant repeat measurements. Face mouth-corner MAE was 0.00452
+interocular-width units (33 measurements, 22 participants).
+Eleven complete Face repeat pairs yielded ICC(2,1)=0.935 (95\% interval
+0.801--0.975), with measurements 11.2--15.6 days apart.
+One of 12 repeat participants lacked the first corresponding Face measurement.
+For the exported Eyes gaze-offset field, MAE was 0.280$^\circ$ against desktop eye-tracker values
+(25 measurements, 19 participants), over system values of 0.094--1.641$^\circ$.
+The Eyes field is not mapped to a unique runtime monocular or binocular output;
+this numerical comparison does not establish runtime angular accuracy.
+Automatic Eyes abnormality classification remained disabled.
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.88\textwidth]{validation-reference-repeatability.pdf}
+\caption{Exported-value comparisons and Face repeatability.
+(a,b) System-minus-reference errors for Face mouth-corner change and Eyes gaze
+offset; dashed lines indicate zero difference. Eyes compares exported fields with
+unresolved runtime mapping. (c) Two system measurements for each
+of 11 participants with complete Face repeat pairs. Lines connect participants
+across visits.}
+\label{fig:participant_reference}
+\end{figure*}
+
+The recorded protocol specifies a 5-s Arms hold and a 2-s neutral plus
+3-s smile Face sequence. Eyes totals include settling-period attempts,
+which runtime trial counters exclude. The population-reference parameters,
+its enrollment provenance, and the exact No gates rule changes are not specified
+in the available configuration record. Comparisons therefore describe these
+recorded configurations without isolating the effects of personalization or
+individual gates. Scripted targets support engineering evaluation, not
+clinical sensitivity.

@@ -80,7 +80,39 @@ class _PositiveMdscModel:
         )
 
 
+class _SpeakerMdscModel(_PositiveMdscModel):
+    def __init__(self):
+        self.embedding = (1.0, 0.0)
+
+    def predict_wav(self, wav_path):
+        return DysarthriaPrediction(
+            probability=0.9,
+            threshold=0.8,
+            model_version=self.model_version,
+            representation_version="mdsc-logmel-v1",
+            embedding=self.embedding,
+        )
+
+
 class PassiveSpeechTest(unittest.TestCase):
+    def test_vote_trace_links_trigger_to_acquisition_windows(self):
+        with tempfile.TemporaryDirectory() as directory:
+            monitor = PassiveSpeechMonitor(Path(directory), capture_backend=_BlockingCapture(), config=self.config())
+            for _ in range(3):
+                monitor._accept_analysis(_analysis(), monitor.generation)
+            for index in range(2):
+                analysis = _analysis(pause_fraction=0.8, hnr_db=-5.0)
+                analysis.update(window_id=f'w{index}', capture_started_at=index * 4,
+                                capture_finished_at=index * 4 + 3,
+                                analysis_completed_at=index * 4 + 3.1)
+                monitor._accept_analysis(analysis, monitor.generation)
+            window = monitor.snapshot()['latest_window']
+            self.assertEqual(window['anomaly_votes'], 2)
+            self.assertEqual([r['window_id'] for r in window['vote_windows']], ['w0', 'w1'])
+            self.assertEqual(window['capture_finished_at'], 7)
+            window['vote_windows'][0]['anomaly'] = False
+            self.assertTrue(monitor.snapshot()['latest_window']['vote_windows'][0]['anomaly'])
+
     def config(self, **overrides):
         values = {
             "window_seconds": 3.0,
@@ -137,7 +169,7 @@ class PassiveSpeechTest(unittest.TestCase):
         self.assertEqual(status["assessment"], "waiting_for_speech")
         self.assertFalse(status["latest_window"]["valid"])
 
-    def test_mdsc_positive_immediately_recommends_guided_check(self):
+    def test_mdsc_positive_alone_does_not_trigger_guided_check(self):
         with tempfile.TemporaryDirectory() as directory:
             wav_path = Path(directory) / "window.wav"
             write_modulated_wav(wav_path)
@@ -150,14 +182,38 @@ class PassiveSpeechTest(unittest.TestCase):
 
             status = monitor.process_window(wav_path)
 
-        self.assertEqual(status["baseline_windows"], 0)
-        self.assertTrue(status["recommend_guided_check"])
-        self.assertEqual(status["assessment"], "suspected_change")
-        self.assertEqual(status["latest_window"]["changed_domains"], ["mdsc"])
+        self.assertEqual(status["baseline_windows"], 1)
+        self.assertFalse(status["recommend_guided_check"])
+        self.assertEqual(status["assessment"], "calibrating")
+        self.assertEqual(status["latest_window"]["changed_domains"], [])
         self.assertAlmostEqual(
             status["latest_window"]["metrics"]["mdsc_dysarthria_probability"],
             0.9,
         )
+
+    def test_target_speaker_gate_rejects_nonmatching_window(self):
+        with tempfile.TemporaryDirectory() as directory:
+            wav_path = Path(directory) / "window.wav"
+            write_modulated_wav(wav_path)
+            model = _SpeakerMdscModel()
+            monitor = PassiveSpeechMonitor(
+                Path(directory) / "work",
+                capture_backend=_BlockingCapture(),
+                representation_model=model,
+                config=self.config(
+                    require_speaker_verification=True,
+                    speaker_enrollment_windows=1,
+                    speaker_cosine_threshold=0.7,
+                ),
+            )
+            monitor.start_speaker_enrollment()
+            monitor.process_window(wav_path)
+            model.embedding = (0.0, 1.0)
+            status = monitor.process_window(wav_path)
+
+        self.assertEqual(status["assessment"], "speaker_unverified")
+        self.assertEqual(status["latest_window"]["reason"], "non_target_speaker_rejected")
+        self.assertFalse(status["recommend_guided_check"])
 
     def test_calibrates_persists_and_reloads_personal_baseline(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -235,6 +291,33 @@ class PassiveSpeechTest(unittest.TestCase):
         self.assertEqual(second["recent_anomaly_history"], [True, True])
         self.assertFalse(second["clinical_validation"])
         self.assertEqual(second["evidence_version"], EVIDENCE_VERSION)
+
+    def test_mdsc_can_support_but_not_replace_a_changed_acoustic_domain(self):
+        with tempfile.TemporaryDirectory() as directory:
+            monitor = PassiveSpeechMonitor(
+                Path(directory) / "work",
+                capture_backend=_BlockingCapture(),
+                config=self.config(),
+            )
+            for _ in range(3):
+                monitor._accept_analysis(_analysis(), monitor.generation)
+
+            changed = _analysis(pause_fraction=0.8)
+            changed["mdsc"] = {
+                "predicted_dysarthria": True,
+                "probability": 0.9,
+                "threshold": 0.8,
+            }
+            monitor._accept_analysis(changed, monitor.generation)
+            first = monitor.snapshot()
+            monitor._accept_analysis(changed, monitor.generation)
+            second = monitor.snapshot()
+
+        self.assertEqual(first["assessment"], "observing_change")
+        self.assertFalse(first["recommend_guided_check"])
+        self.assertEqual(second["assessment"], "suspected_change")
+        self.assertTrue(second["recommend_guided_check"])
+        self.assertEqual(second["latest_window"]["changed_domains"], ["mdsc", "timing"])
 
     def test_version_one_baseline_is_not_reused(self):
         with tempfile.TemporaryDirectory() as directory:

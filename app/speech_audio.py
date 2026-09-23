@@ -1,8 +1,8 @@
-"""Raspberry Pi-oriented microphone capture and offline speech assessment."""
+"""Local-computer microphone capture and offline guided speech assessment."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from math import ceil, log10
 from pathlib import Path
 import platform
@@ -472,17 +472,21 @@ def _mdsc_audio_eligible(result: MotionResult) -> bool:
 
 
 def _apply_mdsc_prediction(result: MotionResult, prediction: Any) -> MotionResult:
-    """Attach MDSC evidence and promote a qualified positive to the S result."""
+    """Use qualified chronic-dysarthria screening evidence for guided S.
+
+    This classifies the observable speech component, not stroke etiology.  The
+    separately collected onset answer controls urgency downstream.
+    """
 
     predicted = bool(prediction.predicted_dysarthria)
-    status = result.status
-    reason = result.reason
-    if predicted and _mdsc_audio_eligible(result) and result.status != "positive":
-        status = "positive"
-        reason = "mdsc_dysarthria_detected"
+    trigger_recommended = bool(predicted and _mdsc_audio_eligible(result))
     return MotionResult(
-        status=status,
-        reason=reason,
+        status="positive" if trigger_recommended else "negative",
+        reason=(
+            "mdsc_dysarthria_detected"
+            if trigger_recommended
+            else "mdsc_dysarthria_not_detected"
+        ),
         affected_side=result.affected_side,
         quality=result.quality,
         metrics={
@@ -494,7 +498,8 @@ def _apply_mdsc_prediction(result: MotionResult, prediction: Any) -> MotionResul
             **result.details,
             "mdsc_dysarthria_model": prediction.model_version,
             "mdsc_dysarthria_prediction": str(predicted).lower(),
-            "mdsc_medical_role": "speech_screening_component_not_stroke_diagnosis",
+            "mdsc_guided_check_recommended": str(trigger_recommended).lower(),
+            "mdsc_medical_role": "guided_S_screening_evidence_not_stroke_specific",
         },
     )
 
@@ -524,7 +529,8 @@ class SpeechCaptureService:
         self.started_at: float | None = None
         self.language = "zh"
         self.expected_text = self.config.prompt("zh")
-        self.new_or_sudden = False
+        self.speech_attempt_id: str | None = None
+        self.new_or_sudden: bool | None = None
         self.onset_time: str | None = None
         self.result: MotionResult | None = None
         self.audio_path: Path | None = None
@@ -533,8 +539,9 @@ class SpeechCaptureService:
         self,
         *,
         language: str = "zh",
-        new_or_sudden: bool = False,
+        new_or_sudden: bool | None = None,
         onset_time: str | None = None,
+        speech_attempt_id: str | None = None,
     ) -> dict[str, Any]:
         normalized_language = "en" if language == "en" else "zh"
         with self.lock:
@@ -546,7 +553,8 @@ class SpeechCaptureService:
             self.started_at = time.time()
             self.language = normalized_language
             self.expected_text = self.config.prompt(normalized_language)
-            self.new_or_sudden = bool(new_or_sudden)
+            self.speech_attempt_id = speech_attempt_id
+            self.new_or_sudden = new_or_sudden
             self.onset_time = str(onset_time).strip() if onset_time else None
             self.result = None
             self.audio_path = self.root_dir / f"speech-{uuid4().hex}.wav"
@@ -643,17 +651,19 @@ class SpeechCaptureService:
                 "representation_model": representation_version,
                 "representation_ready": representation_ready,
                 "representation_reason": representation_reason,
-                "representation_mode": "direct_speech_decision",
+                "representation_mode": "guided_S_dysarthria_screening_evidence",
                 "result": self.result.as_dict() if self.result is not None else None,
             }
 
     def consume_result(
         self,
-    ) -> tuple[MotionResult, Path | None, bool, str | None]:
+    ) -> tuple[MotionResult, Path | None, bool | None, str | None]:
         with self.lock:
             if self.state != "ready" or self.result is None:
                 raise ValueError("speech assessment is not ready")
             result = self.result
+            if self.speech_attempt_id is not None:
+                result = replace(result, details={**result.details, "speech_attempt_id": self.speech_attempt_id})
             audio_path = self.audio_path
             sudden = self.new_or_sudden
             onset_time = self.onset_time
@@ -695,17 +705,21 @@ class SpeechCaptureService:
                 expected_text=expected_text,
                 config=self.config,
             )
-            # MDSC predicts a chronic dysarthria phenotype, not acute stroke.
-            # A qualified positive contributes directly to the S status.
-            if self.representation_model is not None:
-                model_ready, _ = self.representation_model.availability()
-                if model_ready and _mdsc_audio_eligible(result):
+            # A quality-qualified MDSC prediction is guided-S screening evidence.
+            # It is not evidence of stroke etiology; transcript and timing values
+            # remain audit features, and onset is handled by the session layer.
+            if _mdsc_audio_eligible(result):
+                model_ready = False
+                model_reason = "dysarthria model not configured"
+                if self.representation_model is not None:
+                    model_ready, model_reason = self.representation_model.availability()
+                if model_ready and self.representation_model is not None:
                     try:
                         prediction = self.representation_model.predict_wav(path)
                     except Exception as exc:
                         result = MotionResult(
-                            status=result.status,
-                            reason=result.reason,
+                            status="insufficient",
+                            reason="dysarthria_model_failed",
                             affected_side=result.affected_side,
                             quality=result.quality,
                             metrics=result.metrics,
@@ -716,6 +730,18 @@ class SpeechCaptureService:
                         )
                     else:
                         result = _apply_mdsc_prediction(result, prediction)
+                else:
+                    result = MotionResult(
+                        status="insufficient",
+                        reason="dysarthria_model_unavailable",
+                        quality=result.quality,
+                        metrics=result.metrics,
+                        details={
+                            **result.details,
+                            "mdsc_dysarthria_error": model_reason,
+                            "asr_role": "audit_feature_only",
+                        },
+                    )
         except SpeechBackendUnavailable as exc:
             result = MotionResult(
                 status="insufficient",

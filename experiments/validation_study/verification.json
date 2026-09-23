@@ -1,0 +1,94 @@
+{
+  "source": "experiments/validation_study/pibefast_validation_data.xlsx",
+  "source_sha256": "59bee5086661ed4043b2ab14288fe1b8551eef781711304a819cd370b76097dd",
+  "all_analysis_fields_equal_to_revision_1_except_source_sha256": true,
+  "changed_cells_by_sheet": {
+    "系统输出": 186,
+    "论文汇总": 177,
+    "FE参考测量": 50,
+    "图表汇总": 1
+  },
+  "pdfs": {
+    "docs/pibefast-paper/pibefast-conference-paper.pdf": {
+      "pages": 8,
+      "sha256": "ee0b941478052f70a38cafa70db3fb86c888ddb5b0c9676f99104af5308ae15c"
+    }
+  },
+  "figures": {
+    "paired-outcomes": {
+      "sha256": "48d3cd17256ffb8b528baebbd2da2215e6046ea8370c228f4ad205b56fa7ad4c",
+      "png_same_as_revision_1": true,
+      "text_audit": {
+        "pdf": "experiments/validation_study/figures/paired-outcomes.pdf",
+        "auditable": true,
+        "minimum_required_pt": 5.0,
+        "minimum_found_pt": 7.0,
+        "text_run_count": 32,
+        "below_minimum_count": 0,
+        "below_minimum": [],
+        "warnings": []
+      },
+      "collision_audit": {
+        "pdf": "experiments/validation_study/figures/paired-outcomes.pdf",
+        "auditable": true,
+        "verdict": "PASS",
+        "page_count": 1,
+        "visible_text_box_count": 32,
+        "text_trace_count": 32,
+        "stroke_path_count": 96,
+        "filled_region_count": 76,
+        "image_region_count": 0,
+        "summary": {
+          "fail": 0,
+          "warn": 0,
+          "contained_fill_overlays": 0,
+          "contained_image_overlays": 0
+        },
+        "thresholds": {
+          "text_inset_pt": 0.6,
+          "min_overlap_ratio": 0.05,
+          "clipping_tolerance_pt": 0.5
+        },
+        "findings": []
+      }
+    },
+    "reference-and-repeatability": {
+      "sha256": "3dcceec4b141d68ab0f746d46bd0efdb6c21118fe9ef8c9c74765b8748ea449f",
+      "png_same_as_revision_1": true,
+      "text_audit": {
+        "pdf": "experiments/validation_study/figures/reference-and-repeatability.pdf",
+        "auditable": true,
+        "minimum_required_pt": 5.0,
+        "minimum_found_pt": 7.0,
+        "text_run_count": 35,
+        "below_minimum_count": 0,
+        "below_minimum": [],
+        "warnings": []
+      },
+      "collision_audit": {
+        "pdf": "experiments/validation_study/figures/reference-and-repeatability.pdf",
+        "auditable": true,
+        "verdict": "PASS",
+        "page_count": 1,
+        "visible_text_box_count": 32,
+        "text_trace_count": 35,
+        "stroke_path_count": 117,
+        "filled_region_count": 102,
+        "image_region_count": 0,
+        "summary": {
+          "fail": 0,
+          "warn": 0,
+          "contained_fill_overlays": 0,
+          "contained_image_overlays": 0
+        },
+        "thresholds": {
+          "text_inset_pt": 0.6,
+          "min_overlap_ratio": 0.05,
+          "clipping_tolerance_pt": 0.5
+        },
+        "findings": []
+      }
+    }
+  },
+  "visual_qa": "Inspected final English validation page 5 and final page 8, Chinese figure page 5; no overlap or clipping. Plot PNGs compared with previous revision."
+}

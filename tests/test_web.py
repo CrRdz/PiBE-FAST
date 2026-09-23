@@ -6,9 +6,11 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from app.befast import BefastSession
+from app.befast import BefastSession, MotionResult
+from app.edge_trigger_queue import EdgeTriggerQueue
 from app.history import AbnormalHistoryStore
 from app.speech_audio import SpeechAudioConfig, SpeechCaptureService, Transcript
+from app.speech_representation import DysarthriaPrediction
 from app.web import PreviewState, _mjpeg_stream, create_app
 
 
@@ -43,6 +45,21 @@ class _TestSpeechRecognizer:
 
     def recognize(self, wav_path, language):
         return Transcript(text=self.text, engine=self.name)
+
+
+class _TestRepresentationModel:
+    model_version = "test-mdsc"
+
+    def __init__(self):
+        self.probability = 0.2
+
+    def availability(self):
+        return True, None
+
+    def predict_wav(self, wav_path):
+        return DysarthriaPrediction(
+            self.probability, 0.7, self.model_version, "mdsc-logmel-v1", (1.0,)
+        )
 
 
 class _TestPassiveSpeechMonitor:
@@ -100,25 +117,50 @@ class _TestPassiveSpeechMonitor:
 
 
 class BefastWebApiTest(unittest.TestCase):
+    def test_reported_functional_problem_preserves_failed_acquisition(self):
+        self.session.start_screening()
+        self.session.arm_result = MotionResult(status="insufficient", reason="both_arms_were_not_held_up")
+        response = self.client.post('/api/befast/functional-problem', json={
+            'component': 'A', 'reported_problem': True, 'new_or_sudden': True})
+        self.assertEqual(response.status_code, 200)
+        result = response.get_json()['befast']
+        self.assertEqual(result['urgency'], 'urgent')
+        self.assertEqual(result['completeness'], 'incomplete')
+        self.assertEqual(result['items']['A']['status'], 'insufficient')
+        self.session.prepare_component('A')
+        self.assertEqual(self.session.snapshot()['urgency'], 'urgent')
+        self.session.reset()
+        self.assertEqual(self.session.reported_functional_problems, {})
+
+    def test_functional_report_requires_explicit_report_and_valid_onset(self):
+        for payload in ({'component':'A'}, {'component':'A','reported_problem':True,'new_or_sudden':'yes'}):
+            self.assertEqual(self.client.post('/api/befast/functional-problem', json=payload).status_code, 400)
+
     def setUp(self):
         self.history_directory = tempfile.TemporaryDirectory()
         self.history_store = AbnormalHistoryStore(self.history_directory.name)
         self.session = BefastSession()
         self.state = PreviewState()
         self.speech_recognizer = _TestSpeechRecognizer()
+        self.representation_model = _TestRepresentationModel()
         self.speech_service = SpeechCaptureService(
             Path(self.history_directory.name) / "speech-work",
             capture_backend=_TestSpeechCapture(),
             recognizer=self.speech_recognizer,
+            representation_model=self.representation_model,
             config=SpeechAudioConfig(capture_seconds=3.0),
         )
         self.passive_speech_monitor = _TestPassiveSpeechMonitor()
+        self.trigger_queue = EdgeTriggerQueue(
+            Path(self.history_directory.name) / "edge-triggers.json"
+        )
         self.app = create_app(
             self.state,
             befast_session=self.session,
             history_store=self.history_store,
             speech_service=self.speech_service,
             passive_speech_monitor=self.passive_speech_monitor,
+            trigger_queue=self.trigger_queue,
         )
         self.client = self.app.test_client()
 
@@ -374,6 +416,74 @@ class BefastWebApiTest(unittest.TestCase):
         )
         self.assertFalse(self.passive_speech_monitor.paused)
 
+    def test_late_audio_cannot_downgrade_reported_acute_symptom(self):
+        self.client.post("/api/befast/component", json={"component": "S"})
+        self.assertEqual(self.client.post("/api/speech/start", json={"new_or_sudden": False}).status_code, 200)
+        report = self.client.post("/api/befast/functional-problem", json={
+            "component": "S", "reported_problem": True, "new_or_sudden": True,
+        })
+        self.assertEqual(report.status_code, 200)
+        self.assertTrue(self.speech_service.wait(timeout=2.0))
+        completed = self.client.post("/api/speech/complete")
+        self.assertEqual(completed.status_code, 200)
+        self.assertEqual(completed.get_json()["befast"]["urgency"], "urgent")
+
+    def test_unknown_speech_onset_is_preserved(self):
+        self.client.post("/api/befast/component", json={"component": "S"})
+        started = self.client.post("/api/speech/start", json={"new_or_sudden": None})
+        self.assertEqual(started.status_code, 200)
+        self.assertTrue(self.speech_service.wait(timeout=2.0))
+        completed = self.client.post("/api/speech/complete")
+        self.assertEqual(completed.status_code, 200)
+        self.assertIsNone(completed.get_json()["befast"]["component_onsets"]["S"])
+
+    def test_audio_from_reset_session_is_rejected(self):
+        self.client.post("/api/befast/component", json={"component": "S"})
+        self.client.post("/api/speech/start", json={"new_or_sudden": True})
+        self.assertTrue(self.speech_service.wait(timeout=2.0))
+        self.client.post("/api/befast/reset")
+        self.client.post("/api/befast/component", json={"component": "S"})
+        completed = self.client.post("/api/speech/complete")
+        self.assertEqual(completed.status_code, 409)
+        self.assertEqual(self.session.snapshot()["items"]["S"]["status"], "pending")
+
+    def test_symptom_update_and_correction_are_persisted_as_revisions(self):
+        self.client.post("/api/befast/component", json={"component": "S"})
+        self.client.post("/api/speech/start", json={"new_or_sudden": False})
+        self.assertTrue(self.speech_service.wait(timeout=2.0))
+        self.client.post("/api/speech/complete")
+        reported = self.client.post("/api/befast/functional-problem", json={
+            "component": "S", "reported_problem": True, "new_or_sudden": True,
+        }).get_json()["befast"]
+        self.assertEqual(reported["current_report"]["decision"], "emergency")
+        event = reported["items"]["S"]["symptom_evidence"][0]
+        corrected = self.client.post("/api/befast/symptom-correction", json={
+            "event_id": event["event_id"], "reason": "Entered for the wrong check",
+        })
+        self.assertEqual(corrected.status_code, 200)
+        screen = corrected.get_json()["befast"]
+        self.assertEqual(screen["current_report"]["decision"], "clear")
+        history = self.client.get("/api/history?component=S").get_json()["items"]
+        self.assertEqual(len(history), 2)
+        self.assertEqual({r["details"]["evidence_report"]["kind"] for r in history},
+                         {"symptom_update", "symptom_correction"})
+        self.assertEqual({r["status"] for r in history}, {"positive", "corrected"})
+        self.client.post("/api/befast/reset")
+        self.assertEqual(len(self.client.get("/api/history?component=S").get_json()["items"]), 2)
+        self.assertEqual(self.client.post("/api/befast/symptom-correction", json={
+            "event_id": event["event_id"], "reason": "old session",
+        }).status_code, 400)
+
+    def test_manual_symptoms_allow_unknown_onset_and_survive_retry(self):
+        for code in ("B", "E"):
+            self.client.post("/api/befast/reset")
+            result = self.client.post("/api/befast/manual-item", json={
+                "component": code, "problem": True, "new_or_sudden": None,
+            })
+            self.assertEqual(result.status_code, 200)
+            retried = self.client.post("/api/befast/component", json={"component": code})
+            self.assertEqual(retried.get_json()["befast"]["urgency"], "urgent")
+
     def test_guided_speech_preserves_a_manual_passive_pause(self):
         self.client.post("/api/speech/passive/pause")
         self.client.post("/api/befast/component", json={"component": "S"})
@@ -404,7 +514,7 @@ class BefastWebApiTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(payload["skipped"], "eyes")
         self.assertEqual(payload["befast"]["stage"], "ready_face")
-        self.assertEqual(payload["befast"]["items"]["E"]["status"], "skipped")
+        self.assertEqual(payload["befast"]["items"]["E"]["camera_measurement"]["status"], "skipped")
 
     def test_user_trigger_switches_standby_to_screening(self):
         response = self.client.post(
@@ -416,6 +526,19 @@ class BefastWebApiTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(payload["mode"], "screening")
         self.assertEqual(payload["trigger"]["reason"], "felt_unwell")
+
+    def test_passive_trigger_is_durable_until_standby_acknowledgement(self):
+        triggered = self.client.post(
+            "/api/monitoring/trigger",
+            json={"source": "passive", "reason": "passive_pose_change_trigger"},
+        ).get_json()
+        record_id = triggered["edge_trigger"]["id"]
+        self.assertEqual(len(self.trigger_queue.unresolved()), 1)
+        self.assertEqual(triggered["befast"]["trigger"]["id"], record_id)
+
+        response = self.client.post("/api/monitoring/standby").get_json()
+        self.assertEqual(response["acknowledged_trigger"]["id"], record_id)
+        self.assertEqual(self.trigger_queue.unresolved(), [])
 
     def test_return_to_standby_clears_active_screen(self):
         self.session.start_screening(now=1.0)
@@ -434,8 +557,36 @@ class BefastWebApiTest(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
 
+    def test_component_onsets_can_represent_mixed_chronic_and_acute_signs(self):
+        self.session.start_screening(now=1.0)
+        with self.session.lock:
+            self.session.face_result = MotionResult(
+                status="positive", reason="facial_asymmetry", quality=0.9,
+                metrics={"mouth_corner_delta": 0.2},
+            )
+            self.session.arm_result = MotionResult(
+                status="positive", reason="arm_drift", quality=0.9,
+                metrics={"level_difference": 0.4},
+            )
+        first = self.client.post(
+            "/api/befast/onset",
+            json={"component": "F", "new_or_sudden": False},
+        )
+        second = self.client.post(
+            "/api/befast/onset",
+            json={"component": "A", "new_or_sudden": True},
+        )
+
+        payload = second.get_json()["befast"]
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(payload["urgency"], "urgent")
+        self.assertEqual(payload["component_onsets"]["F"], False)
+        self.assertEqual(payload["component_onsets"]["A"], True)
+
     def test_microphone_sudden_speech_problem_triggers_emergency(self):
         self.speech_recognizer.text = "今天"
+        self.representation_model.probability = 0.8
         self.client.post("/api/befast/component", json={"component": "S"})
         started = self.client.post(
             "/api/speech/start",
@@ -465,6 +616,7 @@ class BefastWebApiTest(unittest.TestCase):
             },
         )
         self.speech_recognizer.text = "今天"
+        self.representation_model.probability = 0.8
         self.client.post("/api/befast/component", json={"component": "S"})
         started = self.client.post(
             "/api/speech/start",
@@ -488,7 +640,7 @@ class BefastWebApiTest(unittest.TestCase):
         self.assertEqual(payload["total"], 1)
         self.assertEqual(payload["filters"]["component"], ["F", "S"])
         self.assertEqual(record["component"], "S")
-        self.assertEqual(record["reason"], "speech_content_mismatch")
+        self.assertEqual(record["reason"], "mdsc_dysarthria_detected")
         self.assertEqual(record["details"]["transcript"], "今天")
         self.assertTrue(record["audio_url"].endswith("/audio"))
         self.assertEqual(excluded.get_json()["total"], 0)

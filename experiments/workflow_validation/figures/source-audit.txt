@@ -1,0 +1,33 @@
+Nature Figure Static Preflight
+source: scripts/generate_validation_figures.py
+backend: python
+
+[PASS] SOURCE-SYNTAX: Python source parses successfully
+[PASS] FONT-FAMILY: A publication-safe sans-serif family is configured
+  - Arial
+  - sans-serif
+[PASS] FONT-SIZE: All detected text sizes are at least 5 pt (minimum 7 pt)
+[PASS] FONT-GLYPH-FLOOR: No mathtext superscript/subscript expression detected
+[PASS] LEGEND-LABEL-CASE: No auditable literal legend labels detected
+[PASS] COLOR-MAP: No rainbow/jet/hsv color mapping detected
+[PASS] EDITABLE-TEXT: SVG and PDF editable-text settings are configured
+[PASS] EXPORT-VECTOR: Both SVG and PDF exports are present
+[PASS] EXPORT-RASTER: TIFF raster export is present
+[PASS] RASTER-DPI: A raster export of at least 600 dpi is configured
+  - 600
+[PASS] FINAL-WIDTH: Detected width 181.9 mm matches a common journal column width
+[PASS] DATA-SAMPLING: No high-confidence row-sampling operation detected
+[PASS] DATA-EXCLUSION: No high-confidence missing-data exclusion detected
+[PASS] DEMO-DATA: No obvious simulated-data generator detected
+[PASS] LOG-GUARD: No logarithmic transform or axis detected
+[PASS] INTERP-MONOTONIC: No NumPy interpolation requiring an increasing x-grid detected
+[PASS] UNCERTAINTY-ENCODING: No stochastic aggregate requiring a variability audit was inferred
+[PASS] ROTATION-ANCHOR: No rotated Matplotlib text detected
+[PASS] ANNOTATION-WORKAROUND: No high-risk hard-coded label height or opaque white text mask detected
+[PASS] PANEL-ALIGNMENT-GATE: Render-time panel-alignment gate is wired into the plotting source
+  - require_matplotlib_panel_alignment(
+[PASS] BACKEND-EXCLUSIVE: No obvious cross-backend plotting reference found for python
+
+summary: 21 pass, 0 warn, 0 fail
+verdict: READY FOR VISUAL QA
+note: static preflight does not validate statistics, source-data truth, or rendered appearance

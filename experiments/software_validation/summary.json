@@ -1,0 +1,266 @@
+{
+  "scope": "deterministic software cases and descriptive frozen-MDSC reanalysis; no target-device or clinical experiment",
+  "cases": [
+    {
+      "id": "D1",
+      "scenario": "All requested checks negative",
+      "expected_urgency": "none",
+      "expected_completeness": "complete",
+      "missing_normal": "clear",
+      "scalar": "clear",
+      "proposed_urgency": "none",
+      "proposed_completeness": "complete",
+      "missing_normal_hides_incomplete": 0,
+      "scalar_hides_incomplete": 0,
+      "proposed_hides_incomplete": 0
+    },
+    {
+      "id": "D2",
+      "scenario": "Technical arm acquisition failure",
+      "expected_urgency": "none",
+      "expected_completeness": "incomplete",
+      "missing_normal": "clear",
+      "scalar": "incomplete",
+      "proposed_urgency": "none",
+      "proposed_completeness": "incomplete",
+      "missing_normal_hides_incomplete": 1,
+      "scalar_hides_incomplete": 0,
+      "proposed_hides_incomplete": 0
+    },
+    {
+      "id": "D3",
+      "scenario": "New face positive and arm failure",
+      "expected_urgency": "urgent",
+      "expected_completeness": "incomplete",
+      "missing_normal": "emergency",
+      "scalar": "emergency",
+      "proposed_urgency": "urgent",
+      "proposed_completeness": "incomplete",
+      "missing_normal_hides_incomplete": 1,
+      "scalar_hides_incomplete": 1,
+      "proposed_hides_incomplete": 0
+    },
+    {
+      "id": "D4",
+      "scenario": "Chronic face positive and skipped arm",
+      "expected_urgency": "warning",
+      "expected_completeness": "incomplete",
+      "missing_normal": "warning",
+      "scalar": "warning",
+      "proposed_urgency": "warning",
+      "proposed_completeness": "incomplete",
+      "missing_normal_hides_incomplete": 1,
+      "scalar_hides_incomplete": 1,
+      "proposed_hides_incomplete": 0
+    },
+    {
+      "id": "D5",
+      "scenario": "Reported new inability with failed arm task",
+      "expected_urgency": "urgent",
+      "expected_completeness": "incomplete",
+      "missing_normal": "emergency",
+      "scalar": "emergency",
+      "proposed_urgency": "urgent",
+      "proposed_completeness": "incomplete",
+      "missing_normal_hides_incomplete": 1,
+      "scalar_hides_incomplete": 1,
+      "proposed_hides_incomplete": 0
+    },
+    {
+      "id": "D6",
+      "scenario": "Reported difficulty with unknown onset",
+      "expected_urgency": "urgent",
+      "expected_completeness": "incomplete",
+      "missing_normal": "emergency",
+      "scalar": "emergency",
+      "proposed_urgency": "urgent",
+      "proposed_completeness": "incomplete",
+      "missing_normal_hides_incomplete": 1,
+      "scalar_hides_incomplete": 1,
+      "proposed_hides_incomplete": 0
+    },
+    {
+      "id": "D7",
+      "scenario": "Chronic face and new speech positive",
+      "expected_urgency": "urgent",
+      "expected_completeness": "complete",
+      "missing_normal": "emergency",
+      "scalar": "emergency",
+      "proposed_urgency": "urgent",
+      "proposed_completeness": "complete",
+      "missing_normal_hides_incomplete": 0,
+      "scalar_hides_incomplete": 0,
+      "proposed_hides_incomplete": 0
+    },
+    {
+      "id": "D8",
+      "scenario": "F-only request with research E data",
+      "expected_urgency": "none",
+      "expected_completeness": "complete",
+      "missing_normal": "clear",
+      "scalar": "clear",
+      "proposed_urgency": "none",
+      "proposed_completeness": "complete",
+      "missing_normal_hides_incomplete": 0,
+      "scalar_hides_incomplete": 0,
+      "proposed_hides_incomplete": 0
+    }
+  ],
+  "representation": {
+    "legacy_29d_collision": true,
+    "current_48d_collision": false
+  },
+  "speakers": [
+    {
+      "split": "validation",
+      "speaker": "CF0012",
+      "label": 0,
+      "recordings": 405,
+      "tp": 0,
+      "fn": 0,
+      "tn": 325,
+      "fp": 80,
+      "mean_probability": 0.3728137446568162
+    },
+    {
+      "split": "validation",
+      "speaker": "CF0016",
+      "label": 0,
+      "recordings": 405,
+      "tp": 0,
+      "fn": 0,
+      "tn": 402,
+      "fp": 3,
+      "mean_probability": 0.032692040451255386
+    },
+    {
+      "split": "validation",
+      "speaker": "CF0018",
+      "label": 0,
+      "recordings": 405,
+      "tp": 0,
+      "fn": 0,
+      "tn": 189,
+      "fp": 216,
+      "mean_probability": 0.6426249870196041
+    },
+    {
+      "split": "validation",
+      "speaker": "CM0025",
+      "label": 0,
+      "recordings": 405,
+      "tp": 0,
+      "fn": 0,
+      "tn": 402,
+      "fp": 3,
+      "mean_probability": 0.08957284455064443
+    },
+    {
+      "split": "validation",
+      "speaker": "DF0007",
+      "label": 1,
+      "recordings": 405,
+      "tp": 404,
+      "fn": 1,
+      "tn": 0,
+      "fp": 0,
+      "mean_probability": 0.9962317029672391
+    },
+    {
+      "split": "validation",
+      "speaker": "DF0021",
+      "label": 1,
+      "recordings": 405,
+      "tp": 385,
+      "fn": 20,
+      "tn": 0,
+      "fp": 0,
+      "mean_probability": 0.949113077096847
+    },
+    {
+      "split": "validation",
+      "speaker": "DM0005",
+      "label": 1,
+      "recordings": 405,
+      "tp": 305,
+      "fn": 100,
+      "tn": 0,
+      "fp": 0,
+      "mean_probability": 0.807859203793761
+    },
+    {
+      "split": "test",
+      "speaker": "CF0005",
+      "label": 0,
+      "recordings": 405,
+      "tp": 0,
+      "fn": 0,
+      "tn": 397,
+      "fp": 8,
+      "mean_probability": 0.08723881498738642
+    },
+    {
+      "split": "test",
+      "speaker": "CF0011",
+      "label": 0,
+      "recordings": 405,
+      "tp": 0,
+      "fn": 0,
+      "tn": 400,
+      "fp": 5,
+      "mean_probability": 0.07872859424740236
+    },
+    {
+      "split": "test",
+      "speaker": "CM0015",
+      "label": 0,
+      "recordings": 405,
+      "tp": 0,
+      "fn": 0,
+      "tn": 404,
+      "fp": 1,
+      "mean_probability": 0.025178999211100853
+    },
+    {
+      "split": "test",
+      "speaker": "DF0004",
+      "label": 1,
+      "recordings": 405,
+      "tp": 384,
+      "fn": 21,
+      "tn": 0,
+      "fp": 0,
+      "mean_probability": 0.9574251472329038
+    },
+    {
+      "split": "test",
+      "speaker": "DF0009",
+      "label": 1,
+      "recordings": 405,
+      "tp": 341,
+      "fn": 64,
+      "tn": 0,
+      "fp": 0,
+      "mean_probability": 0.8835020804858088
+    },
+    {
+      "split": "test",
+      "speaker": "DF0016",
+      "label": 1,
+      "recordings": 405,
+      "tp": 92,
+      "fn": 313,
+      "tn": 0,
+      "fp": 0,
+      "mean_probability": 0.4373514121949207
+    }
+  ],
+  "incomplete_cases": 5,
+  "source_sha256": {
+    "scripts/analyze_model_evidence.py": "6fb3443512f31d6ff2cfe9062cd99afa7f36edee7b0dc856d89b715e4d0172a6",
+    "models/mdsc_dysarthria_v1.json": "ea9f29cdbd68734e977312834d4f0d36b4207991b51cf04c491b3cc9805cbe0e",
+    "training/processed/mdsc_features.npz": "bd4d5f21bfd6f6e65db93d1bd8dc6c130c5e36f2ac549e0d0821032c1e387504",
+    "app/befast/fusion.py": "6666e03fed2e5285d70edad7abfbe0e5442fa1b6fa1b9a1379704b53c322ee92",
+    "app/befast/urgency.py": "807d7b1609e4bce1252ff062b3e33b5f51b6e9f793c944a9026c43613656aae1"
+  }
+}

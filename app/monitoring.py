@@ -164,6 +164,10 @@ class PassiveMonitor:
         """Opportunistically collect a complete quiet-standing window."""
 
         if keypoints is None:
+            # Leaving the field of view invalidates, rather than completes, an
+            # opportunistic standing candidate.
+            if self.balance_screen.start_ts is not None:
+                self.balance_screen.reset()
             return False
         frame_metrics = balance_frame_metrics(
             keypoints,
@@ -173,6 +177,11 @@ class PassiveMonitor:
             if pose.pose != "standing" or frame_metrics is None:
                 return False
             self.balance_screen.start(ts)
+        elif pose.pose != "standing" or frame_metrics is None:
+            # Sitting, walking, bending, occlusion, and unknown pose must never
+            # contribute a partial window to the personal baseline.
+            self.balance_screen.reset()
+            return False
 
         if not self.balance_screen.update(ts, keypoints, pose.pose):
             return False

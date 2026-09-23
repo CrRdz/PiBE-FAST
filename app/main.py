@@ -16,6 +16,7 @@ from app.befast import BefastConfig, BefastSession, PersonalBalanceBaseline
 from app.camera import Frame, FrameSource
 from app.config import PoseClassifierConfig, RuntimeConfig
 from app.drawing import draw_befast_overlay
+from app.edge_trigger_queue import EdgeTriggerQueue
 from app.event_recorder import EventClipRecorder
 from app.face_landmarker import FaceObservation, MediaPipeFaceLandmarker
 from app.history import AbnormalHistoryStore
@@ -130,6 +131,29 @@ def parse_args() -> argparse.Namespace:
         default=RuntimeConfig.scheduled_screen_interval_hours,
         help="Open a guided screen on this interval; 0 disables scheduled reminders",
     )
+    parser.add_argument(
+        "--edge-trigger-queue-path",
+        default="data/edge-triggers.json",
+        help="Durable queue for unresolved passive and scheduled triggers",
+    )
+    parser.add_argument(
+        "--trigger-repeat-prompt-seconds",
+        type=float,
+        default=30.0,
+        help=(
+            "Engineering no-response timer before a local repeat-prompt state; "
+            "this does not change medical urgency"
+        ),
+    )
+    parser.add_argument(
+        "--trigger-attention-required-seconds",
+        type=float,
+        default=120.0,
+        help=(
+            "Engineering no-response timer before local caregiver-attention-required "
+            "state; no message is sent unless a delivery adapter is configured"
+        ),
+    )
 
     # Web 预览默认监听 0.0.0.0，树莓派上可通过 SSH 端口转发到本机浏览器。
     parser.add_argument("--web-host", default="0.0.0.0")
@@ -190,8 +214,8 @@ def parse_args() -> argparse.Namespace:
         "--speech-representation-model",
         default="models/mdsc_dysarthria_v1.json",
         help=(
-            "MDSC Mandarin dysarthria representation model; predictions are "
-            "reported in shadow mode and never change the S decision"
+            "MDSC Mandarin dysarthria representation model; fixed-phrase "
+            "predictions are used as guided S screening evidence"
         ),
     )
     parser.add_argument(
@@ -202,7 +226,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--disable-speech",
         action="store_true",
-        help="Disable Pi microphone capture and offline speech recognition",
+        help="Disable local-computer guided-S capture and offline speech recognition",
     )
     parser.add_argument(
         "--disable-passive-speech",
@@ -295,6 +319,7 @@ def run_detection(
     stop_event: threading.Event | None = None,
     befast_session: BefastSession | None = None,
     history_store: AbnormalHistoryStore | None = None,
+    trigger_queue: EdgeTriggerQueue | None = None,
 ) -> None:
     """Run stage-aware inference, keeping Pi CPU load to one model at a time."""
 
@@ -521,6 +546,8 @@ def run_detection(
                 last_frame_time = now
 
                 assessment = befast.snapshot(frame.ts)
+                if trigger_queue is not None:
+                    trigger_queue.evaluate_timeouts(now=frame.ts)
                 if next_scheduled_trigger is None and scheduled_interval_seconds > 0:
                     next_scheduled_trigger = frame.ts + scheduled_interval_seconds
                 if (
@@ -528,10 +555,20 @@ def run_detection(
                     and frame.ts >= next_scheduled_trigger
                     and assessment["mode"] == "standby"
                 ):
+                    trigger = (
+                        trigger_queue.enqueue(
+                            "scheduled", "scheduled_screen_due", created_at=frame.ts
+                        )
+                        if trigger_queue is not None
+                        else None
+                    )
+                    if trigger is not None:
+                        trigger_queue.mark_delivery_attempt(trigger["id"])
                     befast.start_screening(
                         source="scheduled",
                         reason="scheduled_screen_due",
                         now=frame.ts,
+                        trigger_id=trigger["id"] if trigger else None,
                     )
                     assessment = befast.snapshot(frame.ts)
                     next_scheduled_trigger = frame.ts + scheduled_interval_seconds
@@ -658,13 +695,24 @@ def run_detection(
                             inference_performed = True
                             pose = classifier.classify(keypoints)
                             if passive_monitor.update(frame.ts, pose, keypoints):
+                                reason = (
+                                    passive_monitor.last_trigger_reason
+                                    or "passive_pose_change_trigger"
+                                )
+                                trigger = (
+                                    trigger_queue.enqueue(
+                                        "passive", reason, created_at=frame.ts
+                                    )
+                                    if trigger_queue is not None
+                                    else None
+                                )
+                                if trigger is not None:
+                                    trigger_queue.mark_delivery_attempt(trigger["id"])
                                 befast.start_screening(
                                     source="passive",
-                                    reason=(
-                                        passive_monitor.last_trigger_reason
-                                        or "passive_pose_change_trigger"
-                                    ),
+                                    reason=reason,
                                     now=frame.ts,
+                                    trigger_id=trigger["id"] if trigger else None,
                                 )
                                 assessment = befast.snapshot(frame.ts)
                                 operation_mode = "screening"
@@ -959,7 +1007,28 @@ def main() -> None:
     balance_baseline = PersonalBalanceBaseline(
         balance_config,
         args.balance_baseline_path,
+        require_confirmation=True,
     )
+    trigger_queue = EdgeTriggerQueue(
+        args.edge_trigger_queue_path,
+        repeat_prompt_seconds=max(1.0, float(args.trigger_repeat_prompt_seconds)),
+        attention_required_seconds=max(
+            max(1.0, float(args.trigger_repeat_prompt_seconds)),
+            float(args.trigger_attention_required_seconds),
+        ),
+    )
+    befast_session = BefastSession(balance_config, balance_baseline)
+
+    def handle_passive_speech_trigger(reason: str) -> None:
+        """Persist a passive speech event before opening the guided check."""
+
+        if befast_session.snapshot().get("mode") != "standby":
+            return
+        record = trigger_queue.enqueue("passive", reason)
+        trigger_queue.mark_delivery_attempt(record["id"])
+        befast_session.start_screening(
+            source="passive", reason=reason, trigger_id=record["id"]
+        )
     speech_service = None
     passive_speech_monitor = None
     if not args.disable_speech:
@@ -1005,7 +1074,9 @@ def main() -> None:
                     baseline_windows=max(
                         1, int(args.passive_speech_baseline_windows)
                     ),
+                    require_speaker_verification=True,
                 ),
+                on_trigger=handle_passive_speech_trigger,
             )
             passive_status = passive_speech_monitor.start()
             if not passive_status["capture_ready"]:
@@ -1021,11 +1092,9 @@ def main() -> None:
         try:
             run_detection(
                 args,
-                befast_session=BefastSession(
-                    balance_config,
-                    balance_baseline,
-                ),
+                befast_session=befast_session,
                 history_store=history_store,
+                trigger_queue=trigger_queue,
             )
         finally:
             if passive_speech_monitor is not None:
@@ -1037,10 +1106,6 @@ def main() -> None:
     # Web 模式下，检测循环在后台线程运行，Flask 主线程负责提供页面和 MJPEG 视频流。
     stop_event = threading.Event()
     preview_state = PreviewState(jpeg_quality=RuntimeConfig.jpeg_quality)
-    befast_session = BefastSession(
-        balance_config,
-        balance_baseline,
-    )
     worker = None
     if _preflight_macos_camera(args, preview_state):
         worker = threading.Thread(
@@ -1051,6 +1116,7 @@ def main() -> None:
                 stop_event,
                 befast_session,
                 history_store,
+                trigger_queue,
             ),
             daemon=True,
         )
@@ -1065,6 +1131,7 @@ def main() -> None:
         history_store,
         speech_service,
         passive_speech_monitor,
+        trigger_queue,
     )
     try:
         ssl_context = (args.web_cert, args.web_key) if args.web_cert else None

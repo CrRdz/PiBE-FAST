@@ -1,0 +1,9 @@
+id,scenario,expected_urgency,expected_completeness,missing_normal,scalar,proposed_urgency,proposed_completeness,missing_normal_hides_incomplete,scalar_hides_incomplete,proposed_hides_incomplete
+D1,All requested checks negative,none,complete,clear,clear,none,complete,0,0,0
+D2,Technical arm acquisition failure,none,incomplete,clear,incomplete,none,incomplete,1,0,0
+D3,New face positive and arm failure,urgent,incomplete,emergency,emergency,urgent,incomplete,1,1,0
+D4,Chronic face positive and skipped arm,warning,incomplete,warning,warning,warning,incomplete,1,1,0
+D5,Reported new inability with failed arm task,urgent,incomplete,emergency,emergency,urgent,incomplete,1,1,0
+D6,Reported difficulty with unknown onset,urgent,incomplete,emergency,emergency,urgent,incomplete,1,1,0
+D7,Chronic face and new speech positive,urgent,complete,emergency,emergency,urgent,complete,0,0,0
+D8,F-only request with research E data,none,complete,clear,clear,none,complete,0,0,0

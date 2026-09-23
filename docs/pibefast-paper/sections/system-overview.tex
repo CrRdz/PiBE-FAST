@@ -1,38 +1,29 @@
 \section{System Overview}
-\label{sec:system_overview}
+\label{sec:system}
+The embodied AI workflow couples physical sensing, prompted user actions, renewed acquisition, and feedback. The monitoring tier seeks candidate warning signs; guided checks acquire task-specific evidence. The Pi tier continuously observes balance and speech at reduced rates.
+A retained trigger requests an active check on the local computer, where the
+user selects or follows B/E/F/A/S tasks. A persistent unresolved-event queue
+supports delivery retries and acknowledgement. During guided interaction,
+passive processing is paused as appropriate; the workflow resumes monitoring
+after the active session.
 
-PiBE-FAST uses a two-tier local architecture because long-running observation
-and fine-grained guided measurement have different sensing requirements. This
-split also avoids forcing every model and camera viewpoint onto one low-power
-device.
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{system-overview.pdf}
+\caption{PiBE-FAST evidence and feedback paths. Research features form a separate branch; urgency and completeness can jointly be urgent and incomplete.}
+\label{fig:overview}
+\end{figure*}
 
-\subsection{Always-on Raspberry Pi Tier}
+Figure~\ref{fig:overview} summarizes the audio/video sensing and feedback workflow. Medical-record processing is implemented externally; its interface and performance are outside this evaluation. The sensing service produces component measurements, acquisition-quality reasons, a research feature vector, and an independent urgency/completeness assessment. Eligible measurements and symptom reports contribute directly to the urgency rule.
 
-Balance (B) and Speech (S) form the low-load passive tier on the Raspberry Pi.
-For B, the Pi consumes a continuously reachable IP-camera stream and applies
-throttled MoveNet inference for 24/7 observation of visible, pose-qualified
-standing. Periods with no person, incomplete body visibility, or an ineligible
-stance are unmeasurable rather than negative. For S, a USB, I$^2$S, or ALSA
-microphone attached directly to the Pi supplies rolling natural-speech windows.
-The passive speech process compares local features with a personal baseline; it
-does not run Whisper continuously, and routine raw WAV files are deleted after
-feature extraction. Thus, the IP camera supplies B video only, whereas S audio
-comes from the Pi-local microphone. In both modalities, sustained change requests
-follow-up and is not itself a stroke diagnosis.
+Each component record includes status, metrics, quality, and a reason code.
+Requested tasks can be pending, checking, positive, negative, insufficient, or
+skipped. A negative result requires completed, qualified acquisition. Technical
+failure does not itself imply either a clinical abnormality or its absence.
+Explicit symptom reports carry their own onset metadata. Automatic eye geometry
+is research-only; the separate visual-symptom questionnaire supplies the
+eligible E evidence.
 
-\subsection{Guided Local-Computer Tier}
-
-Eyes (E), Face (F), and Arms (A) are short active screens performed with the
-built-in or USB webcam of a local computer. Distant, low-rate Pi video provides
-insufficient iris and face pixel scale and is more vulnerable to occlusion,
-perspective, and wrist/elbow landmark error. The interface therefore guides the
-participant through close, stable, and explicitly phased tasks: centre/lateral
-gaze for E, neutral-to-smile motion for F, and a complete bilateral
-raise--hold--lower action for A. The corresponding MediaPipe or MoveNet inference
-runs locally on the computer and is activated only during the selected task.
-
-The Raspberry Pi retains the Web service, local history, and passive monitoring
-state. The local computer provides guidance and returns structured active-task
-measurements over the local network; no raw stream requires a third-party cloud.
-The repository also retains a single-host mode for development and demonstration,
-but the split topology above is the target deployment evaluated in this paper.
+The interface presents acquisition progress and the current report, while
+historical reports retain their original evidence. Photos in the following
+section illustrate the acquisition setup and live feedback.

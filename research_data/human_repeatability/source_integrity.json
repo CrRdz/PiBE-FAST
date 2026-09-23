@@ -1,0 +1,9 @@
+{
+  "original_source_sha256": "6824a935ace7a5cef66b49d3d7b685f7c8bb860688ca8ce62f305ce217787afa",
+  "repository_workbook": "human_repeatability_data.xlsx",
+  "repository_workbook_sha256": "6b542ab641acf8729c3b4f0099e210a8ccc1c3ff0441a5eff58b3f7080b8511e",
+  "participants": 40,
+  "sessions": 200,
+  "module_records": 800,
+  "repository_privacy_transform": "exact session_date omitted; interval_from_first_days retained"
+}

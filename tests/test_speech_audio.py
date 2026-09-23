@@ -225,7 +225,8 @@ class SpeechAudioTest(unittest.TestCase):
             self.assertTrue(service.wait(timeout=2.0))
             result, audio_path, sudden, onset_time = service.consume_result()
 
-            self.assertEqual(result.status, "negative")
+            self.assertEqual(result.status, "insufficient")
+            self.assertEqual(result.reason, "dysarthria_model_unavailable")
             self.assertTrue(sudden)
             self.assertIsNone(onset_time)
             self.assertIsNotNone(audio_path)
@@ -233,7 +234,7 @@ class SpeechAudioTest(unittest.TestCase):
             service.discard_consumed_audio(audio_path)
             self.assertFalse(audio_path.exists())
 
-    def test_mdsc_positive_directly_changes_speech_result(self):
+    def test_mdsc_positive_is_guided_S_screening_evidence(self):
         with tempfile.TemporaryDirectory() as directory:
             service = SpeechCaptureService(
                 directory,
@@ -250,11 +251,14 @@ class SpeechAudioTest(unittest.TestCase):
             self.assertEqual(result.metrics["mdsc_dysarthria_probability"], 0.8)
             self.assertEqual(
                 result.details["mdsc_medical_role"],
-                "speech_screening_component_not_stroke_diagnosis",
+                "guided_S_screening_evidence_not_stroke_specific",
+            )
+            self.assertEqual(
+                result.details["mdsc_guided_check_recommended"], "true"
             )
             self.assertEqual(
                 service.snapshot()["representation_mode"],
-                "direct_speech_decision",
+                "guided_S_dysarthria_screening_evidence",
             )
             service.discard_consumed_audio(audio_path)
 
