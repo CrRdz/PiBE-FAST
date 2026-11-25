@@ -50,6 +50,8 @@ training/manifests/*.local.csv
 *.png
 !docs/pibefast-paper/figures/arms-demonstration.jpg
 !docs/pibefast-paper/figures/balance-demonstration.jpg
+!docs/pibefast-paper/picture/*.jpg
+!docs/pibefast-paper/picture/*.png
 
 # Local cleanup manifests and one-off repository audits.
 /docs/REPOSITORY_STRUCTURE.md
